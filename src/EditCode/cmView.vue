@@ -1,7 +1,6 @@
 <template>
   <div class="cmviewRef">
     <div class="cm-img-button">
-      <!--mouseenter mouseover @mouseleave="openPanel = false"   -->
       <div v-if="openPanel">
         <button @click="hiCode"><img :src="jsimg" /></button>
         <button @click="undoCode"><img :src="undoimg" /></button>
@@ -12,9 +11,7 @@
         <button @click="delAllCode"><img :src="del" /></button>
         <button @click="pasteNav"><img :src="paste" /></button>
       </div>
-      <span v-else style="opacity: 0.4; font-size: 12px; padding-left: 10px">
-        {{ Length }} &nbsp;
-      </span>
+      <span v-else style="opacity: 0.4; font-size: 12px; padding-left: 10px">{{ Length }} &nbsp;</span>
 
       <button @click="setPanel"><img :src="more" /></button>
     </div>
@@ -27,74 +24,13 @@
 import { darkCode } from "./dark.js";
 import { lightCode } from "./light.js";
 import { javascript } from "@/EditCode/lang-js";
-// import { javascript } from "@codemirror/lang-javascript";
-
-// import { markdown } from "@codemirror/lang-markdown";
-// import { json } from "@codemirror/lang-json";
-// pnpm install github:keywos/codemirror-lang-javascript
-// "@codemirror/lang-javascript": "^6.2.1",
-// "@codemirror/lang-json": "^6.0.1",
-// "@codemirror/lang-markdown": "^6.2.4",
-// "@codemirror/search": "^6.5.5",
-import {
-  ref,
-  reactive,
-  watchEffect,
-  onMounted,
-  onBeforeUnmount,
-  nextTick,
-  watch,
-} from "vue";
-
-import {
-  highlightSelectionMatches,
-  searchKeymap,
-  openSearchPanel,
-  gotoLine,
-  closeSearchPanel,
-} from "@/EditCode/search";
-// import {
-//   highlightSelectionMatches,
-//   searchKeymap,
-//   openSearchPanel,
-//   gotoLine,
-//   closeSearchPanel,
-// } from "@codemirror/search";
-
-import {
-  lineNumbers,
-  highlightActiveLineGutter,
-  highlightSpecialChars,
-  EditorView,
-  highlightActiveLine,
-  keymap,
-} from "@codemirror/view";
-import {
-  foldGutter,
-  indentOnInput,
-  syntaxHighlighting,
-  HighlightStyle,
-  defaultHighlightStyle,
-  bracketMatching,
-  foldKeymap,
-} from "@codemirror/language";
-import {
-  undo,
-  redo,
-  redoSelection,
-  history,
-  defaultKeymap,
-  historyKeymap,
-  indentWithTab,
-} from "@codemirror/commands";
-import {
-  closeBrackets,
-  autocompletion,
-  closeBracketsKeymap,
-  completionKeymap,
-} from "@codemirror/autocomplete";
+import { ref, onMounted, watch } from "vue";
+import { highlightSelectionMatches, searchKeymap, openSearchPanel, closeSearchPanel } from "@/EditCode/search";
+import { lineNumbers, EditorView, highlightActiveLine, keymap } from "@codemirror/view";
+import { foldGutter, bracketMatching } from "@codemirror/language";
+import { undo, redo, history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { closeBrackets, autocompletion } from "@codemirror/autocomplete";
 import { Compartment, EditorState } from "@codemirror/state";
-// import { hyperLink } from "@uiw/codemirror-extensions-hyper-link";
 import { hyperLink } from "@/EditCode/link";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 
@@ -118,21 +54,9 @@ import localforage from "localforage";
 const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
 const Length = ref("");
-// import { basicSetup } from 'codemirror';
-
 const { isDarkModeEnabled } = useTheme();
-
 const props = defineProps(["isReadOnly"]);
-// watchEffect(()=>{
-//   console.log(props.test)
-// })
-// const code = ref(cmStore.CmCode);
 
-// const openPanelMo = () => {
-//   if (!openPanel.value) {
-//     openPanel.value = true;
-//   }
-// };
 localforage.config({
   name: "Linkey",
   storeName: "codeData",
@@ -147,11 +71,6 @@ const CreateView = () => {
   view = new EditorView({
     state: EditorState.create({
       extensions: [
-        // basicSetup,
-        // markdown(),
-        // json(),
-        // javascript(),
-        // xc ? markdown() : javascript(),
         history(), //历史
         keymap.of([
           indentWithTab,
@@ -162,14 +81,12 @@ const CreateView = () => {
         langs.of([]),
         editorTheme.of(isDarkModeEnabled.value ? darkCode : lightCode), // 设置初始主题
         EditorState.readOnly.of(props.isReadOnly ? true : false),
-
         EditorView.lineWrapping, // 换行
         lineNumbers(),
         highlightActiveLine(),
         bracketMatching(),
         highlightSelectionMatches(),
         indentationMarkers(),
-
         closeBrackets(), // 括号闭合
         autocompletion(), // 代码补全
         EditorView.updateListener.of((update) => {
@@ -182,14 +99,11 @@ const CreateView = () => {
             console.log("0 更新数据 - 已存储");
           };
           saveData();
-          // console.log(docContent )
           cmStore.setCmCode(docContent);
           Length.value = formatLength(docContent.length);
           docUpdate = false;
         }),
         hyperLink,
-        // indentOnInput(),
-        // foldGutter(),
         foldGutter({
           closedText: "▸",
           openText: "▾",
@@ -200,22 +114,11 @@ const CreateView = () => {
     parent: viewRef.value,
   });
 
-  // name: "Linkey",
-  // storeName: "codeData",
-  // const username = ref("");
-
   watch(
     () => cmStore.CmCode,
     (newValue) => {
-      // c e.log("cmStore.CmCode");
-      // co e.log(newValue);
       if (!docUpdate && newValue !== view.state.doc.toString()) {
         console.log("0 Code更新到文档");
-        // const saveData = async () => {
-        //   await localforage.setItem("codehub", newValue);
-        //   console.log("0 Code更新到文档 - 数据已存储");
-        // };
-        // saveData();
         view.dispatch({
           changes: {
             from: 0,
@@ -252,8 +155,7 @@ function formatLength(length) {
 const getjsjson = (res) => {
   Length.value = formatLength(res.length);
   try {
-    const jsRegex =
-      /(?:function|var|let|const|if|else|return|try|catch|finally|typeof|delete|async|await)\s/;
+    const jsRegex = /(?:function|var|let|const|if|else|return|try|catch|finally|typeof|delete|async|await)\s/;
     if (jsRegex.test(res.slice(0, 4000))) {
       setHJ();
 
@@ -280,60 +182,16 @@ const getjsjson = (res) => {
     return false;
   }
 };
-// //  import {sql} from "@codemirror/lang-sql"
 
-// // pnpm add @codemirror/lang-wast  @replit/codemirror-lang-nix
-// // import { nix } from "@/EditCode/nix";
-// setTimeout(() => {
-//   // view.dispatch({
-//   //   effects: langs.reconfigure(nix()),
-//   // });
-// }, 1000);
 onMounted(() => {
-  //   console.log('🍉')
-  // console.log(cmStore.CmCode)
   CreateView();
- 
   let lg = localStorage.getItem("highlightJS");
-  // let isjs = false;
-  // console.log(cmStore.CmCode.substring(0, 2000))
-  // if (
-  //   /const\s|let\s|var\s|function\s|console\.log/gm.test(
-  //     cmStore.CmCode.substring(0, 2000)
-  //   )
-  // ) {
-  //   lg = 1;
-  //   isjs = true;
-  //   console.log("===========");
-  // }
-  // console.log(/const\s|function\s/.test(cmStore.CmCode.substring(0, 2000)));
-  // let parsertf = false;
-  // try {
-  //   console.log(cmStore.CmCode.length);
-  //   parser.parse(cmStore.CmCode);
-  //   parsertf = true;
-  //   console.log("---");
-  //   console.log(parser.parse(cmStore.CmCode));
-  //   setHJ();
-  // } catch (error) {
-  //   noHJ();
-  // }
-  // try {
-  //   getjsjson(cmStore.CmCode)
-  //   parsertf = true;
-  // } catch (error) {}
   if (!getjsjson(cmStore.CmCode)) {
-    if (lg == 1 || lg == null) {
-      setHJ();
-    } else {
-      noHJ();
-    }
-    // setHJ();
+    if (lg == 1 || lg == null) setHJ();
+    else noHJ();
   }
-  // !isjs && noHJ();
 });
 
-// let isopenPanel = localStorage.getItem("highlightJS") != 1;
 const openPanel = ref(localStorage.getItem("openCodePanel") != 1);
 const setPanel = () => {
   if (openPanel.value) {
@@ -379,9 +237,6 @@ const noHJ = () => {
     effects: langs.reconfigure([]),
   });
 };
-// const openLine = () => {
-//   gotoLine(view);
-// };
 
 const undoCode = () => undo(view);
 const redoCode = () => redo(view);
@@ -402,17 +257,13 @@ async function formatCode() {
 
 const copyText = async () => {
   const x = await toClipboard(cmStore.CmCode);
-  if (x) {
-    showToast("已复制字符串数: " + x?.text?.length);
-  }
+  if (x) showToast("已复制字符串数: " + x?.text?.length);
 };
 
 const delAllCode = () => {
   showToast("已清空");
   cmStore.setCmCode("");
 };
-
-
 
 const pasteNav = async () => {
   try {
