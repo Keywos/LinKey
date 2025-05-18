@@ -126,7 +126,6 @@ const CreateView = () => {
       }
     }
   );
-
   watch(isDarkModeEnabled, (isDark) => {
     if (isDark) {
       view.dispatch({
