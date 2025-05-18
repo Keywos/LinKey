@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="key" data-name="linkey" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect y="598.39" width="198.54" height="198.54" rx="20" ry="20" style="fill: #8fa8bf;"/>
+  <rect y="361.55" width="198.54" height="198.54" rx="20" ry="20" style="fill: #8fa8bf;"/>
+  <rect x="232.45" y="361.55" width="198.54" height="198.54" rx="20" ry="20" style="fill: #8fa8bf;"/>
+  <rect y="124.71" width="198.54" height="198.54" rx="20" ry="20" style="fill: #8fa8bf;"/>
+  <rect x="287.39" y="25.44" width="198.54" height="198.54" rx="20" ry="20" transform="translate(115.11 426.9) rotate(-65.93)" style="fill: #8fa8bf;"/>
+  <rect x="586.13" y="15.23" width="198.54" height="198.54" rx="20" ry="20" transform="translate(425.84 759.1) rotate(-77.55)" style="fill: #8fa8bf;"/>
+  <rect x="558.34" y="306.82" width="198.54" height="198.54" rx="20" ry="20" transform="translate(-68.42 141.07) rotate(-11.64)" style="fill: #8fa8bf;"/>
+  <rect x="232.45" y="598.39" width="198.54" height="198.54" rx="20" ry="20" style="fill: #8fa8bf;"/>
+  <rect x="463.44" y="598.39" width="198.54" height="198.54" rx="20" ry="20" style="fill: #8fa8bf;"/>
+</svg>
