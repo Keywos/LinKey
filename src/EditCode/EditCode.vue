@@ -27,14 +27,12 @@ import localforage from "localforage";
 const route = useRoute();
 const israw = ref(false);
 const grc = ref("");
-
 const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
 const showlog = ref(false);
 const showlogs = () => {
   showlog.value = false;
 };
-
 const { isDarkModeEnabled } = useTheme();
 const logAll = ref("");
 const props = defineProps(["isReadOnly"]);

@@ -12,10 +12,8 @@
         <button @click="pasteNav"><img :src="paste" /></button>
       </div>
       <span v-else style="opacity: 0.4; font-size: 12px; padding-left: 10px">{{ Length }} &nbsp;</span>
-
       <button @click="setPanel"><img :src="more" /></button>
     </div>
-
     <div ref="viewRef" style="width: 100%; font-size: 11px" />
     <div style="height: 10px" />
   </div>
@@ -33,7 +31,6 @@ import { closeBrackets, autocompletion } from "@codemirror/autocomplete";
 import { Compartment, EditorState } from "@codemirror/state";
 import { hyperLink } from "@/EditCode/link";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
-
 import { showToast } from "vant";
 import useV3Clipboard from "vue-clipboard3";
 import copyimg from "@/img/svg/copy.svg";
@@ -45,7 +42,6 @@ import more from "@/img/svg/more.svg";
 import redoimg from "@/img/svg/redo.svg";
 import undoimg from "@/img/svg/undo.svg";
 import jsimg from "@/img/svg/jsimg.svg";
-
 import { useTheme } from "@/hooks/theme";
 import beautify from "js-beautify";
 import { useCmStore } from "@/store/cmCodeStore.js";
