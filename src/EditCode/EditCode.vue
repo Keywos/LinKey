@@ -3,7 +3,7 @@
     <span @click="goFunction()">Code Hub</span>
     <span @click="rePwa()" style="margin-left: auto; font-size: 14px; padding: 6px 20px; opacity: 0.1">⟳</span>
   </h2>
-  <cmView :isReadOnly="false" />
+  <cmView  id="main" :isReadOnly="false" />
   <div v-if="showlog" style="padding: 0 2%; position: fixed; bottom: 0; left: 0; width: 96%; z-index: 999">
     <div style="display: flex; justify-content: space-between">
       <div class="pretitcode" @click="showlogs" />
