@@ -1,7 +1,7 @@
 {
   "name": "linkey",
   "private": true,
-  "version": "9.2.1512",
+  "version": "9.2.1513",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -31,6 +31,7 @@
     "crelt": "^1.0.6",
     "js-beautify": "^1.14.11",
     "json5": "^2.2.3",
+    "jszip": "^3.10.1",
     "localforage": "^1.10.0",
     "pinia": "^2.1.7",
     "punycode": "^2.3.1",

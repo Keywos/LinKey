@@ -20,7 +20,7 @@
         <button @click="delAllCode"><img :src="del" /></button>
         <button @click="pasteNav"><img :src="paste" /></button>
       </div>
-      <span v-else style="opacity: 0.4; font-size: 12px; padding-left: 10px">{{ Length }} &nbsp;</span>
+      <!-- <span v-else style="opacity: 0.4; font-size: 12px; padding-left: 10px">{{ Length }} &nbsp;</span> -->
       <button @click="setPanel"><img :src="more" /></button>
     </div>
     <div ref="viewRef" style="width: 100%; font-size: 11px" />
@@ -34,6 +34,7 @@ import { javascript } from "@/EditCode/lang-js";
 import { json } from "@codemirror/lang-json";
 
 import { canFormatEditorLanguage, detectEditorLanguage, EDITOR_LANGUAGE_OPTIONS, formatEditorCode, loadEditorLanguageExtension, normalizeEditorLanguage } from "@/EditCode/editorLanguages";
+import { renameFileExtension } from "@/EditCode/fileLanguageUtils";
 import { shikiHighlight } from "@/EditCode/shikiHighlight";
 import { computed, nextTick, ref, onBeforeUnmount, onMounted, watch, watchEffect } from "vue";
 import { highlightSelectionMatches, searchKeymap, openSearchPanel, gotoLine, closeSearchPanel } from "@/EditCode/search";
@@ -56,17 +57,11 @@ import redoimg from "@/img/svg/redo.svg";
 import undoimg from "@/img/svg/undo.svg";
 import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
-import localforage from "localforage";
-
-// 检测语言
-const SYNC_DEBOUNCE_MS = 1000;
-// 保存
-const SAVE_DEBOUNCE_MS = 500;
 
 ///
 const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
-const Length = ref("");
+// const Length = ref("");
 const { isDarkModeEnabled } = useTheme();
 // const props = defineProps(["isReadOnly", "editorLanguage", "placeholder","toolbarActions"]);
 const props = defineProps({
@@ -101,10 +96,6 @@ const props = defineProps({
     type: String,
     default: "default",
   },
-});
-localforage.config({
-  name: "Linkey",
-  storeName: "codeData",
 });
 
 const viewRef = ref(null);
@@ -206,9 +197,21 @@ const createShikiHighlight = (language = activeLanguage.value) =>
 const applyLanguage = async (language, requestId = ++languageRequestId) => {
   const nextLanguage = normalizeEditorLanguage(language, "plaintext");
   if (!view || requestId !== languageRequestId) return;
+
+  // 文件名改写是独立于"语法高亮是否需要重新配置"的副作用：
+  // 即使 nextLanguage 和当前 activeLanguage 相同（例如组件刚挂载、
+  // activeLanguage 的初始值本来就是 plaintext，检测结果也恰好是 plaintext），
+  // 文件名后缀也可能还没和这个语言同步过，所以每次调用都单独检查，不要被下面的
+  // "语言未变化则跳过"提前 return 一并挡住。
+  const renamedFile = renameFileExtension(cmStore.currentFileName, nextLanguage);
+  if (renamedFile !== cmStore.currentFileName) {
+    cmStore.setCurrentFileName(renamedFile);
+  }
+
   if (nextLanguage === activeLanguage.value) return;
 
   activeLanguage.value = nextLanguage;
+  cmStore.setActiveLanguage(nextLanguage);
 
   view.dispatch({
     effects: [langs.reconfigure([]), shikiSyntax.reconfigure([])],
@@ -242,7 +245,7 @@ const applyLanguage = async (language, requestId = ++languageRequestId) => {
   });
 };
 
-// 自动识别
+// 自动识别：按文档内容检测语言（语言变化后会反向改写文件名后缀，见 applyLanguage）
 const syncLanguageForDocument = async (docContent) => {
   const requestId = ++languageRequestId;
   const docSnapshot = docContent || "";
@@ -277,6 +280,7 @@ const syncLanguageForDocument = async (docContent) => {
 };
 const createEditorPlaceholder = () => (props.placeholder ? cmPlaceholder(props.placeholder) : []);
 
+const SYNC_DEBOUNCE_MS = 1000;
 let syncTimer = null;
 
 const debouncedSyncLanguage = (docContent) => {
@@ -284,20 +288,6 @@ const debouncedSyncLanguage = (docContent) => {
   syncTimer = setTimeout(() => {
     syncLanguageForDocument(docContent);
   }, SYNC_DEBOUNCE_MS);
-};
-
-let saveTimer = null;
-
-const saveData = (docContent) => {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    try {
-      await localforage.setItem("codehub", docContent);
-      console.log("0 更新数据 - 已存储");
-    } catch (error) {
-      console.error("保存文档到 localforage 失败", error);
-    }
-  }, SAVE_DEBOUNCE_MS);
 };
 
 let docUpdate = false;
@@ -331,9 +321,7 @@ const CreateView = () => {
           const docContent = update.state.doc.toString();
           docUpdate = true;
           console.log("0 更新文档 - CodeValue");
-          saveData(docContent);
           cmStore.setCmCode(docContent);
-          Length.value = formatLength(docContent.length);
           docUpdate = false;
           //++
           if (selectedLanguage.value === "auto") {
@@ -398,40 +386,27 @@ watch(
     });
   },
 );
-function formatLength(length) {
-  if (length < 1024) {
-    return length === 0 ? "" : length + " bytes";
-  } else if (length < 1024 * 1024) {
-    return (length / 1024).toFixed(2) + " KB";
-  } else {
-    return (length / (1024 * 1024)).toFixed(2) + " MB";
-  }
-}
+
+// function formatLength(length) {
+//   if (length < 1024) {
+//     return length === 0 ? "" : length + " bytes";
+//   } else if (length < 1024 * 1024) {
+//     return (length / 1024).toFixed(2) + " KB";
+//   } else {
+//     return (length / (1024 * 1024)).toFixed(2) + " MB";
+//   }
+// }
 
 onMounted(() => {
   CreateView();
   const initialCode = cmStore.CmCode || "";
-  Length.value = formatLength(initialCode.length);
   syncLanguageForDocument(initialCode);
 });
 
-const flushSave = async (docContent) => {
-  clearTimeout(saveTimer);
-  try {
-    await localforage.setItem("codehub", docContent);
-  } catch (error) {
-    console.error("保存文档到 localforage 失败", error);
-  }
-};
-
 onBeforeUnmount(() => {
   clearLanguageDetectionTimer();
-  clearTimeout(saveTimer);
   clearTimeout(syncTimer);
   // 卸载前用当前最新内容强制保存一次，避免丢失防抖期间的最后改动
-  if (view) {
-    flushSave(view.state.doc.toString());
-  }
 });
 
 const openPanel = ref(canToggleToolbarPanel.value ? localStorage.getItem("openCodePanel") != 1 : true);
@@ -520,21 +495,6 @@ const pasteNav = async () => {
   border: 0px solid #8b8b8b66;
   border-radius: 6px;
 }
-
-// .language-select-wrap::after {
-//   content: "";
-//   position: absolute;
-//   top: 50%;
-//   right: 8px;
-//   z-index: 3;
-//   width: 6px;
-//   height: 6px;
-//   border-right: 1px solid currentColor;
-//   border-bottom: 1px solid currentColor;
-//   opacity: 0.9;
-//   pointer-events: none;
-//   transform: translateY(-65%) rotate(45deg);
-// }
 
 .language-select-display {
   position: absolute;

@@ -39,7 +39,7 @@ interface JsBeautifyModule {
   js_beautify: (source: string, options?: Record<string, unknown>) => string;
 }
 
-const SAMPLE_LIMIT = 4000;
+const SAMPLE_LIMIT = 4200;
 
 const ACTIVE_LANGUAGE_IDS: ActiveEditorLanguageId[] = [
   "javascript",
