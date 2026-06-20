@@ -30,6 +30,9 @@
 <script setup>
 import { darkCode } from "./dark.js";
 import { lightCode } from "./light.js";
+import { javascript } from "@/EditCode/lang-js";
+import { json } from "@codemirror/lang-json";
+
 import { canFormatEditorLanguage, detectEditorLanguage, EDITOR_LANGUAGE_OPTIONS, formatEditorCode, loadEditorLanguageExtension, normalizeEditorLanguage } from "@/EditCode/editorLanguages";
 import { shikiHighlight } from "@/EditCode/shikiHighlight";
 import { computed, nextTick, ref, onBeforeUnmount, onMounted, watch, watchEffect } from "vue";
@@ -51,11 +54,16 @@ import format from "@/img/svg/format.svg";
 import more from "@/img/svg/more.svg";
 import redoimg from "@/img/svg/redo.svg";
 import undoimg from "@/img/svg/undo.svg";
-// import jsimg from "@/img/svg/jsimg.svg";
 import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
 import localforage from "localforage";
 
+// 检测语言
+const SYNC_DEBOUNCE_MS = 1000;
+// 保存
+const SAVE_DEBOUNCE_MS = 500;
+
+///
 const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
 const Length = ref("");
@@ -126,7 +134,6 @@ const editorLanguage_json = {
     retry: "重试自动检测",
   },
 };
-const isFullscreen = ref(false);
 const languageDetectionStatus = ref("idle");
 const getLanguageLabel = (language) => {
   const normalizedLanguage = normalizeEditorLanguage(language, "plaintext");
@@ -198,21 +205,44 @@ const createShikiHighlight = (language = activeLanguage.value) =>
 
 const applyLanguage = async (language, requestId = ++languageRequestId) => {
   const nextLanguage = normalizeEditorLanguage(language, "plaintext");
-
-  const extension = await loadEditorLanguageExtension(nextLanguage);
-
-  if (!view || requestId !== languageRequestId) {
-    return;
-  }
+  if (!view || requestId !== languageRequestId) return;
+  if (nextLanguage === activeLanguage.value) return;
 
   activeLanguage.value = nextLanguage;
 
+  view.dispatch({
+    effects: [langs.reconfigure([]), shikiSyntax.reconfigure([])],
+  });
+
+  if (nextLanguage === "plaintext") {
+    return;
+  }
+
+  if (nextLanguage === "javascript") {
+    console.log("启用 JavaScript 语法高亮 2  - 使用 codemirror");
+    view.dispatch({
+      effects: langs.reconfigure(javascript()),
+    });
+    return;
+  }
+
+  if (nextLanguage === "json" || nextLanguage === "json5") {
+    console.log(`启用 ${nextLanguage} 语法高亮 3 - 使用 codemirror`);
+    view.dispatch({
+      effects: langs.reconfigure(json()),
+    });
+    return;
+  }
+
+  const extension = await loadEditorLanguageExtension(nextLanguage);
+  if (requestId !== languageRequestId) return;
+  console.log(`启用 ${getLanguageLabel(nextLanguage)} 语法高亮 4 - 使用 shiki`);
   view.dispatch({
     effects: [langs.reconfigure(extension), shikiSyntax.reconfigure(createShikiHighlight(nextLanguage))],
   });
 };
 
-// /自动识别
+// 自动识别
 const syncLanguageForDocument = async (docContent) => {
   const requestId = ++languageRequestId;
   const docSnapshot = docContent || "";
@@ -247,6 +277,29 @@ const syncLanguageForDocument = async (docContent) => {
 };
 const createEditorPlaceholder = () => (props.placeholder ? cmPlaceholder(props.placeholder) : []);
 
+let syncTimer = null;
+
+const debouncedSyncLanguage = (docContent) => {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncLanguageForDocument(docContent);
+  }, SYNC_DEBOUNCE_MS);
+};
+
+let saveTimer = null;
+
+const saveData = (docContent) => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      await localforage.setItem("codehub", docContent);
+      console.log("0 更新数据 - 已存储");
+    } catch (error) {
+      console.error("保存文档到 localforage 失败", error);
+    }
+  }, SAVE_DEBOUNCE_MS);
+};
+
 let docUpdate = false;
 let view;
 const CreateView = () => {
@@ -278,17 +331,13 @@ const CreateView = () => {
           const docContent = update.state.doc.toString();
           docUpdate = true;
           console.log("0 更新文档 - CodeValue");
-          const saveData = async () => {
-            await localforage.setItem("codehub", docContent);
-            console.log("0 更新数据 - 已存储");
-          };
-          saveData();
+          saveData(docContent);
           cmStore.setCmCode(docContent);
           Length.value = formatLength(docContent.length);
           docUpdate = false;
           //++
           if (selectedLanguage.value === "auto") {
-            syncLanguageForDocument(docContent);
+            debouncedSyncLanguage(docContent); // 防抖后再检测
           }
         }),
         hyperLink,
@@ -366,8 +415,23 @@ onMounted(() => {
   syncLanguageForDocument(initialCode);
 });
 
+const flushSave = async (docContent) => {
+  clearTimeout(saveTimer);
+  try {
+    await localforage.setItem("codehub", docContent);
+  } catch (error) {
+    console.error("保存文档到 localforage 失败", error);
+  }
+};
+
 onBeforeUnmount(() => {
   clearLanguageDetectionTimer();
+  clearTimeout(saveTimer);
+  clearTimeout(syncTimer);
+  // 卸载前用当前最新内容强制保存一次，避免丢失防抖期间的最后改动
+  if (view) {
+    flushSave(view.state.doc.toString());
+  }
 });
 
 const openPanel = ref(canToggleToolbarPanel.value ? localStorage.getItem("openCodePanel") != 1 : true);
@@ -416,10 +480,7 @@ async function formatCode() {
   }
 
   console.error(result.error);
-  showNotify({
-    type: "warning",
-    title: result.reason === "unsupported" ? "当前语言暂不支持格式化" : "格式化失败, 内容未修改",
-  });
+  showToast("当前语言暂不支持格式化 : 格式化失败, 内容未修改");
 }
 
 const copyText = async () => {

@@ -1,7 +1,7 @@
 {
   "name": "linkey",
   "private": true,
-  "version": "9.2.1510",
+  "version": "9.2.1511",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,6 +19,7 @@
     "@codemirror/state": "^6.4.0",
     "@codemirror/view": "^6.23.1",
     "@lezer/common": "^1.2.1",
+    "@lezer/highlight": "1.2.0",
     "@lezer/javascript": "^1.4.13",
     "@replit/codemirror-indentation-markers": "^6.5.0",
     "@uiw/codemirror-extensions-hyper-link": "^4.21.21",
