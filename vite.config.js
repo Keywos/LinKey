@@ -5,7 +5,6 @@ import { VantResolver } from "@vant/auto-import-resolver";
 import { VitePWA } from "vite-plugin-pwa";
 import fs from "fs";
 
-
 function fetchProxyPlugin() {
   return {
     name: "fetch-proxy",
@@ -86,49 +85,74 @@ export default {
           },
         ],
       },
+      // workbox: {
+      // runtimeCaching: [
+      //   {
+      //     urlPattern: /\/api\/fetch/,
+      //     handler: "NetworkOnly",
+      //   },
+      //   {
+      //     urlPattern: /^https?:\/\/(?:www|s1|apps|res|github|chat)\./,
+      //     handler: "NetworkOnly",
+      //   },
+      //   {
+      //     urlPattern: /\/(?:linkassets\/|linkjs\/).*\.(?:js|css|gz|html|json)/i,
+      //     handler: "CacheFirst",
+      //     options: {
+      //       cacheName: "Linkey-cache",
+      //       expiration: {
+      //         maxEntries: 30,
+      //         maxAgeSeconds: 60 * 60 * 24,
+      //       },
+      //       cacheableResponse: {
+      //         statuses: [200],
+      //       },
+      //     },
+      //   },
+      //   {
+      //     urlPattern: /\/(?:linkassets\/).*\.(?:png|svg|ico|woff|woff2|ttf|eot)/i,
+      //     handler: "CacheFirst",
+      //     options: {
+      //       cacheName: "Linkey-res-cache",
+      //       expiration: {
+      //         maxEntries: 20,
+      //         maxAgeSeconds: 60 * 60 * 24 * 7,
+      //       },
+      //       cacheableResponse: {
+      //         statuses: [200],
+      //       },
+      //     },
+      //   },
+      // ],
+      // },
       workbox: {
-        runtimeCaching: [
-          {
-            urlPattern: /\/api\/fetch/,
-            handler: "NetworkOnly",
-            options: {
-              cacheableResponse: {
-                statuses: [0],
-              },
-            },
-          },
-          {
-            urlPattern: /^https?:\/\/(?:www|s1|apps|res|github|chat)\./,
-            handler: "NetworkOnly",
-          },
-          {
-            urlPattern: /(?!.*\/api\/fetch).*\.(?:js|css|gz|html|json)/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "Linkey-cache",
-              expiration: {
-                maxEntries: 30,
-                maxAgeSeconds: 60 * 60 * 24,
-              },
-              cacheableResponse: {
-                statuses: [200],
-              },
-            },
-          },
-          {
-            urlPattern: /.*\.(?:png|svg|ico|woff|woff2|ttf|eot)/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "Linkey-res-cache",
-              expiration: {
-                maxEntries: 20,
-                maxAgeSeconds: 60 * 60 * 24 * 7,
-              },
-              cacheableResponse: {
-                statuses: [200],
-              },
-            },
-          },
+        globPatterns: [
+          "144x144.png",
+          "192x192.png",
+          "512x512.png",
+          "512x512b.png",
+
+          "apple-touch-icon.png",
+
+          "bd.png",
+          "bi.png",
+          "bl.png",
+
+          "gg.png",
+          "gh.png",
+          "sg.png",
+
+          "favicon.ico",
+          "favicon.svg",
+
+          "index.html",
+
+          "linkassets/**/*",
+
+          "linkjs/**/*",
+
+          "manifest.json",
+          "manifest.webmanifest",
         ],
       },
       selfDestroying: false,
@@ -152,8 +176,8 @@ export default {
           js: ["@/EditCode/lang-js"],
         },
         entryFileNames: "[name].[hash].js",
-        chunkFileNames: "js/[name].[hash].js",
-        assetFileNames: "assets/[name].[hash].[ext]",
+        chunkFileNames: "linkjs/[name].[hash].js",
+        assetFileNames: "linkassets/[name].[hash].[ext]",
       },
     },
     terserOptions: {
