@@ -89,6 +89,10 @@ export default {
       workbox: {
         runtimeCaching: [
           {
+            urlPattern: /\/api\/fetch/,
+            handler: "NetworkOnly",
+          },
+          {
             urlPattern: /^https?:\/\/(?:www|s1|apps|res|github|chat)\./,
             handler: "NetworkOnly",
           },
