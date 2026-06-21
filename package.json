@@ -1,7 +1,7 @@
 {
   "name": "linkey",
   "private": true,
-  "version": "9.2.1518",
+  "version": "9.2.1519",
   "type": "module",
   "scripts": {
     "dev": "vite",

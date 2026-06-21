@@ -102,7 +102,7 @@ export default {
             handler: "NetworkOnly",
           },
           {
-            urlPattern: /.*\.(?:js|css|gz|html|json)/i,
+            urlPattern: /(?!.*\/api\/fetch).*\.(?:js|css|gz|html|json)/i,
             handler: "CacheFirst",
             options: {
               cacheName: "Linkey-cache",
