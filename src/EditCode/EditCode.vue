@@ -73,7 +73,7 @@
     </div>
     </div>
     <!-- 拖拽调整高度手柄 -->
-    <div class="saves-resize-handle" @mousedown="startSavesResize" @touchstart="startSavesResizeTouch">
+    <div ref="savesHandleRef" class="saves-resize-handle" @mousedown="startSavesResize">
       <div class="saves-resize-bar"></div>
     </div>
   </div>
@@ -222,7 +222,7 @@ const selectMode = ref(false); // 是否处于"选择"模式（显示复选框/�
 const MIN_SAVES_HEIGHT = 10;
 const SAVES_HEIGHT_KEY = "codehub_saves_panel_height";
 const savesPanelHeight = ref(parseInt(localStorage.getItem(SAVES_HEIGHT_KEY), 10) || 300);
-// const savesListRef = ref(null);
+const savesHandleRef = ref(null);
 let savesResizeStartY = 0;
 let savesResizeStartHeight = 0;
 
@@ -426,7 +426,7 @@ async function refreshUrlItem(item) {
     let currentURL = item.url;
     let res = await sendReq("GET", currentURL);
     if (!res || !res.data) {
-      const localURL = `/api/fetch?url=${encodeURIComponent(currentURL)}`;
+      const localURL = `https://surgetool.com/api/fetch?url=${encodeURIComponent(currentURL)}`;
       res = await sendReq("GET", localURL);
     }
     if (!res || !res.data) {
@@ -910,7 +910,7 @@ async function loadUrlContent(inputUrl) {
     // 先尝试直连；若被 CORS 拦截则走本地同源接口（Vite dev server 中转）
     let res = await sendReq("GET", currentURL);
     if (!res || !res.data) {
-      const localURL = `/api/fetch?url=${encodeURIComponent(currentURL)}`;
+      const localURL = `https://surgetool.com/api/fetch?url=${encodeURIComponent(currentURL)}`;
       showToast("同源转发中…");
       res = await sendReq("GET", localURL);
     }
@@ -1099,6 +1099,11 @@ onMounted(async () => {
 
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("beforeunload", handleBeforeUnload);
+
+  // 被动 touchstart 绑定，消除浏览器 warning
+  if (savesHandleRef.value) {
+    savesHandleRef.value.addEventListener("touchstart", startSavesResizeTouch, { passive: false });
+  }
 });
 
 function extractAndFormatUrl(rawUrl) {
