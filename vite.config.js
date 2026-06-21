@@ -91,6 +91,11 @@ export default {
           {
             urlPattern: /\/api\/fetch/,
             handler: "NetworkOnly",
+            options: {
+              cacheableResponse: {
+                statuses: [0],
+              },
+            },
           },
           {
             urlPattern: /^https?:\/\/(?:www|s1|apps|res|github|chat)\./,
