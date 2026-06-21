@@ -1,27 +1,81 @@
 <template>
   <div class="cmviewRef">
-    <div class="cm-img-button">
-      <div v-if="openPanel">
-        <div class="language-select-wrap">
-          <!-- <span class="language-select-display" aria-hidden="true">
-            {{ selectedLanguageDisplayLabel }}
-          </span> // @xream -->
-          <select v-model="selectedLanguage" class="language-select" :title="selectedLanguageTitle" aria-label="Editor language" @change="onLanguageChange">
-            <option v-for="option in languageOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+    <!-- 折叠态：小圆点 -->
+    <div v-if="collapsed" class="cm-collapsed-dot" :style="toolbarStyle" @mousedown="startDrag" @touchstart="startDragTouch" @click="toggleCollapsed">
+      <span class="cm-collapsed-icon">
+        <svg
+          class="icon"
+          style="width: 1.2em; height: 1.2em; vertical-align: middle; fill: currentColor; overflow: hidden"
+          viewBox="0 0 1024 1024"
+          version="1.1"
+          xmlns="http://www.w3.org/2000/svg"
+          p-id="8591"
+        >
+          <path
+            d="M546.112 33.152L512.32 0 512 0.32 511.68 0l-33.792 33.152L192 308.352 269.056 384 512 150.08 754.944 384 832 308.416 546.112 33.152zM546.112 990.848L512.32 1024 512 1023.68 511.68 1024l-33.792-33.152L192 715.648 269.056 640 512 873.92 754.944 640 832 715.584l-285.888 275.264z"
+            fill="currentColor"
+            p-id="8592"
+          ></path>
+        </svg>
+      </span>
+    </div>
+    <!-- 展开态：完整工具栏 -->
+    <div v-else class="cm-toolbar-wrapper" :style="toolbarStyle" @mousedown="startDrag" @touchstart="startDragTouch">
+      <div class="cm-img-button">
+        <div>
+          <button class="cm-collapse-btn" :style="collapseBtnOrder" @click="onCollapseClick" title="折叠">
+            <svg
+              class="icon"
+              style="width: 1.2em; height: 1.2em; vertical-align: middle; fill: currentColor; overflow: hidden; transform: rotate(90deg)"
+              viewBox="0 0 1024 1024"
+              version="1.1"
+              xmlns="http://www.w3.org/2000/svg"
+              p-id="8591"
+            >
+              <path
+                d="M546.112 33.152L512.32 0 512 0.32 511.68 0l-33.792 33.152L192 308.352 269.056 384 512 150.08 754.944 384 832 308.416 546.112 33.152zM546.112 990.848L512.32 1024 512 1023.68 511.68 1024l-33.792-33.152L192 715.648 269.056 640 512 873.92 754.944 640 832 715.584l-285.888 275.264z"
+                fill="currentColor"
+                p-id="8592"
+              ></path>
+            </svg>
+          </button>
+          <div class="language-select-wrap">
+            <select v-model="selectedLanguage" class="language-select" :title="selectedLanguageTitle" aria-label="Editor language" @change="onLanguageChange">
+              <option v-for="option in languageOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          <button @click="undoCode"><img :src="undoimg" /></button>
+          <button @click="redoCode"><img :src="redoimg" /></button>
+          <button @click="formatCode"><img :src="format" /></button>
+          <button @click="toggleSearch"><img :src="searchimg" /></button>
+          <button @click="copyText"><img :src="copyimg" /></button>
+          <button @click="delAllCode"><img :src="del" /></button>
+          <button @click="pasteNav"><img :src="paste" /></button>
         </div>
-        <button @click="undoCode"><img :src="undoimg" /></button>
-        <button @click="redoCode"><img :src="redoimg" /></button>
-        <button @click="formatCode"><img :src="format" /></button>
-        <button @click="searchs"><img :src="searchimg" /></button>
-        <button @click="copyText"><img :src="copyimg" /></button>
-        <button @click="delAllCode"><img :src="del" /></button>
-        <button @click="pasteNav"><img :src="paste" /></button>
       </div>
-      <!-- <span v-else style="opacity: 0.4; font-size: 12px; padding-left: 10px">{{ Length }} &nbsp;</span> -->
-      <button @click="setPanel"><img :src="more" /></button>
+      <div v-show="searchOpen" class="cm-search-box">
+        <input
+          ref="searchInputRef"
+          v-model="searchQuery"
+          type="text"
+          class="cm-search-input"
+          placeholder="查找…"
+          @input="onSearchInput"
+          @keydown.enter.prevent="onSearchEnter"
+          @keydown.escape.prevent="toggleSearch"
+        />
+        <button class="cm-search-btn" @click="findPrev" title="上一个 (Shift+Enter)">&#x25B2;</button>
+        <button class="cm-search-opt" :class="{ active: searchCaseSensitive }" @click="toggleCaseSensitive" title="区分大小写">Aa</button>
+        <button class="cm-search-opt" :class="{ active: searchWholeWord }" @click="toggleWholeWord" title="全词匹配">ab</button>
+        <button class="cm-search-opt" :class="{ active: searchRegexp }" @click="toggleRegexp" title="正则表达式">.*</button>
+
+        <input v-model="replaceQuery" type="text" class="cm-search-input" placeholder="替换…" @keydown.enter.prevent="replaceNext" />
+        <button class="cm-search-btn" @click="findNext" title="下一个 (Enter)">&#x25BC;</button>
+        <button class="cm-replace-btn" @click="replaceNext">替换</button>
+        <button class="cm-replace-btn" style="grid-column: span 2" @click="replaceAll">全替换</button>
+      </div>
     </div>
     <div ref="viewRef" style="width: 100%; font-size: 11px" />
     <div style="height: 10px" />
@@ -37,7 +91,18 @@ import { canFormatEditorLanguage, detectEditorLanguage, EDITOR_LANGUAGE_OPTIONS,
 import { renameFileExtension } from "@/EditCode/fileLanguageUtils";
 import { shikiHighlight } from "@/EditCode/shikiHighlight";
 import { computed, nextTick, ref, onBeforeUnmount, onMounted, watch, watchEffect } from "vue";
-import { highlightSelectionMatches, searchKeymap, openSearchPanel, gotoLine, closeSearchPanel } from "@/EditCode/search";
+import {
+  highlightSelectionMatches,
+  searchKeymap,
+  gotoLine,
+  setSearchQuery,
+  SearchQuery,
+  getSearchQuery,
+  findNext as cmFindNext,
+  findPrevious as cmFindPrev,
+  replaceNext as cmReplaceNext,
+  replaceAll as cmReplaceAll,
+} from "@/EditCode/search";
 import { lineNumbers, EditorView, highlightActiveLine, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
 import { foldGutter, bracketMatching } from "@codemirror/language";
 import { undo, redo, history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
@@ -52,7 +117,6 @@ import del from "@/img/svg/del.svg";
 import paste from "@/img/svg/zt.svg";
 import searchimg from "@/img/svg/search.svg";
 import format from "@/img/svg/format.svg";
-import more from "@/img/svg/more.svg";
 import redoimg from "@/img/svg/redo.svg";
 import undoimg from "@/img/svg/undo.svg";
 import { useTheme } from "@/hooks/theme";
@@ -110,6 +174,15 @@ const autoDetectedLanguage = ref(null);
 
 const isFormatting = ref(false);
 
+const editorLanguage_short = {
+  javascript: "JS",
+  json: "JSON",
+  json5: "JSON5",
+  yaml: "YAML",
+  ini: "INI",
+  plaintext: "TXT",
+};
+
 let languageRequestId = 0;
 const editorLanguage_json = {
   auto: "自动",
@@ -130,11 +203,12 @@ const getLanguageLabel = (language) => {
   const normalizedLanguage = normalizeEditorLanguage(language, "plaintext");
   return editorLanguage_json[normalizedLanguage] || editorLanguage_json.plaintext;
 };
+const getShortLanguageLabel = (language) => {
+  const normalizedLanguage = normalizeEditorLanguage(language, "plaintext");
+  return editorLanguage_short[normalizedLanguage] || getLanguageLabel(normalizedLanguage);
+};
 
 const selectedLanguageDisplayLabel = computed(() => getLanguageLabel(selectedLanguage.value));
-const normalizedToolbarActions = computed(() => new Set(Array.isArray(props.toolbarActions) ? props.toolbarActions : DEFAULT_TOOLBAR_ACTIONS));
-const isToolbarActionEnabled = (action) => normalizedToolbarActions.value.has(action);
-const canToggleToolbarPanel = computed(() => isToolbarActionEnabled("panel"));
 
 const LANGUAGE_DETECTION_BUSY_DELAY = 300;
 let languageDetectionTimer;
@@ -172,7 +246,7 @@ const languageOptions = computed(() =>
     option.value === "auto"
       ? {
           ...option,
-          label: autoDetectedLanguage.value ? `${getLanguageLabel("auto")} · ${getLanguageLabel(autoDetectedLanguage.value)}` : getLanguageLabel(option.value),
+          label: autoDetectedLanguage.value ? `${getShortLanguageLabel(autoDetectedLanguage.value)}` : getLanguageLabel(option.value),
         }
       : {
           ...option,
@@ -185,7 +259,7 @@ const selectedLanguageTitle = computed(() => {
     return selectedLanguageDisplayLabel.value;
   }
 
-  return autoDetectedLanguage.value ? `${getLanguageLabel("auto")} · ${getLanguageLabel(autoDetectedLanguage.value)}` : getLanguageLabel("auto");
+  return autoDetectedLanguage.value ? `${getShortLanguageLabel(autoDetectedLanguage.value)}` : getLanguageLabel("auto");
 });
 
 const createShikiHighlight = (language = activeLanguage.value) =>
@@ -409,27 +483,100 @@ onBeforeUnmount(() => {
   // 卸载前用当前最新内容强制保存一次，避免丢失防抖期间的最后改动
 });
 
-const openPanel = ref(canToggleToolbarPanel.value ? localStorage.getItem("openCodePanel") != 1 : true);
-const setPanel = () => {
-  if (!canToggleToolbarPanel.value) return;
+const collapsed = ref(localStorage.getItem("cm_collapsed") === "true");
+watch(collapsed, (v) => localStorage.setItem("cm_collapsed", v));
+const searchOpen = ref(false);
+const collapseBtnOrder = computed(() => ({ order: 999 }));
+const toolbarStyle = computed(() => ({ right: "2%", top: toolbarTopPx.value + "px" }));
+const searchQuery = ref("");
+const replaceQuery = ref("");
+const searchCaseSensitive = ref(false);
+const searchWholeWord = ref(false);
+const searchRegexp = ref(false);
+const searchInputRef = ref(null);
 
-  if (openPanel.value) {
-    openPanel.value = false;
-    localStorage.setItem("openCodePanel", 1);
+const buildSearchQuery = () =>
+  new SearchQuery({
+    search: searchQuery.value,
+    replace: replaceQuery.value,
+    caseSensitive: searchCaseSensitive.value,
+    wholeWord: searchWholeWord.value,
+    regexp: searchRegexp.value,
+  });
+
+const dispatchSearch = () => {
+  if (!view) return;
+  view.dispatch({ effects: setSearchQuery.of(buildSearchQuery()) });
+};
+
+const toggleCaseSensitive = () => {
+  searchCaseSensitive.value = !searchCaseSensitive.value;
+  dispatchSearch();
+};
+const toggleWholeWord = () => {
+  searchWholeWord.value = !searchWholeWord.value;
+  dispatchSearch();
+};
+const toggleRegexp = () => {
+  searchRegexp.value = !searchRegexp.value;
+  dispatchSearch();
+};
+
+const toggleSearch = () => {
+  searchOpen.value = !searchOpen.value;
+  if (searchOpen.value) {
+    nextTick(() => {
+      searchInputRef.value?.focus();
+      searchInputRef.value?.select();
+    });
   } else {
-    openPanel.value = true;
-    localStorage.setItem("openCodePanel", 0);
+    searchQuery.value = "";
+    replaceQuery.value = "";
+    searchCaseSensitive.value = false;
+    searchWholeWord.value = false;
+    searchRegexp.value = false;
+    dispatchSearch();
   }
 };
 
-let sopen = true;
-const searchs = () => {
-  if (sopen) {
-    openSearchPanel(view);
-    sopen = false;
+const onSearchInput = () => {
+  dispatchSearch();
+};
+
+const onSearchEnter = (e) => {
+  dispatchSearch();
+  if (e.shiftKey) {
+    cmFindPrev(view);
   } else {
-    closeSearchPanel(view);
-    sopen = true;
+    cmFindNext(view);
+  }
+};
+
+const findNext = () => {
+  if (searchQuery.value && view) {
+    dispatchSearch();
+    cmFindNext(view);
+  }
+};
+
+const findPrev = () => {
+  if (searchQuery.value && view) {
+    dispatchSearch();
+    cmFindPrev(view);
+  }
+};
+
+const replaceNext = () => {
+  if (searchQuery.value && view) {
+    dispatchSearch();
+    cmReplaceNext(view);
+  }
+};
+
+const replaceAll = () => {
+  if (searchQuery.value && view) {
+    dispatchSearch();
+    cmReplaceAll(view);
   }
 };
 
@@ -479,63 +626,146 @@ const pasteNav = async () => {
     showToast("获取剪贴板失败: 非Https");
   }
 };
+
+// ===== 工具栏垂直拖拽（像素级，顺滑） =====
+let dragStartY = 0;
+let dragStartTop = 0;
+const DRAG_THRESHOLD = 6;
+let isDragging = false;
+
+const toolbarTopPx = ref(parseFloat(localStorage.getItem("cm_toolbar_top_px")) || 0);
+
+const onCollapseClick = () => {
+  collapsed.value = true;
+};
+const toggleCollapsed = () => {
+  collapsed.value = !collapsed.value;
+};
+
+/* 拖拽移动≥6px 后，在捕获阶段拦截下一次工具栏内的 click 事件 */
+function blockClickAfterDrag(e) {
+  if (e.target.closest(".cm-toolbar-wrapper, .cm-collapsed-dot")) {
+    e.stopPropagation();
+  }
+}
+
+function startDrag(e) {
+  if (e.target.closest("input, select, textarea, option")) return;
+  dragStartY = e.clientY;
+  dragStartTop = toolbarTopPx.value;
+  isDragging = false;
+  document.addEventListener("mousemove", onDrag);
+  document.addEventListener("mouseup", endDrag);
+}
+
+function startDragTouch(e) {
+  if (e.target.closest("input, select, textarea, option")) return;
+  const t = e.touches[0];
+  dragStartY = t.clientY;
+  dragStartTop = toolbarTopPx.value;
+  isDragging = false;
+  document.addEventListener("touchmove", onDragTouch, { passive: false });
+  document.addEventListener("touchend", endDragTouch);
+}
+
+function onDrag(ev) {
+  const dy = ev.clientY - dragStartY;
+  if (!isDragging && Math.abs(dy) < DRAG_THRESHOLD) return;
+  isDragging = true;
+  toolbarTopPx.value = Math.max(0, Math.min(window.innerHeight - 60, dragStartTop + dy));
+  /* 一旦确认拖拽，拦截紧接着的 click */
+  document.addEventListener("click", blockClickAfterDrag, { capture: true, once: true });
+}
+
+function onDragTouch(ev) {
+  const t = ev.touches[0];
+  const dy = t.clientY - dragStartY;
+  if (!isDragging && Math.abs(dy) < DRAG_THRESHOLD) return;
+  ev.preventDefault();
+  isDragging = true;
+  toolbarTopPx.value = Math.max(0, Math.min(window.innerHeight - 60, dragStartTop + dy));
+  /* 一旦确认拖拽，拦截紧接着的 click */
+  document.addEventListener("click", blockClickAfterDrag, { capture: true, once: true });
+}
+
+function endDrag() {
+  document.removeEventListener("mousemove", onDrag);
+  document.removeEventListener("mouseup", endDrag);
+  if (isDragging) {
+    localStorage.setItem("cm_toolbar_top_px", toolbarTopPx.value.toString());
+  }
+}
+
+function endDragTouch() {
+  document.removeEventListener("touchmove", onDragTouch);
+  document.removeEventListener("touchend", endDragTouch);
+  if (isDragging) {
+    localStorage.setItem("cm_toolbar_top_px", toolbarTopPx.value.toString());
+  }
+}
+// ===== 工具栏垂直拖拽 end =====
 </script>
 
 <style lang="scss" scoped>
+// .cmviewRef {
+// 工具栏通过 fixed 定位悬浮，无需额外 padding
+// }
+
 .language-select-wrap {
   position: relative;
   display: flex;
   align-items: center;
   height: 24px;
   // width: 110px;
-  padding: 3px 5px 0 0;
+  padding: 0px 0px 0 20px;
   margin-right: 6px;
   color: var(--second-text-color);
   flex: 0 1 auto;
   border: 0px solid #8b8b8b66;
-  border-radius: 6px;
+  border-radius: 16px;
 }
 
 .language-select-display {
   position: absolute;
   inset: 0 20px 0 8px;
-  z-index: 1;
+  z-index: 1001;
   display: flex;
   align-items: center;
   overflow: hidden;
   color: currentColor;
-  font-size: 12px;
-  line-height: 22px;
+  font-size: 11px;
+  line-height: 14px;
   pointer-events: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
 }
 
-.language-selects {
-  text-align: right;
-  -webkit-appearance: none;
-  appearance: none;
-  display: block;
-  position: relative;
-  z-index: 2;
-  box-sizing: border-box;
-  height: 24px;
-  width: 120px;
-  max-width: 34vw;
-  padding: 0 20px 0 8px;
-  border: 1px solid #8b8b8b66;
-  border-radius: 6px;
-  background-color: transparent;
-  background-image: none;
-  box-shadow: none;
-  color: transparent;
-  font-size: 12px;
-  line-height: 22px;
-  outline: none;
-  opacity: 1;
-  text-overflow: ellipsis;
-  -webkit-text-fill-color: transparent;
-}
+// .language-select {
+//   // text-align: right;
+//   -webkit-appearance: none;
+//   appearance: none;
+//   display: block;
+//   position: relative;
+//   z-index: 2;
+//   box-sizing: border-box;
+//   height: 34px;
+//   // width: auto;
+//   min-width: 34px;
+//   max-width: 34px;
+//   max-width: 34vw;
+//   // padding: 0 20px 0 8px;
+//   // border: 1px solid #8b8b8b66;
+//   // border-radius: 16px;
+//   background-color: transparent;
+//   background-image: none;
+//   box-shadow: none;
+//   color: transparent;
+//   // font-size: 9px;
+//   // line-height: 14px;
+//   outline: none;
+//   // opacity: 1;/
+//   // text-overflow: ellipsis;
+//   // -webkit-text-fill-color: transparent;
+// }
 
 .language-select:focus {
   border-color: #8fb4e8;
@@ -552,19 +782,23 @@ const pasteNav = async () => {
 
   border: 0px solid rgba(128, 128, 128, 0.5);
   text-align: right;
-  border-radius: 6px;
+  // border-radius: 16px;
   color: var(--text);
   // color: inherit;
-
+  width: 34px;
   outline: none;
 
   appearance: none;
-
+  // margin-left: 10px;
   -webkit-appearance: none;
 
-  padding: 0 0px 1px 0px;
-
-  height: 28px;
+  padding: 0 0 0 1px;
+  // margin-left: 10px;
+  height: 34px;
+  // min-height: 34px;
+  // width: auto;
+  // min-width: 34px;
+  // max-width: px;
 }
 
 @media (max-width: 480px) {
@@ -572,7 +806,17 @@ const pasteNav = async () => {
     display: flex;
     align-items: center;
     gap: 6px;
-    width: 28px;
+    width: 31px;
+    height: 30px;
+
+    // background: #000;
+    justify-content: center;
+    align-items: center;
+    // background: var(--cm-bg, rgba(0, 0, 0, 0.062));
+    // color: #222;
+    // opacity: .1;
+    // border-radius: 20px;
+    // border: 1px solid rgba(128, 128, 128, 0.3);
   }
 
   .cm-img-button .language-detect-button {
@@ -583,11 +827,11 @@ const pasteNav = async () => {
   }
 
   .language-select-wrap {
-    margin-right: 3px;
+    // margin-right: 3px;
   }
 
   .language-select {
-    width: 104px;
+    // width: 34px;
     // padding-right: 18px;
     // padding-left: 7px;
   }
@@ -601,10 +845,249 @@ const pasteNav = async () => {
   }
 }
 
+.cm-toolbar-wrapper {
+  position: fixed;
+  right: 4%;
+  top: 0;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  width: fit-content;
+  max-width: 96vw;
+  background: #eee;
+  color: #222;
+  opacity: 1;
+  border-radius: 23px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: top;
+}
+
+.cm-toolbar-wrapper:active {
+  cursor: grabbing;
+}
+
+/* 折叠态小圆点 */
+.cm-collapsed-dot {
+  position: fixed;
+  right: 3%;
+  top: 0;
+  z-index: 1001;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--cm-bg, rgba(255, 255, 255, 0.96));
+  border-radius: 23px;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.08);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: top;
+  opacity: 1;
+  transition:
+    width 0.2s,
+    height 0.2s,
+    border-radius 0.2s;
+}
+
+.cm-collapsed-dot:active {
+  cursor: grabbing;
+}
+
+.cm-collapsed-icon {
+  font-size: 16px;
+  font-weight: 700;
+  color: #222;
+  pointer-events: none;
+}
+
+/* 折叠按钮（左侧圆点） */
+.cm-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #222;
+  font-size: 20px;
+  cursor: pointer;
+  border-radius: 50%;
+  opacity: 1;
+  filter: none;
+  transition:
+    opacity 0.15s,
+    background 0.15s;
+}
+
+.cm-collapse-btn:hover {
+  opacity: 1;
+}
+
+.cm-img-button {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow-x: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 6px 14px 6px 0;
+  width: auto;
+}
+
 .cm-img-button > div:first-child {
-  // text-align: right;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* 非桌面端（移动端）底部留出安全区 */
+@media (hover: none) and (pointer: coarse) {
+  .cm-toolbar-wrapper {
+    top: calc(env(safe-area-inset-top, 0px) + 50px);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .cm-toolbar-wrapper,
+  .cm-collapsed-dot {
+    background: #282c34;
+    border-color: rgba(255, 255, 255, 0.15);
+    color: var(--text, inherit);
+  }
+  .cm-collapse-btn,
+  .cm-collapsed-icon {
+    color: var(--text, inherit);
+  }
+  .cm-search-input {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .cm-search-input:focus {
+    background: rgba(143, 180, 232, 0.08);
+  }
+  .cm-search-opt.active {
+    border-color: #6a9ed8;
+    background: rgba(106, 158, 216, 0.2);
+    color: #7ab0f0;
+  }
+}
+
+/* ===== 自定义搜索框 ===== */
+.cm-search-box {
+  display: grid;
+  grid-template-columns: 1fr repeat(4, auto);
+  gap: 5px;
+  row-gap: 5px;
+  width: 100%;
+  padding: 8px 10px 8px;
+  background: transparent;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.cm-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 16px;
+  background: rgba(128, 128, 128, 0.06);
+  color: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.cm-search-input:focus {
+  border-color: #8fb4e8;
+  background: rgba(143, 180, 232, 0.06);
+}
+
+.cm-search-btn,
+.cm-replace-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  min-width: 52px;
+  padding: 0 7px;
+  margin: 0 2px 0 4px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 16px;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.cm-search-btn:hover,
+.cm-replace-btn:hover {
+  background: rgba(128, 128, 128, 0.1);
+}
+
+/* 搜索选项切换按钮: Aa / .* / ab */
+.cm-search-opt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  min-width: 26px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  color: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.45;
+  transition:
+    opacity 0.15s,
+    background 0.15s,
+    border-color 0.15s;
+  letter-spacing: 0;
+  font-family: inherit;
+}
+
+.cm-search-opt:hover {
+  opacity: 0.7;
+  background: rgba(128, 128, 128, 0.08);
+}
+
+.cm-search-opt.active {
+  opacity: 1;
+  border-color: #8fb4e8;
+  background: rgba(143, 180, 232, 0.15);
+  color: #4a8ad6;
+}
+
+.cm-replace-btn:active,
+.cm-search-btn:active {
+  background: rgba(128, 128, 128, 0.18);
+}
+
+/* 隐藏 CodeMirror 内置搜索面板 */
+:deep(.cm-editor .cm-search) {
+  display: none !important;
 }
 </style>

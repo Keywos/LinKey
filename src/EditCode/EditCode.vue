@@ -8,6 +8,7 @@
   </h2>
   <!-- 保存列表面板 -->
   <div v-if="showSaves" class="saves-panel">
+    <div class="saves-body">
     <div class="saves-toolbar">
       <button class="saves-btn" @click="toggleSelectMode">{{ selectMode ? "完成" : "选择" }}</button>
 
@@ -33,19 +34,25 @@
 
       <input ref="importInputRef" type="file" style="display: none" @change="onImportFileChange" />
     </div>
-    <div class="saves-list">
+    <div ref="savesListRef" class="saves-list" :style="{ maxHeight: savesPanelHeight + 'px' }">
       <div v-if="savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
-      <div v-for="item in savedItems" :key="item.id" class="saves-item">
+      <div v-for="item in savedItems" :key="item.id" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
         <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" />
 
         <div class="saves-item-info">
           <div class="saves-item-name">
             {{ item.name }}
-            <span v-if="item.id === currentItemId" class="saves-item-current">当前</span>
           </div>
 
           <div class="saves-item-preview">
-            {{ item.preview || "" }}
+            <template v-if="item.url">
+              <div v-if="item.blobUrl" class="saves-url-line" title="点击复制 blob URL" @click.stop="copyUrl(item, 'blob')">{{ item.blobUrl }}</div>
+              <div class="saves-url-line" title="点击复制 raw URL" @click.stop="copyUrl(item, 'raw')">{{ item.url }}</div>
+              <div class="saves-item-content-preview">{{ item.preview || "" }}</div>
+            </template>
+            <template v-else>
+              <span class="saves-item-content-preview">{{ item.preview || "" }}</span>
+            </template>
           </div>
 
           <div class="saves-item-meta">
@@ -55,10 +62,19 @@
           </div>
         </div>
 
+        <template v-if="item.url">
+          <button class="saves-refresh-btn" :disabled="loadingItemId === item.id" @click="refreshUrlItem(item)" title="重新请求 URL 更新当前文件">请求</button>
+        </template>
         <button class="saves-load-btn" :disabled="loadingItemId === item.id" @click="loadItem(item)">
-          {{ loadingItemId === item.id ? "加载中" : "加载" }}
+          <!-- {{ loadingItemId === item.id ? "加载中" : "加载" }} -->
+          加载
         </button>
       </div>
+    </div>
+    </div>
+    <!-- 拖拽调整高度手柄 -->
+    <div class="saves-resize-handle" @mousedown="startSavesResize" @touchstart="startSavesResizeTouch">
+      <div class="saves-resize-bar"></div>
     </div>
   </div>
 
@@ -77,6 +93,7 @@
       <div class="modal-title">{{ promptState.title }}</div>
       <input ref="promptInputRef" v-model="promptState.value" class="modal-input" type="text" @keyup.enter="promptConfirm" @keyup.esc="promptCancel" />
       <div class="modal-actions">
+        <button class="modal-btn" @click="pasteToPromptInput">粘贴</button>
         <button class="modal-btn" @click="promptCancel">取消</button>
         <button class="modal-btn modal-btn-primary" @click="promptConfirm">确定</button>
       </div>
@@ -155,6 +172,17 @@ const promptCancel = () => {
   resolve?.(null);
 };
 
+async function pasteToPromptInput() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) {
+      promptState.value.value = text;
+    }
+  } catch {
+    // 静默失败
+  }
+}
+
 function askConfirm(title) {
   return new Promise((resolve) => {
     confirmState.value = { visible: true, title, resolve };
@@ -189,6 +217,53 @@ const checkedIds = ref([]);
 const showSaves = ref(false);
 const loadingItemId = ref(null); // 当前正在异步加载内容的项 id
 const selectMode = ref(false); // 是否处于"选择"模式（显示复选框/全选/删除/导出选中）
+
+// ===== 保存面板拖拽调整高度 =====
+const MIN_SAVES_HEIGHT = 10;
+const SAVES_HEIGHT_KEY = "codehub_saves_panel_height";
+const savesPanelHeight = ref(parseInt(localStorage.getItem(SAVES_HEIGHT_KEY), 10) || 300);
+// const savesListRef = ref(null);
+let savesResizeStartY = 0;
+let savesResizeStartHeight = 0;
+
+function startSavesResize(e) {
+  savesResizeStartY = e.clientY;
+  savesResizeStartHeight = savesPanelHeight.value;
+  document.addEventListener("mousemove", onSavesResize);
+  document.addEventListener("mouseup", endSavesResize);
+  document.body.style.cursor = "row-resize";
+  e.preventDefault();
+}
+
+function startSavesResizeTouch(e) {
+  if (e.touches.length !== 1) return;
+  savesResizeStartY = e.touches[0].clientY;
+  savesResizeStartHeight = savesPanelHeight.value;
+  document.addEventListener("touchmove", onSavesResizeTouch);
+  document.addEventListener("touchend", endSavesResize);
+  e.preventDefault();
+}
+
+function onSavesResize(e) {
+  const delta = e.clientY - savesResizeStartY;
+  savesPanelHeight.value = Math.max(MIN_SAVES_HEIGHT, savesResizeStartHeight + delta);
+}
+
+function onSavesResizeTouch(e) {
+  if (e.touches.length !== 1) return;
+  const delta = e.touches[0].clientY - savesResizeStartY;
+  savesPanelHeight.value = Math.max(MIN_SAVES_HEIGHT, savesResizeStartHeight + delta);
+}
+
+function endSavesResize() {
+  document.removeEventListener("mousemove", onSavesResize);
+  document.removeEventListener("mouseup", endSavesResize);
+  document.removeEventListener("touchmove", onSavesResizeTouch);
+  document.removeEventListener("touchend", endSavesResize);
+  document.body.style.cursor = "";
+  localStorage.setItem(SAVES_HEIGHT_KEY, savesPanelHeight.value.toString());
+}
+// ===== 保存面板拖拽调整高度 end =====
 
 const toggleSaves = async () => {
   showSaves.value = !showSaves.value;
@@ -333,6 +408,54 @@ const loadItem = async (item) => {
     loadingItemId.value = null;
   }
 };
+
+async function copyUrl(item, type) {
+  const text = type === "blob" && item.blobUrl ? item.blobUrl : item.url;
+  try {
+    await toClipboard(text);
+    showToast("已复制 " + (type === "blob" ? "blob" : "raw") + " URL");
+  } catch {
+    showToast("复制失败");
+  }
+}
+
+async function refreshUrlItem(item) {
+  if (!item.url) return;
+  loadingItemId.value = item.id;
+  try {
+    let currentURL = item.url;
+    let res = await sendReq("GET", currentURL);
+    if (!res || !res.data) {
+      const localURL = `/api/fetch?url=${encodeURIComponent(currentURL)}`;
+      res = await sendReq("GET", localURL);
+    }
+    if (!res || !res.data) {
+      showToast("请求失败");
+      return;
+    }
+    let content = res.data;
+    if (typeof content !== "string") {
+      content = JSON.stringify(content, null, 2);
+    }
+    await localforage.setItem(contentKey(item.id), content);
+    item.length = content.length;
+    item.preview = content.slice(0, 60).replace(/\s+/g, " ").slice(0, 30);
+    item.updatedAt = Date.now();
+    await persistIndex();
+    cmStore.setCmCode(content);
+    await setCurrentItem(item.id, item.name);
+    lastSavedContent.value = content;
+    await nextTick();
+    clearTimeout(autosaveTimer);
+    isDirty = false;
+    showToast("已刷新：" + item.name);
+  } catch (e) {
+    console.log(e);
+    showToast("刷新失败");
+  } finally {
+    loadingItemId.value = null;
+  }
+}
 
 const allChecked = computed(() => savedItems.value.length > 0 && checkedIds.value.length === savedItems.value.length);
 const toggleCheckAll = () => {
@@ -760,8 +883,6 @@ console.log(i.o.c[2])
 
 // end`;
 
-const code = ref("");
-
 async function loadUrlContent(inputUrl) {
   try {
     let currentURL = inputUrl;
@@ -786,9 +907,15 @@ async function loadUrlContent(inputUrl) {
 
     showToast("请求中");
 
-    const res = await sendReq("GET", currentURL);
+    // 先尝试直连；若被 CORS 拦截则走本地同源接口（Vite dev server 中转）
+    let res = await sendReq("GET", currentURL);
+    if (!res || !res.data) {
+      const localURL = `/api/fetch?url=${encodeURIComponent(currentURL)}`;
+      showToast("同源转发中…");
+      res = await sendReq("GET", localURL);
+    }
 
-    if (!res.data) {
+    if (!res || !res.data) {
       showToast("请求失败");
       return;
     }
@@ -809,6 +936,8 @@ async function loadUrlContent(inputUrl) {
       id,
       name: fileName,
       ...buildMeta(content),
+      url: currentURL,
+      blobUrl: bloburl,
     };
 
     await localforage.setItem(contentKey(id), content);
@@ -892,16 +1021,10 @@ onMounted(async () => {
   } catch {}
   await loadSaves();
 
-  // const cc = cmStore.CmCode;
-  // if (israw.value) {
-  //   code.value = grc.value;
-  //   await setCurrentItem(null, "");
-  // }
   const cc = cmStore.CmCode;
+  let initialCode;
 
   if (israw.value) {
-    code.value = grc.value;
-
     // 从 blob 链接提取文件名
     const fileName = getFileNameFromUrl(bloburl || currentURL);
 
@@ -931,9 +1054,10 @@ onMounted(async () => {
     clearTimeout(autosaveTimer);
 
     isDirty = false;
+
+    initialCode = grc.value;
   } else if (cc != "") {
-    console.log("2");
-    code.value = cc;
+    initialCode = cc;
   } else {
     let lastId = null;
     try {
@@ -952,8 +1076,7 @@ onMounted(async () => {
     }
 
     if (lastId && lastContent !== null && lastContent !== undefined) {
-      // console.log("读取:", JSON.stringify(lastContent), lastContent.length);
-      code.value = lastContent;
+      initialCode = lastContent;
       currentItemId.value = lastId; // 直接赋值，避免重复写一次 LAST_OPENED_KEY
 
       const lastItem = savedItems.value.find((i) => i.id === lastId);
@@ -963,15 +1086,15 @@ onMounted(async () => {
     } else {
       const storedUsername = await localforage.getItem("codehub");
       if (storedUsername) {
-        code.value = storedUsername;
+        initialCode = storedUsername;
         console.log("0 读取到草稿数据");
       } else {
-        code.value = xc;
+        initialCode = xc;
       }
     }
   }
-  cmStore.setCmCode(code.value);
-  lastSavedContent.value = code.value || EMPTY_CONTENT;
+  cmStore.setCmCode(initialCode);
+  lastSavedContent.value = initialCode || EMPTY_CONTENT;
   isDirty = false;
 
   document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -1044,8 +1167,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
   background: transparent;
   border-radius: 20px;
-  z-index: 998;
-  overflow: hidden;
+  z-index: 996;
+  position: relative;
   line-height: 16px;
   box-shadow: 0 0 5px #919db687;
 }
@@ -1057,6 +1180,11 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.2);
   flex-wrap: wrap;
+}
+
+.saves-body {
+  overflow: hidden;
+  border-radius: 20px;
 }
 
 .saves-btn {
@@ -1086,7 +1214,6 @@ onBeforeUnmount(() => {
 }
 
 .saves-list {
-  max-height: 300px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 4px 0;
@@ -1099,12 +1226,47 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 
+/* 拖拽调整高度手柄 */
+.saves-resize-handle {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 4px;
+  height: 26px;
+  cursor: row-resize;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  background: transparent;
+}
+
+.saves-resize-bar {
+  width: 80px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(128, 128, 128, 0.35);
+  transition: background 0.15s;
+}
+
+.saves-resize-handle:hover .saves-resize-bar,
+.saves-resize-handle:active .saves-resize-bar {
+  background: rgba(128, 128, 128, 0.55);
+}
+
 .saves-item {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.1);
+}
+
+.saves-item-current {
+  background: rgba(92, 125, 190, 0.15);
 }
 
 .saves-item-info {
@@ -1128,21 +1290,39 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.saves-item-current {
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 400;
-  padding: 1px 6px;
-  border-radius: 10px;
-  color: #5c7dbe;
-  border: 1px solid #5c7dbe66;
-}
-
 .saves-item-preview {
   margin-top: 3px;
   font-size: 12px;
   opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
+/* URL 项预览多行布局 */
+.saves-item-preview:has(.saves-url-line) {
+  white-space: normal;
+  overflow: visible;
+}
+
+.saves-url-line {
+  cursor: pointer;
+  text-decoration: underline;
+  opacity: 0.7;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saves-url-line:hover {
+  opacity: 1;
+}
+
+.saves-item-content-preview {
+  margin-top: 3px;
+  font-size: 12px;
+  opacity: 0.7;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1167,6 +1347,44 @@ onBeforeUnmount(() => {
 
 .saves-load-btn:disabled {
   opacity: 0.4;
+}
+
+.saves-refresh-btn {
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  background: transparent;
+  color: inherit;
+  flex-shrink: 0;
+  cursor: pointer;
+  line-height: 1;
+}
+.saves-refresh-btn:disabled {
+  opacity: 0.4;
+}
+
+.saves-url-line {
+  cursor: pointer;
+  text-decoration: underline;
+  opacity: 0.7;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saves-url-line:hover {
+  opacity: 1;
+}
+
+.saves-item-content-preview {
+  margin-top: 3px;
+  font-size: 12px;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ===== 自定义弹窗样式 ===== */
@@ -1235,10 +1453,6 @@ onBeforeUnmount(() => {
 }
 
 @media (prefers-color-scheme: dark) {
-  .saves-panel {
-    box-shadow: 0 0 5px #5c7dbe61;
-  }
-
   .modal-box {
     background: #16181c;
   }
