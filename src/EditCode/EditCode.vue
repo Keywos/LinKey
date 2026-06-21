@@ -9,68 +9,68 @@
   <!-- 保存列表面板 -->
   <div v-if="showSaves" class="saves-panel">
     <div class="saves-body">
-    <div class="saves-toolbar">
-      <button class="saves-btn" @click="toggleSelectMode">{{ selectMode ? "完成" : "选择" }}</button>
+      <div class="saves-toolbar">
+        <button class="saves-btn" @click="toggleSelectMode">{{ selectMode ? "完成" : "选择" }}</button>
 
-      <template v-if="selectMode">
-        <label class="saves-check-all">
-          <input type="checkbox" :checked="allChecked" @change="toggleCheckAll" />
-          全选
-        </label>
-        <button class="saves-btn" :disabled="checkedIds.length === 0" @click="deleteSelected">删除({{ checkedIds.length }})</button>
+        <template v-if="selectMode">
+          <label class="saves-check-all">
+            <input type="checkbox" :checked="allChecked" @change="toggleCheckAll" />
+            全选
+          </label>
+          <button class="saves-btn" :disabled="checkedIds.length === 0" @click="deleteSelected">删除({{ checkedIds.length }})</button>
 
-        <button class="saves-btn" :disabled="checkedIds.length === 0" @click="exportSelected">导出选中({{ checkedIds.length }})</button>
-      </template>
-
-      <template v-else>
-        <button class="saves-btn" @click="createNewBlank">新建</button>
-
-        <button class="saves-btn" @click="requestUrlContent">URL</button>
-
-        <button class="saves-btn" @click="triggerImport">导入</button>
-
-        <button class="saves-btn" @click="exportCurrent">导出</button>
-      </template>
-
-      <input ref="importInputRef" type="file" style="display: none" @change="onImportFileChange" />
-    </div>
-    <div ref="savesListRef" class="saves-list" :style="{ maxHeight: savesPanelHeight + 'px' }">
-      <div v-if="savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
-      <div v-for="item in savedItems" :key="item.id" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
-        <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" />
-
-        <div class="saves-item-info">
-          <div class="saves-item-name">
-            {{ item.name }}
-          </div>
-
-          <div class="saves-item-preview">
-            <template v-if="item.url">
-              <div v-if="item.blobUrl" class="saves-url-line" title="点击复制 blob URL" @click.stop="copyUrl(item, 'blob')">{{ item.blobUrl }}</div>
-              <div class="saves-url-line" title="点击复制 raw URL" @click.stop="copyUrl(item, 'raw')">{{ item.url }}</div>
-              <div class="saves-item-content-preview">{{ item.preview || "" }}</div>
-            </template>
-            <template v-else>
-              <span class="saves-item-content-preview">{{ item.preview || "" }}</span>
-            </template>
-          </div>
-
-          <div class="saves-item-meta">
-            {{ formatTime(item.updatedAt) }}
-            ·
-            {{ formatBytes(item.length) }}
-          </div>
-        </div>
-
-        <template v-if="item.url">
-          <button class="saves-refresh-btn" :disabled="loadingItemId === item.id" @click="refreshUrlItem(item)" title="重新请求 URL 更新当前文件">请求</button>
+          <button class="saves-btn" :disabled="checkedIds.length === 0" @click="exportSelected">导出选中({{ checkedIds.length }})</button>
         </template>
-        <button class="saves-load-btn" :disabled="loadingItemId === item.id" @click="loadItem(item)">
-          <!-- {{ loadingItemId === item.id ? "加载中" : "加载" }} -->
-          加载
-        </button>
+
+        <template v-else>
+          <button class="saves-btn" @click="createNewBlank">新建</button>
+
+          <button class="saves-btn" @click="requestUrlContent">URL</button>
+
+          <button class="saves-btn" @click="triggerImport">导入</button>
+
+          <button class="saves-btn" @click="exportCurrent">导出</button>
+        </template>
+
+        <input ref="importInputRef" type="file" style="display: none" @change="onImportFileChange" />
       </div>
-    </div>
+      <div ref="savesListRef" class="saves-list" :style="{ maxHeight: savesPanelHeight + 'px' }">
+        <div v-if="savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
+        <div v-for="item in savedItems" :key="item.id" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
+          <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" />
+
+          <div class="saves-item-info">
+            <div class="saves-item-name">
+              {{ item.name }}
+            </div>
+
+            <div class="saves-item-preview">
+              <template v-if="item.url">
+                <div v-if="item.blobUrl" class="saves-url-line" title="点击复制 blob URL" @click.stop="copyUrl(item, 'blob')">{{ item.blobUrl }}</div>
+                <div class="saves-url-line" title="点击复制 raw URL" @click.stop="copyUrl(item, 'raw')">{{ item.url }}</div>
+                <div class="saves-item-content-preview">{{ item.preview || "" }}</div>
+              </template>
+              <template v-else>
+                <span class="saves-item-content-preview">{{ item.preview || "" }}</span>
+              </template>
+            </div>
+
+            <div class="saves-item-meta">
+              {{ formatTime(item.updatedAt) }}
+              ·
+              {{ formatBytes(item.length) }}
+            </div>
+          </div>
+
+          <template v-if="item.url">
+            <button class="saves-refresh-btn" :disabled="loadingItemId === item.id" @click="refreshUrlItem(item)" title="重新请求 URL 更新当前文件">请求</button>
+          </template>
+          <button class="saves-load-btn" :disabled="loadingItemId === item.id" @click="loadItem(item)">
+            <!-- {{ loadingItemId === item.id ? "加载中" : "加载" }} -->
+            加载
+          </button>
+        </div>
+      </div>
     </div>
     <!-- 拖拽调整高度手柄 -->
     <div ref="savesHandleRef" class="saves-resize-handle" @mousedown="startSavesResize">
@@ -427,6 +427,7 @@ async function refreshUrlItem(item) {
     let res = await sendReq("GET", currentURL);
     if (!res || !res.data) {
       const localURL = `https://surgetool.com/api/fetch?url=${encodeURIComponent(currentURL)}`;
+      showToast("模块请求转发中…");
       res = await sendReq("GET", localURL);
     }
     if (!res || !res.data) {
@@ -911,7 +912,7 @@ async function loadUrlContent(inputUrl) {
     let res = await sendReq("GET", currentURL);
     if (!res || !res.data) {
       const localURL = `https://surgetool.com/api/fetch?url=${encodeURIComponent(currentURL)}`;
-      showToast("同源转发中…");
+      showToast("模块请求转发中…");
       res = await sendReq("GET", localURL);
     }
 
