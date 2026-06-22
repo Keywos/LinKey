@@ -323,7 +323,7 @@ const persistIndex = async () => {
 // 预览只需要取内容的前一小段处理，不要对整份大文件做正则扫描
 const buildMeta = (content) => ({
   length: content.length,
-  preview: content.slice(0, 60).replace(/\s+/g, " ").slice(0, 30),
+  preview: content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100),
   updatedAt: Date.now(),
   language: cmStore.activeLanguage, // 保存时记录当前识别出的语言，供导出时决定后缀
 });
