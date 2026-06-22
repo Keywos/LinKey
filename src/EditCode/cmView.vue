@@ -532,6 +532,7 @@ const CreateView = () => {
         // ★ 首次加载延迟 300ms，让编辑器先渲染空白壳
         if (isFirstLoad.value) {
           isFirstLoad.value = false;
+          console.log('首次加载延迟 345ms')
           setTimeout(() => applyContentToEditor(nextValue), 345);
         } else {
           applyContentToEditor(nextValue);

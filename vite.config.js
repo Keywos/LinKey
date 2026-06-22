@@ -97,6 +97,9 @@ export default {
     chunkSizeWarningLimit: 4096,
     target: "es2020",
     minify: "esbuild",
+    esbuild: {
+      drop: ["console"],
+    },
     input: {
       main: "src/splash.js",
     },
