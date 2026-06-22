@@ -17,7 +17,21 @@ const handler = async ({ event }) => {
   if (!cached) {
     // 预缓存缺失 → 后台重建，当前导航从网络加载
     event.waitUntil(rebuildPrecache());
-    return fetch(event.request);
+    try {
+      return await fetch(event.request);
+    } catch (e) {
+      // 离线 + 缓存缺失 → 尝试从所有缓存中找 index.html 兜底
+      const allCaches = await caches.keys();
+      for (const name of allCaches) {
+        const hit = await caches.match("/index.html", { cacheName: name });
+        if (hit) return hit;
+      }
+      // 最终兜底：极简离线页面
+      return new Response(
+        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>离线</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f5f5f5;color:#333}</style></head><body><div><h1>⚠️ 离线</h1><p>请检查网络连接后重试</p></div></body></html>',
+        { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
+      );
+    }
   }
 
   if (cached.redirected) {

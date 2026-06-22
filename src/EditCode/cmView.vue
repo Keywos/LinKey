@@ -446,6 +446,7 @@ defineExpose({
 
 let docUpdate = false;
 let view;
+const isFirstLoad = ref(true);
 const CreateView = () => {
   view = new EditorView({
     state: EditorState.create({
@@ -492,38 +493,48 @@ const CreateView = () => {
     parent: viewRef.value,
   });
 
+  const applyContentToEditor = (nextValue) => {
+    console.log("Code更新到文档");
+    view.dispatch({
+      changes: {
+        from: 0,
+        to: view.state.doc.length,
+        insert: nextValue,
+      },
+    });
+
+    // 外部加载新文件时重置格式化状态
+    isFormatted.value = false;
+
+    // ★ 超过 1MB 强制纯文本，清理前一个文件残留的高亮扩展
+    if (nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
+      syncLanguageForDocument(nextValue);
+      return;
+    }
+
+    // ★ 修复：如果外部标记了 skip，则等 CodeMirror 渲染完成后
+    //   再延迟触发语言同步，而不是立即排队
+    if (_skipNextLangSync) {
+      _skipNextLangSync = false;
+      nextTick(() => {
+        debouncedSyncLanguage(nextValue);
+      });
+    } else {
+      syncLanguageForDocument(nextValue);
+    }
+  };
+
   watch(
     () => cmStore.CmCode,
     (newValue) => {
       const nextValue = newValue || "";
       if (!docUpdate && nextValue !== view.state.doc.toString()) {
-        console.log("Code更新到文档");
-        view.dispatch({
-          changes: {
-            from: 0,
-            to: view.state.doc.length,
-            insert: nextValue,
-          },
-        });
-
-        // 外部加载新文件时重置格式化状态
-        isFormatted.value = false;
-
-        // ★ 超过 1MB 强制纯文本，清理前一个文件残留的高亮扩展
-        if (nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
-          syncLanguageForDocument(nextValue);
-          return;
-        }
-
-        // ★ 修复：如果外部标记了 skip，则等 CodeMirror 渲染完成后
-        //   再延迟触发语言同步，而不是立即排队
-        if (_skipNextLangSync) {
-          _skipNextLangSync = false;
-          nextTick(() => {
-            debouncedSyncLanguage(nextValue);
-          });
+        // ★ 首次加载延迟 300ms，让编辑器先渲染空白壳
+        if (isFirstLoad.value) {
+          isFirstLoad.value = false;
+          setTimeout(() => applyContentToEditor(nextValue), 300);
         } else {
-          syncLanguageForDocument(nextValue);
+          applyContentToEditor(nextValue);
         }
       }
     },
@@ -559,11 +570,13 @@ watch(
 
 onMounted(() => {
   CreateView();
-  const initialCode = cmStore.CmCode || "";
-  // ★ 超过 1MB 初次跳过语言检测
-  if (!(initialCode.length > LARGE_FILE_PLAINTEXT_THRESHOLD)) {
-    syncLanguageForDocument(initialCode);
-  }
+  setTimeout(() => {
+    const initialCode = cmStore.CmCode || "";
+    // ★ 超过 1MB 初次跳过语言检测
+    if (!(initialCode.length > LARGE_FILE_PLAINTEXT_THRESHOLD)) {
+      syncLanguageForDocument(initialCode);
+    }
+  }, 300);
 });
 
 onBeforeUnmount(() => {
