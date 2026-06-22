@@ -666,7 +666,7 @@ function onDragPointer(ev) {
   const dy = ev.clientY - dragStartY;
   if (!isDragging && Math.abs(dy) < DRAG_THRESHOLD) return;
   isDragging = true;
-  toolbarTopPx.value = Math.max(0, Math.min(window.innerHeight - 60, dragStartTop + dy));
+  toolbarTopPx.value = Math.max(0, Math.min(window.innerHeight - 130, dragStartTop + dy));
   /* 一旦确认拖拽，拦截紧接着的 click */
   document.addEventListener("click", blockClickAfterDrag, { capture: true, once: true });
 }
