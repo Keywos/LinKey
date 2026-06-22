@@ -54,12 +54,11 @@ export default {
     }),
     VitePWA({
       strategies: "generateSW",
-
       registerType: "autoUpdate",
 
       manifest: {
-        name: "LinKey",
-        short_name: "LinKey",
+        name: "App",
+        short_name: "App",
         start_url: "/",
         scope: "/",
         display: "standalone",
@@ -72,11 +71,26 @@ export default {
 
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,json}"],
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.destination === "script",
 
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "js-cache",
+            },
+          },
+          {
+            urlPattern: ({ request }) => request.destination === "style" || request.destination === "image" || request.destination === "document" || request.destination === "font",
+
+            handler: "CacheFirst",
+            options: {
+              cacheName: "asset-cache",
+            },
+          },
+        ],
         skipWaiting: true,
         clientsClaim: true,
-
-        runtimeCaching: [],
       },
     }),
   ],
@@ -99,8 +113,9 @@ export default {
     rollupOptions: {
       output: {
         manualChunks: {
-          v: ["vant"],
-          js: ["@/EditCode/lang-js"],
+          linkv: ["vant"],
+          linkterser: ["terser"],
+          linkjs: ["@/EditCode/lang-js"],
         },
         entryFileNames: "[name].[hash].js",
         chunkFileNames: "linkjs/[name].[hash].js",
