@@ -23,7 +23,7 @@
     <div v-else class="cm-toolbar-wrapper" :style="toolbarStyle" @pointerdown="startDragPointer">
       <div class="cm-img-button">
         <div>
-          <button class="cm-collapse-btn" :style="collapseBtnOrder" @click="onCollapseClick" title="折叠">
+          <button class="cm-collapse-btn" :style="collapseBtnOrder" title="折叠">
             <svg
               class="icon"
               style="width: 1.2em; height: 1.2em; vertical-align: middle; fill: currentColor; overflow: hidden; transform: rotate(90deg)"
@@ -530,6 +530,7 @@ const CreateView = () => {
         }
       }
     },
+    { immediate: true },
   );
 
   watch(isDarkModeEnabled, (isDark) => {
@@ -881,14 +882,22 @@ function onDragPointer(ev) {
 function endDragPointer(ev) {
   document.removeEventListener("pointermove", onDragPointer);
   document.removeEventListener("pointerup", endDragPointer);
+  // ★ 无论拖拽还是点击，都阻止后续自然 click 事件，避免双击/误触
   if (isDragging) {
     localStorage.setItem("cm_toolbar_top_px", toolbarTopPx.value.toString());
-  } else if (ev) {
+  }
+  document.addEventListener("click", swallowToolbarClick, { capture: true, once: true });
+  if (!isDragging && ev) {
     const el = document.elementFromPoint(ev.clientX, ev.clientY);
     if (!el) return;
     const dot = el.closest(".cm-collapsed-dot");
     if (dot) {
       toggleCollapsed();
+      return;
+    }
+    const collapseBtn = el.closest(".cm-collapse-btn");
+    if (collapseBtn) {
+      onCollapseClick();
       return;
     }
     const btn = el.closest("button");
@@ -901,6 +910,14 @@ function endDragPointer(ev) {
       const sel = wrap.querySelector("select");
       if (sel) sel.focus();
     }
+  }
+}
+
+/** 在 capture 阶段吞掉拖拽结束后工具栏区域的 click 事件（但放过 select 下拉框） */
+function swallowToolbarClick(e) {
+  if (e.target.closest("select, .language-select-wrap")) return;
+  if (e.target.closest(".cm-toolbar-wrapper, .cm-collapsed-dot")) {
+    e.stopPropagation();
   }
 }
 // ===== 工具栏垂直拖拽 end =====
@@ -1040,6 +1057,7 @@ function endDragPointer(ev) {
   border-radius: 23px;
   border: 1px solid rgba(128, 128, 128, 0.3);
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.08);
+  touch-action: none;
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -1078,6 +1096,7 @@ function endDragPointer(ev) {
   border-radius: 50%;
   opacity: 1;
   filter: none;
+  touch-action: none;
   transition:
     opacity 0.15s,
     background 0.15s;
