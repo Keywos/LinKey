@@ -633,7 +633,8 @@ let dragStartTop = 0;
 const DRAG_THRESHOLD = 6;
 let isDragging = false;
 
-const toolbarTopPx = ref(parseFloat(localStorage.getItem("cm_toolbar_top_px")) || Math.round(window.innerHeight * 0.66));
+const savedTopPx = localStorage.getItem("cm_toolbar_top_px");
+const toolbarTopPx = ref(savedTopPx !== null ? parseFloat(savedTopPx) : Math.round(window.innerHeight * 0.66));
 
 const onCollapseClick = () => {
   collapsed.value = true;
