@@ -55,20 +55,41 @@ registerRoute(new NavigationRoute(handler, {
 }));
 
 // 重建预缓存：从网络重新拉取所有资源
+// 使用与 precacheAndRoute 一致的缓存键（带 __WB_REVISION__ 参数），避免产生重复条目
 async function rebuildPrecache() {
   const cache = await caches.open(CACHE_NAME);
   const origin = self.location.origin;
   for (const entry of precacheEntries) {
     const url = typeof entry === "string" ? entry : entry.url;
+    const revision = typeof entry === "object" ? entry.revision : undefined;
     try {
       // 确保使用绝对 URL 作为缓存键
       const absUrl = url.startsWith("http") ? url : origin + (url.startsWith("/") ? url : "/" + url);
       const res = await fetch(absUrl);
       if (res.ok) {
-        await cache.put(absUrl, res);
+        // 使用与 precacheAndRoute 完全一致的键（带 __WB_REVISION__），覆盖时不会产生重复
+        const cacheKey = revision ? `${absUrl}?__WB_REVISION__=${revision}` : absUrl;
+        await cache.put(cacheKey, res);
       }
     } catch (e) {
       console.warn("[SW] 重建缓存失败:", url);
+    }
+  }
+  // 清理旧的不带 revision 的重复条目（如果存在）
+  await deduplicateCache(cache, precacheEntries, origin);
+}
+
+// 清理缓存中同时存在"带 revision"和"不带 revision"两种情况下的旧条目
+async function deduplicateCache(cache, entries, origin) {
+  const keys = await cache.keys();
+  for (const entry of entries) {
+    if (typeof entry === "object" && entry.revision) {
+      const absUrl = entry.url.startsWith("http") ? entry.url : origin + (entry.url.startsWith("/") ? entry.url : "/" + entry.url);
+      const revKey = `${absUrl}?__WB_REVISION__=${entry.revision}`;
+      // 如果 revision 键存在，删除无 revision 的旧条目
+      if (keys.some((r) => r.url === revKey)) {
+        await cache.delete(absUrl);
+      }
     }
   }
 }

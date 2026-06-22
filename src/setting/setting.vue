@@ -234,26 +234,31 @@ const clearhs = () => {
   showToast("清除搜索页排序缓存成功");
 };
 
+
 const rePwa = async () => {
-  showToast("正在重置 PWA缓存... 请稍等");
+  showToast("正在重置 PWA缓存...");
+
   if ("serviceWorker" in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    for (let registration of registrations) {
-      await registration.unregister();
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) {
+      await r.unregister();
     }
   }
 
   if ("caches" in window) {
-    const cacheNames = await caches.keys();
-    for (let cacheName of cacheNames) {
-      await caches.delete(cacheName);
-    }
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
   }
-  showToast("重置 PWA 成功，即将刷新页面");
-  setTimeout(() => {
-    location.reload();
-  }, 500);
+
+  // 强制阻止旧 SW 复活
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: "SKIP_WAITING" });
+  }
+
+  showToast("重置完成");
+  setTimeout(() => location.href = location.href + "?t=" + Date.now(), 300);
 };
+
 
 const cleargist = () => {
   localStorage.removeItem("LocalGistResTure");

@@ -48,7 +48,7 @@
           </div>
           <button @click="undoCode"><img :src="undoimg" /></button>
           <button @click="redoCode"><img :src="redoimg" /></button>
-          <button @click="formatCode" :title="formatCodeTitle"><img :src="format" /></button>
+          <button @click="formatCode" :title="formatCodeTitle" :class="{ 'format-btn-dimmed': !isJsLanguage }"><img :src="format" /></button>
           <button @click="toggleSearch"><img :src="searchimg" /></button>
           <button @click="copyText"><img :src="copyimg" /></button>
           <button @click="delAllCode"><img :src="del" /></button>
@@ -172,13 +172,12 @@ const LARGE_FILE_PLAINTEXT_THRESHOLD = 1 * 1024 * 1024; // 超过 1MB 强制纯�
 const SYNC_DEBOUNCE_MS = 300;
 // 按文件大小分级延迟语言检测，避免大文件加载时主线程卡死
 const getSyncDelay = (length) => {
-  if (length > 1048576) return 2400;   // >1MB   
-  if (length > 800000) return 1600;   
-  if (length > 500000)  return 1000;   
-  if (length > 102400)   return 500;    
-  return SYNC_DEBOUNCE_MS;            
+  if (length > 1048576) return 2400; // >1MB
+  if (length > 800000) return 1600;
+  if (length > 500000) return 1000;
+  if (length > 102400) return 500;
+  return SYNC_DEBOUNCE_MS;
 };
-
 
 const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
@@ -422,10 +421,7 @@ const syncLanguageForDocument = async (docContent) => {
 
 const createEditorPlaceholder = () => (props.placeholder ? cmPlaceholder(props.placeholder) : []);
 
-
-
 let syncTimer = null;
-
 
 const debouncedSyncLanguage = (docContent) => {
   clearTimeout(syncTimer);
@@ -452,12 +448,7 @@ const CreateView = () => {
     state: EditorState.create({
       extensions: [
         history(),
-        keymap.of([
-          indentWithTab,
-          ...searchKeymap,
-          ...defaultKeymap,
-          ...historyKeymap,
-        ]),
+        keymap.of([indentWithTab, ...searchKeymap, ...defaultKeymap, ...historyKeymap]),
         langs.of([]),
         shikiSyntax.of(createShikiHighlight()),
         editorPlaceholder.of(createEditorPlaceholder()),
@@ -532,7 +523,7 @@ const CreateView = () => {
         // ★ 首次加载延迟 300ms，让编辑器先渲染空白壳
         if (isFirstLoad.value) {
           isFirstLoad.value = false;
-          console.log('首次加载延迟 345ms')
+          console.log("首次加载延迟 345ms");
           setTimeout(() => applyContentToEditor(nextValue), 345);
         } else {
           applyContentToEditor(nextValue);
@@ -681,16 +672,17 @@ const redoCode = () => redo(view);
 // ===== 格式化 / 压缩 JS 切换 =====
 const isFormatted = ref(false);
 
-const formatCodeTitle = computed(() =>
-  activeLanguage.value === "javascript" ? "JS 选项" : "格式化"
-);
+const isJsLanguage = computed(() => activeLanguage.value === "javascript" || selectedLanguage.value === "javascript");
+const formatCodeTitle = computed(() => (isJsLanguage.value ? "JS 选项" : "格式化"));
 
 const COMPRESS_OPTS_KEY = "compress_opts";
 function loadCompressOpts() {
   try {
     const saved = localStorage.getItem(COMPRESS_OPTS_KEY);
     if (saved) return JSON.parse(saved);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return {};
 }
 
@@ -713,10 +705,10 @@ watch(
         keepNames: compressOpts.keepNames,
         keepConsole: compressOpts.keepConsole,
         charset: compressOpts.charset,
-      })
+      }),
     );
   },
-  { deep: true }
+  { deep: true },
 );
 
 function closeCompressDialog() {
@@ -726,17 +718,22 @@ function closeCompressDialog() {
 // ★ terser 压缩（动态加载）
 let _terserMinify = null;
 
-// 打开弹窗时预载 terser
-watch(() => compressOpts.visible, async (visible) => {
-  if (visible && !_terserMinify) {
-    try {
-      const mod = await import("terser");
-      _terserMinify = mod.minify;
-    } catch (e) {
-      console.warn("terser 预载失败", e);
+// 打开弹窗时预载 terser（先让弹窗渲染，再加载 terser）
+watch(
+  () => compressOpts.visible,
+  async (visible) => {
+    if (visible && !_terserMinify) {
+      // 等待弹窗 DOM 渲染完成后才加载 terser
+      await nextTick();
+      try {
+        const mod = await import("terser");
+        _terserMinify = mod.minify;
+      } catch (e) {
+        console.warn("terser 预载失败", e);
+      }
     }
-  }
-});
+  },
+);
 
 async function doCompress() {
   const code = cmStore.CmCode || "";
@@ -796,7 +793,8 @@ async function formatCode() {
   if (!code) return;
 
   // JS：每次都弹出选项弹窗
-  if (activeLanguage.value === "javascript") {
+  // 同时检查 activeLanguage（检测完成）和 selectedLanguage（用户手动选），避免首次加载时 activeLanguage 尚未检测完成
+  if (activeLanguage.value === "javascript" || selectedLanguage.value === "javascript") {
     compressOpts.visible = true;
     return;
   }
@@ -867,7 +865,9 @@ function startDragPointer(e) {
   dragStartTop = toolbarTopPx.value;
   isDragging = false;
   e.preventDefault();
-  try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+  try {
+    e.currentTarget.setPointerCapture(e.pointerId);
+  } catch (_) {}
   document.addEventListener("pointermove", onDragPointer);
   document.addEventListener("pointerup", endDragPointer);
 }
@@ -889,9 +889,15 @@ function endDragPointer(ev) {
     const el = document.elementFromPoint(ev.clientX, ev.clientY);
     if (!el) return;
     const dot = el.closest(".cm-collapsed-dot");
-    if (dot) { toggleCollapsed(); return; }
+    if (dot) {
+      toggleCollapsed();
+      return;
+    }
     const btn = el.closest("button");
-    if (btn) { btn.click(); return; }
+    if (btn) {
+      btn.click();
+      return;
+    }
     const wrap = el.closest(".language-select-wrap");
     if (wrap) {
       const sel = wrap.querySelector("select");
@@ -974,6 +980,10 @@ function endDragPointer(ev) {
   height: 30px;
   justify-content: center;
   align-items: center;
+}
+
+.format-btn-dimmed {
+  opacity: 0.2;
 }
 
 @media (max-width: 480px) {
@@ -1107,30 +1117,6 @@ function endDragPointer(ev) {
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  .cm-toolbar-wrapper,
-  .cm-collapsed-dot {
-    background: #282c34;
-    border-color: rgba(255, 255, 255, 0.15);
-    color: var(--text, inherit);
-  }
-  .cm-collapse-btn,
-  .cm-collapsed-icon {
-    color: var(--text, inherit);
-  }
-  .cm-search-input {
-    background: rgba(255, 255, 255, 0.06);
-  }
-  .cm-search-input:focus {
-    background: rgba(143, 180, 232, 0.08);
-  }
-  .cm-search-opt.active {
-    border-color: #6a9ed8;
-    background: rgba(106, 158, 216, 0.2);
-    color: #7ab0f0;
-  }
-}
-
 .cm-search-box {
   display: grid;
   grid-template-columns: 1fr repeat(4, auto);
@@ -1240,27 +1226,15 @@ function endDragPointer(ev) {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.45);
-  animation: compressFadeIn 0.15s ease;
-}
-
-@keyframes compressFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
 
 .compress-dialog {
   width: 85%;
   max-width: 340px;
-  background: #fff;
+  background: #ffffffec;
   border-radius: 16px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
   overflow: hidden;
-  animation: compressSlideUp 0.2s ease;
-}
-
-@keyframes compressSlideUp {
-  from { transform: translateY(30px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
 }
 
 .compress-title {
@@ -1281,7 +1255,7 @@ function endDragPointer(ev) {
 .compress-label {
   font-size: 12px;
   font-weight: 500;
-  color: #666;
+  color: #66666680;
   margin-bottom: 6px;
 }
 
@@ -1291,7 +1265,7 @@ function endDragPointer(ev) {
   gap: 6px;
   padding: 6px 0;
   font-size: 14px;
-  color: #333;
+  color: #3333337a;
   cursor: pointer;
 }
 
@@ -1318,7 +1292,7 @@ function endDragPointer(ev) {
   border: none;
   background: transparent;
   font-size: 15px;
-  color: #333;
+  color: #33333362;
   cursor: pointer;
   transition: background 0.12s;
 }
@@ -1341,11 +1315,33 @@ function endDragPointer(ev) {
 }
 
 @media (prefers-color-scheme: dark) {
+  .cm-toolbar-wrapper,
+  .cm-collapsed-dot {
+    background: #282c34;
+    border-color: rgba(255, 255, 255, 0.15);
+    color: var(--text, inherit);
+  }
+  .cm-collapse-btn,
+  .cm-collapsed-icon {
+    color: var(--text, inherit);
+  }
+  .cm-search-input {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .cm-search-input:focus {
+    background: rgba(143, 180, 232, 0.08);
+  }
+  .cm-search-opt.active {
+    border-color: #6a9ed8;
+    background: rgba(106, 158, 216, 0.2);
+    color: #7ab0f0;
+  }
+
   .compress-overlay {
     background: rgba(0, 0, 0, 0.6);
   }
   .compress-dialog {
-    background: #2c2c2c;
+    background: #282c34ec;
   }
   .compress-title {
     color: #e0e0e0;
@@ -1363,13 +1359,13 @@ function endDragPointer(ev) {
     color: #ccc;
   }
   .compress-btn:hover {
-    background: #3a3a3a;
+    background: #3a3a3a5f;
   }
   .compress-btn:active {
     background: #444;
   }
   .compress-btn.cancel {
-    color: #888;
+    color: #888888d7;
   }
   .compress-btn.primary {
     color: #6a9ed8;

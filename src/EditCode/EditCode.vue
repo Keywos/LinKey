@@ -452,7 +452,7 @@ async function refreshUrlItem(item) {
     }
     await idbStorage.setItem(contentKey(item.id), content);
     item.length = content.length;
-    item.preview = content.slice(0, 60).replace(/\s+/g, " ").slice(0, 30);
+    item.preview = content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100);
     item.updatedAt = Date.now();
     await persistIndex();
 
@@ -786,22 +786,27 @@ const exportSelected = async () => {
 // ===== 导入 / 导出文件 end =====
 
 const rePwa = async () => {
+  showToast("正在重置 PWA缓存...");
+
   if ("serviceWorker" in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    for (let registration of registrations) {
-      await registration.unregister();
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const r of regs) {
+      await r.unregister();
     }
   }
+
   if ("caches" in window) {
-    const cacheNames = await caches.keys();
-    for (let cacheName of cacheNames) {
-      await caches.delete(cacheName);
-    }
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
   }
-  showToast("重置 PWA 成功，即将刷新页面");
-  setTimeout(() => {
-    location.reload();
-  }, 100);
+
+  // 强制阻止旧 SW 复活
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: "SKIP_WAITING" });
+  }
+
+  showToast("重置完成");
+  setTimeout(() => location.href = location.href + "?t=" + Date.now(), 300);
 };
 
 function getFileNameFromUrl(url) {
