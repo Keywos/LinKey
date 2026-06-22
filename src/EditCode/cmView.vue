@@ -1,7 +1,7 @@
 <template>
   <div class="cmviewRef">
     <!-- 折叠态：小圆点 -->
-    <div v-if="collapsed" class="cm-collapsed-dot" :style="toolbarStyle" @pointerdown="startDragPointer" @click="toggleCollapsed">
+    <div v-if="collapsed" class="cm-collapsed-dot" :style="toolbarStyle" @pointerdown="startDragPointer">
       <span class="cm-collapsed-icon">
         <svg
           class="icon"
@@ -649,12 +649,14 @@ function blockClickAfterDrag(e) {
   }
 }
 
+/* 统一的拖拽处理器 — 折叠态 / 展开态共用 */
 function startDragPointer(e) {
   if (e.target.closest("input, select, textarea, option")) return;
   dragStartY = e.clientY;
   dragStartTop = toolbarTopPx.value;
   isDragging = false;
-  e.target.setPointerCapture(e.pointerId);
+  e.preventDefault();
+  try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
   document.addEventListener("pointermove", onDragPointer);
   document.addEventListener("pointerup", endDragPointer);
 }
@@ -663,17 +665,29 @@ function onDragPointer(ev) {
   const dy = ev.clientY - dragStartY;
   if (!isDragging && Math.abs(dy) < DRAG_THRESHOLD) return;
   isDragging = true;
-  ev.preventDefault();
   toolbarTopPx.value = Math.max(0, Math.min(window.innerHeight - 60, dragStartTop + dy));
   /* 一旦确认拖拽，拦截紧接着的 click */
   document.addEventListener("click", blockClickAfterDrag, { capture: true, once: true });
 }
 
-function endDragPointer() {
+function endDragPointer(ev) {
   document.removeEventListener("pointermove", onDragPointer);
   document.removeEventListener("pointerup", endDragPointer);
   if (isDragging) {
     localStorage.setItem("cm_toolbar_top_px", toolbarTopPx.value.toString());
+  } else if (ev) {
+    /* 非拖拽：手动触发点击，弥补 iOS 上 preventDefault 屏蔽的 click */
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    if (!el) return;
+    const dot = el.closest(".cm-collapsed-dot");
+    if (dot) { toggleCollapsed(); return; }
+    const btn = el.closest("button");
+    if (btn) { btn.click(); return; }
+    const wrap = el.closest(".language-select-wrap");
+    if (wrap) {
+      const sel = wrap.querySelector("select");
+      if (sel) sel.focus();
+    }
   }
 }
 // ===== 工具栏垂直拖拽 end =====
