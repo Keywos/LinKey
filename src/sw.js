@@ -1,4 +1,4 @@
-import { precacheAndRoute, matchPrecache } from "workbox-precaching";
+import { precacheAndRoute } from "workbox-precaching";
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { clientsClaim } from "workbox-core";
 
@@ -9,10 +9,14 @@ clientsClaim();
 const precacheEntries = self.__WB_MANIFEST || [];
 precacheAndRoute(precacheEntries);
 
+const CACHE_NAME = "workbox-precache-v2";
+
 // 导航请求统一返回 index.html
 // 若预缓存被清空（用户删除了 Cache Storage），手动重建
 const handler = async ({ event }) => {
-  const cached = await matchPrecache("/index.html");
+  const cache = await caches.open(CACHE_NAME);
+  // ignoreSearch 兼容 precacheAndRoute 的 __WB_REVISION__ 参数和 rebuild 无参数两种存储格式
+  const cached = await cache.match("/index.html", { ignoreSearch: true });
 
   if (!cached) {
     // 预缓存缺失 → 后台重建，当前导航从网络加载
@@ -52,14 +56,16 @@ registerRoute(new NavigationRoute(handler, {
 
 // 重建预缓存：从网络重新拉取所有资源
 async function rebuildPrecache() {
-  const cacheName = "workbox-precache-v2";
-  const cache = await caches.open(cacheName);
+  const cache = await caches.open(CACHE_NAME);
+  const origin = self.location.origin;
   for (const entry of precacheEntries) {
     const url = typeof entry === "string" ? entry : entry.url;
     try {
-      const res = await fetch(url);
+      // 确保使用绝对 URL 作为缓存键
+      const absUrl = url.startsWith("http") ? url : origin + (url.startsWith("/") ? url : "/" + url);
+      const res = await fetch(absUrl);
       if (res.ok) {
-        await cache.put(url, res);
+        await cache.put(absUrl, res);
       }
     } catch (e) {
       console.warn("[SW] 重建缓存失败:", url);

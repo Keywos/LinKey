@@ -488,7 +488,7 @@ const CreateView = () => {
           openText: "▾",
         }),
       ],
-      doc: cmStore.CmCode,
+      doc: "", // ★ 初始空文档，首次内容由 isFirstLoad 延迟注入
     }),
     parent: viewRef.value,
   });
@@ -532,7 +532,7 @@ const CreateView = () => {
         // ★ 首次加载延迟 300ms，让编辑器先渲染空白壳
         if (isFirstLoad.value) {
           isFirstLoad.value = false;
-          setTimeout(() => applyContentToEditor(nextValue), 300);
+          setTimeout(() => applyContentToEditor(nextValue), 345);
         } else {
           applyContentToEditor(nextValue);
         }
@@ -570,13 +570,6 @@ watch(
 
 onMounted(() => {
   CreateView();
-  setTimeout(() => {
-    const initialCode = cmStore.CmCode || "";
-    // ★ 超过 1MB 初次跳过语言检测
-    if (!(initialCode.length > LARGE_FILE_PLAINTEXT_THRESHOLD)) {
-      syncLanguageForDocument(initialCode);
-    }
-  }, 300);
 });
 
 onBeforeUnmount(() => {
@@ -730,12 +723,29 @@ function closeCompressDialog() {
 }
 
 // ★ terser 压缩（动态加载）
+let _terserMinify = null;
+
+// 打开弹窗时预载 terser
+watch(() => compressOpts.visible, async (visible) => {
+  if (visible && !_terserMinify) {
+    try {
+      const mod = await import("terser");
+      _terserMinify = mod.minify;
+    } catch (e) {
+      console.warn("terser 预载失败", e);
+    }
+  }
+});
+
 async function doCompress() {
   const code = cmStore.CmCode || "";
   if (!code) return;
+  if (!_terserMinify) {
+    showToast("terser 尚未加载完成，请稍后重试");
+    return;
+  }
   try {
-    const { minify } = await import("terser");
-    const result = await minify(code, {
+    const result = await _terserMinify(code, {
       compress: {
         drop_console: !compressOpts.keepConsole,
       },
