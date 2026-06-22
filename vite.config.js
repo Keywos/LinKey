@@ -165,7 +165,7 @@ export default {
     assetsInlineLimit: 4096,
     chunkSizeWarningLimit: 4096,
     target: "es2020",
-    minify: "terser",
+    minify: "esbuild",
     input: {
       main: "src/splash.js",
     },
@@ -180,11 +180,8 @@ export default {
         assetFileNames: "linkassets/[name].[hash].[ext]",
       },
     },
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
+    esbuild: {
+      drop: ["console", "debugger"],
     },
   },
   define: {

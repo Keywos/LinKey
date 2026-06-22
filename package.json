@@ -1,7 +1,7 @@
 {
   "name": "linkey",
   "private": true,
-  "version": "9.10.06",
+  "version": "9.10.07",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -53,11 +53,5 @@
     "vite": "^5.0.12",
     "workbox-build": "7.4.1",
     "workbox-window": "7.4.1"
-  },
-  "pnpm": {
-    "overrides": {
-      "lru-cache": "10.4.3",
-      "serialize-javascript": "6.0.2"
-    }
   }
 }
