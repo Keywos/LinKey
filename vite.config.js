@@ -53,40 +53,31 @@ export default {
       resolvers: [VantResolver()],
     }),
     VitePWA({
-      srcDir: "src",
-      outDir: "dist",
-      strategies: "injectManifest",
-      swSrc: "src/sw.js",
+      strategies: "generateSW",
+
       registerType: "autoUpdate",
+
       manifest: {
         name: "LinKey",
         short_name: "LinKey",
-        description: "LinKey Web App",
-        id: "/",
         start_url: "/",
         scope: "/",
-        lang: "zh",
         display: "standalone",
         icons: [
-          {
-            src: "144x144.png",
-            sizes: "144x144",
-            type: "image/png",
-          },
-          {
-            src: "192x192.png",
-            sizes: "192x192",
-            type: "image/png",
-          },
-          {
-            src: "512x512.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "any",
-          },
+          { src: "144x144.png", sizes: "144x144", type: "image/png" },
+          { src: "192x192.png", sizes: "192x192", type: "image/png" },
+          { src: "512x512.png", sizes: "512x512", type: "image/png" },
         ],
       },
-      selfDestroying: false,
+
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,json}"],
+
+        skipWaiting: true,
+        clientsClaim: true,
+
+        runtimeCaching: [],
+      },
     }),
   ],
   build: {
