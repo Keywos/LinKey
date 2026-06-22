@@ -92,7 +92,7 @@
   <div v-if="promptState.visible" class="modal-mask" @click.self="promptCancel">
     <div class="modal-box">
       <div class="modal-title">{{ promptState.title }}</div>
-      <input ref="promptInputRef" v-model="promptState.value" class="modal-input" type="text" @keyup.enter="promptConfirm" @keyup.esc="promptCancel" />
+      <input ref="promptInputRef" v-model="promptState.value" class="modal-input" type="text" autofocus @keyup.enter="promptConfirm" @keyup.esc="promptCancel" />
       <div class="modal-actions">
         <button class="modal-btn" @click="pasteToPromptInput">粘贴</button>
         <button class="modal-btn" @click="promptCancel">取消</button>
@@ -159,9 +159,19 @@ const { isDarkModeEnabled } = useTheme();
 const logAll = ref("");
 const props = defineProps(["isReadOnly"]);
 const lastSavedContent = ref("");
+const promptInputRef = ref(null);
 // ===== 自定义弹窗（替代 window.prompt / window.confirm） =====
 const promptState = ref({ visible: false, title: "", value: "", resolve: null });
 const confirmState = ref({ visible: false, title: "", resolve: null });
+
+// 弹窗打开时自动聚焦输入框（移动端弹出键盘）
+watch(() => promptState.value.visible, (visible) => {
+  if (visible) {
+    nextTick(() => {
+      promptInputRef.value?.focus();
+    });
+  }
+});
 
 async function requestUrlContent() {
   const url = await askPrompt("输入 Github/raw/普通文本链接");
