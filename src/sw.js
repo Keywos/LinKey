@@ -1,4 +1,4 @@
-import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
+import { precacheAndRoute } from "workbox-precaching";
 import { registerRoute, NavigationRoute } from "workbox-routing";
 import { NetworkFirst, CacheFirst } from "workbox-strategies";
 import { clientsClaim } from "workbox-core";
@@ -6,12 +6,6 @@ import { clientsClaim } from "workbox-core";
 self.skipWaiting();
 clientsClaim();
 
-/**
- * =========================
- * 1. 清理旧缓存
- * =========================
- */
-cleanupOutdatedCaches();
 
 /**
  * =========================
