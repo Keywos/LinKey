@@ -3,10 +3,9 @@
     <span @click="goFunction()">Code Hub</span>
     <div style="display: flex; align-items: center; gap: 10px; color: var(--text)">
       <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: .4;">{{ showSaves ? "▴" : "▾" }}</span>
-      <!-- <span @click="rePwa()" style="font-size: 14px; padding: 6px 20px; opacity: 0.1">⟳</span> -->
     </div>
-
   </h2>
+
   <!-- 保存列表面板 -->
   <div v-if="showSaves" class="saves-panel">
     <div class="saves-body" :style="{ height: savesPanelHeight + 'px' }">
@@ -19,17 +18,13 @@
             全选
           </label>
           <button class="saves-btn" :disabled="checkedIds.length === 0" @click="deleteSelected">删除({{ checkedIds.length }})</button>
-
           <button class="saves-btn" :disabled="checkedIds.length === 0" @click="exportSelected">导出选中({{ checkedIds.length }})</button>
         </template>
 
         <template v-else>
           <button class="saves-btn" @click="createNewBlank">新建</button>
-
           <button class="saves-btn" @click="requestUrlContent">URL</button>
-
           <button class="saves-btn" @click="triggerImport">导入</button>
-
           <button class="saves-btn" @click="exportCurrent">导出</button>
         </template>
 
@@ -67,7 +62,6 @@
             <button class="saves-refresh-btn" :disabled="loadingItemId === item.id" @click="refreshUrlItem(item)" title="重新请求 URL 更新当前文件">请求</button>
           </template>
           <button class="saves-load-btn" :disabled="loadingItemId === item.id" @click="loadItem(item)">
-            <!-- {{ loadingItemId === item.id ? "加载中" : "加载" }} -->
             加载
           </button>
         </div>
@@ -79,7 +73,9 @@
     </div>
   </div>
 
-  <cmView id="main" :isReadOnly="false" />
+  <!-- ★ 修复：加上 ref="cmViewRef" 供 loadItem 调用 skipNextLanguageSync -->
+  <cmView ref="cmViewRef" id="main" :isReadOnly="false" />
+
   <div v-if="showlog" style="padding: 0 2%; position: fixed; bottom: 0; left: 0; width: 96%; z-index: 999">
     <div style="display: flex; justify-content: space-between">
       <div class="pretitcode" @click="showlogs" />
@@ -88,7 +84,7 @@
     <pre @click="copyText(logAll)" class="prem-code"> {{ logAll.replace(/ /g, "&nbsp;") }}</pre>
   </div>
 
-  <!-- 自定义输入弹窗（替代 window.prompt，iOS PWA 独立模式下 prompt 不可用） -->
+  <!-- 自定义输入弹窗 -->
   <div v-if="promptState.visible" class="modal-mask" @click.self="promptCancel">
     <div class="modal-box">
       <div class="modal-title">{{ promptState.title }}</div>
@@ -101,7 +97,7 @@
     </div>
   </div>
 
-  <!-- 自定义确认弹窗（替代 window.confirm） -->
+  <!-- 自定义确认弹窗 -->
   <div v-if="confirmState.visible" class="modal-mask" @click.self="confirmNo">
     <div class="modal-box">
       <div class="modal-title">{{ confirmState.title }}</div>
@@ -145,6 +141,7 @@ const idbStorage = {
 
 import JSZip from "jszip";
 let skipWatchSave = false;
+let isSwitchingItem = false; // 切换文件期间抑制自动保存 watch
 const route = useRoute();
 const israw = ref(false);
 const grc = ref("");
@@ -160,11 +157,14 @@ const logAll = ref("");
 const props = defineProps(["isReadOnly"]);
 const lastSavedContent = ref("");
 const promptInputRef = ref(null);
-// ===== 自定义弹窗（替代 window.prompt / window.confirm） =====
+
+// ★ 修复：cmView 实例 ref，用于加载大文件前调用 skipNextLanguageSync
+const cmViewRef = ref(null);
+
+// ===== 自定义弹窗 =====
 const promptState = ref({ visible: false, title: "", value: "", resolve: null });
 const confirmState = ref({ visible: false, title: "", resolve: null });
 
-// 弹窗打开时自动聚焦输入框（移动端弹出键盘）
 watch(() => promptState.value.visible, (visible) => {
   if (visible) {
     nextTick(() => {
@@ -175,19 +175,13 @@ watch(() => promptState.value.visible, (visible) => {
 
 async function requestUrlContent() {
   const url = await askPrompt("输入 Github/raw/普通文本链接");
-
   if (!url) return;
-
   await loadUrlContent(url.trim());
 }
+
 function askPrompt(title, defaultValue = "") {
   return new Promise((resolve) => {
-    promptState.value = {
-      visible: true,
-      title,
-      value: defaultValue,
-      resolve,
-    };
+    promptState.value = { visible: true, title, value: defaultValue, resolve };
   });
 }
 
@@ -242,33 +236,26 @@ const createMeta = (name, content) => ({
 
 const contentKey = (id) => `codehub_save_content:${id}`;
 
-const savedItems = ref([]); // 索引数组: [{id, name, preview, length, updatedAt, language}]，不含 content
+const savedItems = ref([]);
 const checkedIds = ref([]);
 const showSaves = ref(false);
-const loadingItemId = ref(null); // 当前正在异步加载内容的项 id
-const selectMode = ref(false); // 是否处于"选择"模式（显示复选框/全选/删除/导出选中）
+const loadingItemId = ref(null);
+const selectMode = ref(false);
 
 // ===== 保存面板拖拽调整高度 =====
 const MIN_SAVES_HEIGHT = 57;
 const SAVES_HEIGHT_KEY = "codehub_saves_panel_height";
 const savesPanelHeight = ref(parseInt(localStorage.getItem(SAVES_HEIGHT_KEY), 10) || Math.round(window.innerHeight * 0.3));
-// const savesHandleRef = ref(null);
 let savesResizeStartY = 0;
 let savesResizeStartHeight = 0;
 
 function startSavesResizePointer(e) {
-  // pointerdown fires even after the element is removed/re-added, unlike
-  // separate mouse/touch listeners that could be stripped during build.
-  // Using pointer events ensures both touch and mouse work identically
-  // in dev and production builds.
   e.preventDefault();
   savesResizeStartY = e.clientY;
   savesResizeStartHeight = savesPanelHeight.value;
   document.addEventListener("pointermove", onSavesResizePointer);
   document.addEventListener("pointerup", endSavesResizePointer);
   document.body.style.cursor = "row-resize";
-  // Capture pointer so we keep getting events even if the pointer
-  // moves outside the handle element (e.g. fast drag).
   e.target.setPointerCapture(e.pointerId);
 }
 
@@ -290,13 +277,13 @@ function endSavesResizePointer(e) {
 
 const toggleSaves = async () => {
   showSaves.value = !showSaves.value;
-
   await idbStorage.setItem("SHOW_SAVES_KEY", showSaves.value);
 };
+
 const toggleSelectMode = () => {
   selectMode.value = !selectMode.value;
   if (!selectMode.value) {
-    checkedIds.value = []; // 退出选择模式时清空已勾选项
+    checkedIds.value = [];
   }
 };
 
@@ -320,12 +307,11 @@ const persistIndex = async () => {
   }
 };
 
-// 预览只需要取内容的前一小段处理，不要对整份大文件做正则扫描
 const buildMeta = (content) => ({
   length: content.length,
   preview: content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100),
   updatedAt: Date.now(),
-  language: cmStore.activeLanguage, // 保存时记录当前识别出的语言，供导出时决定后缀
+  language: cmStore.activeLanguage,
 });
 
 const createNewBlank = async () => {
@@ -344,7 +330,7 @@ const createNewBlank = async () => {
     id: createId(),
     name: defaultName,
     ...buildMeta(EMPTY_CONTENT),
-    language: "plaintext", // 新建内容固定为空白，语言结果是确定的，不依赖 cmStore.activeLanguage（此刻它还是切换前文件的残留值）
+    language: "plaintext",
   };
 
   try {
@@ -353,22 +339,17 @@ const createNewBlank = async () => {
     savedItems.value.unshift(item);
     await persistIndex();
 
-    // 🔥 关键：从这里开始加锁
     skipWatchSave = true;
 
-    // 👉 先切换当前文件
     await setCurrentItem(item.id, item.name);
 
-    // 👉 再清空编辑器
     cmStore.setCmCode(EMPTY_CONTENT);
     lastSavedContent.value = EMPTY_CONTENT;
 
-    // 强制再写一次数据库（关键）
     await idbStorage.setItem(contentKey(item.id), EMPTY_CONTENT);
 
     isDirty = false;
 
-    // 🔥 下一帧解锁（防止 watch 误触）
     nextTick(() => {
       skipWatchSave = false;
     });
@@ -403,21 +384,29 @@ const deleteSelected = async () => {
   showToast(`已删除 ${ids.length} 项`);
 };
 
+// ★ 修复：loadItem 加载大文件前通知 cmView 延迟语言同步
+const LARGE_FILE_THRESHOLD = 50000;
+
 const loadItem = async (item) => {
   loadingItemId.value = item.id;
 
   try {
     const content = await idbStorage.getItem(contentKey(item.id));
 
+    // ★ 大文件加载前先告诉 cmView 跳过立即语言同步，
+    //   等 CodeMirror 渲染完成后再延迟触发，避免主线程卡死导致滚动崩溃
+    if (content && content.length > LARGE_FILE_THRESHOLD) {
+      cmViewRef.value?.skipNextLanguageSync();
+    }
+
+    // 🔥 切换期间抑制自动保存 watch，避免内容设置触发 isDirty / 错误保存
+    isSwitchingItem = true;
     cmStore.setCmCode(content || EMPTY_CONTENT);
 
     await setCurrentItem(item.id, item.name);
 
     lastSavedContent.value = content || EMPTY_CONTENT;
 
-    // setCmCode / setCurrentItem 触发的 watch 是异步的，会在本轮同步代码跑完后
-    // 把 isDirty 误置为 true（内容/文件名其实都没有"新改动"，只是刚从存储里读出来）。
-    // 等一拍再纠正，避免触发一次无意义的自动保存写入。
     await nextTick();
     clearTimeout(autosaveTimer);
     isDirty = false;
@@ -425,10 +414,10 @@ const loadItem = async (item) => {
     showToast("已加载：" + item.name);
   } catch (e) {
     console.log(e);
-
     showToast("加载失败");
   } finally {
     loadingItemId.value = null;
+    isSwitchingItem = false;
   }
 };
 
@@ -466,16 +455,25 @@ async function refreshUrlItem(item) {
     item.preview = content.slice(0, 60).replace(/\s+/g, " ").slice(0, 30);
     item.updatedAt = Date.now();
     await persistIndex();
+
+    // ★ 刷新 URL 内容同样走大文件保护
+    if (content.length > LARGE_FILE_THRESHOLD) {
+      cmViewRef.value?.skipNextLanguageSync();
+    }
+
+    isSwitchingItem = true;
     cmStore.setCmCode(content);
     await setCurrentItem(item.id, item.name);
     lastSavedContent.value = content;
     await nextTick();
     clearTimeout(autosaveTimer);
     isDirty = false;
+    isSwitchingItem = false;
     showToast("已刷新：" + item.name);
   } catch (e) {
     console.log(e);
     showToast("刷新失败");
+    isSwitchingItem = false;
   } finally {
     loadingItemId.value = null;
   }
@@ -492,9 +490,9 @@ function formatBytes(length) {
   if (length < 1024 * 1024) return (length / 1024).toFixed(1) + " KB";
   return (length / (1024 * 1024)).toFixed(2) + " MB";
 }
+
 function formatTime(ts) {
   if (!ts) return "";
-
   return new Date(ts).toLocaleString("zh-CN", {
     year: "numeric",
     month: "2-digit",
@@ -505,14 +503,13 @@ function formatTime(ts) {
 }
 // ===== 保存列表 end =====
 
-// ===== 当前文件追踪 / 自动保存 / 记忆最后打开项 =====
+// ===== 当前文件追踪 / 自动保存 =====
 const LAST_OPENED_KEY = "codehub_last_opened_id";
-
 const currentItemId = ref(null);
 
 const setCurrentItem = async (id, fileName = "") => {
   currentItemId.value = id;
-  cmStore.setCurrentFileName(fileName); // 同步当前文件名（仅展示用，语言识别以内容检测为准，后缀会被自动改写）
+  cmStore.setCurrentFileName(fileName);
   try {
     if (id) {
       await idbStorage.setItem(LAST_OPENED_KEY, id);
@@ -540,7 +537,6 @@ const syncCurrentItemContent = async () => {
     isDirty = false;
 
     const idx = savedItems.value.findIndex((i) => i.id === id);
-
     if (idx === -1) return;
 
     savedItems.value[idx] = {
@@ -559,15 +555,15 @@ let autosaveTimer = null;
 
 const AUTOSAVE_BASE_DELAY = 800;
 const getAutosaveDelay = (length) => {
-  if (length > 2000000) return 3000; // > 2MB
-  if (length > 500000) return 1500; // > 500KB
+  if (length > 2000000) return 3000;
+  if (length > 500000) return 1500;
   return AUTOSAVE_BASE_DELAY;
 };
 
 watch(
   () => cmStore.CmCode,
   (newVal) => {
-    if (skipWatchSave) return; // 🔥 加这一行
+    if (skipWatchSave || isSwitchingItem) return;
     if (!currentItemId.value) return;
 
     isDirty = true;
@@ -582,14 +578,10 @@ watch(
   },
 );
 
-// 文件名后缀会被 cmView.vue 按语言检测结果自动改写（与内容变化是两件独立的事），
-// 之前只有 cmStore.CmCode 变化会触发 isDirty/自动保存，导致文件名改写后
-// 如果用户不再继续输入内容，这次改名永远没有保存窗口，列表里的 name 就一直是旧的。
-// 这里单独监听文件名变化，同样标记 isDirty 并触发（短）防抖保存。
 watch(
   () => cmStore.currentFileName,
   () => {
-    if (skipWatchSave) return;
+    if (skipWatchSave || isSwitchingItem) return;
     if (!currentItemId.value) return;
 
     isDirty = true;
@@ -610,10 +602,8 @@ const flushCurrentSave = async () => {
   if (content == null) return;
   try {
     await idbStorage.setItem(contentKey(id), content);
-
     lastSavedContent.value = content;
     isDirty = false;
-
     const idx = savedItems.value.findIndex((i) => i.id === id);
     if (idx !== -1) {
       savedItems.value[idx] = { ...savedItems.value[idx], name: cmStore.currentFileName || savedItems.value[idx].name, ...buildMeta(content) };
@@ -648,6 +638,13 @@ const onImportFileChange = async (e) => {
 
   try {
     const text = await file.text();
+
+    // ★ 导入大文件同样保护
+    if (text.length > LARGE_FILE_THRESHOLD) {
+      cmViewRef.value?.skipNextLanguageSync();
+    }
+
+    isSwitchingItem = true;
     cmStore.setCmCode(text);
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -659,15 +656,16 @@ const onImportFileChange = async (e) => {
 
     lastSavedContent.value = text;
 
-    // 同 loadItem：等 watch 异步触发完，再把误置的 isDirty 纠正回去
     await nextTick();
     clearTimeout(autosaveTimer);
     isDirty = false;
+    isSwitchingItem = false;
 
     showToast("已导入：" + file.name);
   } catch (error) {
     console.error("导入文件失败", error);
     showToast("导入失败：无法以文本方式读取该文件");
+    isSwitchingItem = false;
   }
 };
 
@@ -683,21 +681,15 @@ const downloadTextFile = (filename, content) => {
   URL.revokeObjectURL(url);
 };
 
-// 根据记录的语言（item.language）得到导出文件名：
-// - 后缀由语言决定（javascript/json/json5 -> js，yaml -> yaml，ini -> ini，其他/未识别 -> txt）
-// - 如果文件名本身已经带有和目标后缀相同的扩展名，不重复拼接
 const buildExportFilename = (name, language, fallbackBase = "CH") => {
   const safeBase = (name || fallbackBase).replace(/[\\/:*?"<>|]/g, "_");
   const ext = getExportExtensionByLanguage(language);
-
   const dotIndex = safeBase.lastIndexOf(".");
   const currentExt = dotIndex > 0 ? safeBase.slice(dotIndex + 1).toLowerCase() : "";
-
   if (currentExt === ext) return safeBase;
   return `${safeBase}.${ext}`;
 };
 
-// 重名去重：把序号插在扩展名前面，而不是结尾再加后缀
 const dedupeFilename = (name, usedNames) => {
   if (!usedNames.has(name)) return name;
   const dotIndex = name.lastIndexOf(".");
@@ -718,7 +710,6 @@ const exportCurrent = () => {
     showToast("当前内容为空，无需导出");
     return;
   }
-
   const ext = getExportExtensionByLanguage(cmStore.activeLanguage);
   downloadTextFile(
     `CH_${new Date()
@@ -730,7 +721,6 @@ const exportCurrent = () => {
   showToast("已导出");
 };
 
-// 把列表中勾选的项导出：只有一项时直接下载该文件，多项才打包成 zip
 const exportSelected = async () => {
   if (checkedIds.value.length === 0) {
     showToast("请先勾选要导出的项");
@@ -739,7 +729,6 @@ const exportSelected = async () => {
   const ids = [...checkedIds.value];
   const items = savedItems.value.filter((item) => ids.includes(item.id));
 
-  // 只有一项：直接下载单个文件，不压缩
   if (items.length === 1) {
     const item = items[0];
     try {
@@ -754,7 +743,6 @@ const exportSelected = async () => {
     return;
   }
 
-  // 多项：打包成 zip
   const zip = new JSZip();
   const usedNames = new Set();
   let okCount = 0;
@@ -763,11 +751,8 @@ const exportSelected = async () => {
     try {
       const content = await idbStorage.getItem(contentKey(item.id));
       let finalName = buildExportFilename(item.name, item.language);
-
-      // 避免重名条目互相覆盖（序号插在扩展名前面）
       finalName = dedupeFilename(finalName, usedNames);
       usedNames.add(finalName);
-
       zip.file(finalName, content || "");
       okCount++;
     } catch (error) {
@@ -822,11 +807,8 @@ const rePwa = async () => {
 function getFileNameFromUrl(url) {
   try {
     const pathname = new URL(url).pathname;
-
     let name = pathname.split("/").pop() || "";
-
     name = decodeURIComponent(name);
-
     if (!name) {
       name = `CH_${new Date()
         .toLocaleString("zh-CN")
@@ -917,21 +899,15 @@ async function loadUrlContent(inputUrl) {
       return;
     }
 
-    // github blob/raw
     if (/^https:\/\/github\.com\/.+?\/(blob|raw)\//.test(currentURL)) {
       bloburl = currentURL;
-
       currentURL = currentURL.replace(/\/(blob|raw)/, "").replace("github.com", "raw.githubusercontent.com");
-    }
-
-    // raw
-    else if (/^https:\/\/raw\.githubusercontent\.com\//.test(currentURL)) {
+    } else if (/^https:\/\/raw\.githubusercontent\.com\//.test(currentURL)) {
       bloburl = extractAndFormatUrl(currentURL);
     }
 
     showToast("请求中");
 
-    // 先尝试直连；若被 CORS 拦截则走本地同源接口（Vite dev server 中转）
     let res = await sendReq("GET", currentURL);
     if (!res || !res.data) {
       const localURL = `https://surgetool.com/api/fetch?url=${encodeURIComponent(currentURL)}`;
@@ -945,17 +921,12 @@ async function loadUrlContent(inputUrl) {
     }
 
     let content = res.data;
-
     if (typeof content !== "string") {
       content = JSON.stringify(content, null, 2);
     }
 
-    // 文件名
     const fileName = getFileNameFromUrl(bloburl || currentURL);
-
-    // 每次创建新文件
     const id = createId();
-
     const item = {
       id,
       name: fileName,
@@ -965,24 +936,26 @@ async function loadUrlContent(inputUrl) {
     };
 
     await idbStorage.setItem(contentKey(id), content);
-
     savedItems.value.unshift(item);
-
     await persistIndex();
 
+    // ★ URL 加载大文件同样保护
+    if (content.length > LARGE_FILE_THRESHOLD) {
+      cmViewRef.value?.skipNextLanguageSync();
+    }
+
+    isSwitchingItem = true;
     cmStore.setCmCode(content);
-
     await setCurrentItem(id, fileName);
-
     lastSavedContent.value = content;
-
     isDirty = false;
+    isSwitchingItem = false;
 
     showToast("载入成功");
   } catch (e) {
     console.log(e);
-
     showToast("请求失败");
+    isSwitchingItem = false;
   }
 }
 
@@ -996,89 +969,33 @@ onMounted(async () => {
   if (typeof state === "boolean") {
     showSaves.value = state;
   }
-  // try {
-  //   if (currentURL !== "" && /^https:\/\/\w+/.test(currentURL)) {
-  //     if (/^https:\/\/github\.com\/.+?\/(blob|raw)\/.+/.test(currentURL)) {
-  //       console.log(currentURL);
-  //       if (/^https:\/\/github\.com\/.+?\/raw\/.+/.test(currentURL)) {
-  //         bloburl = currentURL.replace(/\/raw/, "/blob");
-  //       } else {
-  //         bloburl = currentURL;
-  //       }
-  //       currentURL = currentURL.replace(/\/(blob|raw)/, "").replace("github.com", "raw.githubusercontent.com");
-  //       console.log(currentURL);
-  //     } else if (/^https:\/\/raw\.githubusercontent\.com\/.+/.test(currentURL)) {
-  //       bloburl = extractAndFormatUrl(currentURL);
-  //     }
-  //     showToast("请求链接：" + currentURL);
-  //     let res = await sendReq("GET", currentURL);
-
-  //     if (res.data) {
-  //       let rd = res.data;
-  //       if (rd && typeof rd === "object") {
-  //         rd = JSON.stringify(rd, null, 2);
-  //       } else {
-  //         rd = String(rd);
-  //       }
-  //       showToast("请求成功：" + currentURL);
-  //       israw.value = true;
-  //       grc.value = rd;
-  //       //           `/* CH
-  //       // 原链接:
-  //       // ${bloburl}
-
-  //       // RAW链接:
-  //       // ${currentURL}
-
-  //       // CH */\n` + rd;
-  //     } else {
-  //       console.log(res);
-  //       showToast(`请求失败:${res.status} ${res.message}: ${currentURL}`);
-  //     }
-  //   }
-  // } catch (error) {}
 
   try {
     if (currentURL) {
       await loadUrlContent(currentURL);
     }
   } catch {}
+
   await loadSaves();
 
   const cc = cmStore.CmCode;
   let initialCode;
 
   if (israw.value) {
-    // 从 blob 链接提取文件名
     const fileName = getFileNameFromUrl(bloburl || currentURL);
-
-    // 每次都是新文件
     const id = createId();
-
     const item = {
       id,
       name: fileName,
       ...buildMeta(grc.value),
     };
-
-    // 保存内容
     await idbStorage.setItem(contentKey(id), grc.value);
-
-    // 插入列表顶部
     savedItems.value.unshift(item);
-
-    // 保存索引
     await persistIndex();
-
-    // 设为当前文件
     await setCurrentItem(id, fileName);
-
     lastSavedContent.value = grc.value;
-
     clearTimeout(autosaveTimer);
-
     isDirty = false;
-
     initialCode = grc.value;
   } else if (cc != "") {
     initialCode = cc;
@@ -1101,11 +1018,9 @@ onMounted(async () => {
 
     if (lastId && lastContent !== null && lastContent !== undefined) {
       initialCode = lastContent;
-      currentItemId.value = lastId; // 直接赋值，避免重复写一次 LAST_OPENED_KEY
-
+      currentItemId.value = lastId;
       const lastItem = savedItems.value.find((i) => i.id === lastId);
       cmStore.setCurrentFileName(lastItem?.name || "");
-
       console.log("0 已默认载入最后打开的内容");
     } else {
       const storedUsername = await idbStorage.getItem("codehub");
@@ -1114,7 +1029,6 @@ onMounted(async () => {
         console.log("0 读取到草稿数据");
       } else {
         initialCode = xc;
-        // 首次启动：把示例代码存为列表项
         const firstId = createId();
         const firstName = "example.js";
         await idbStorage.setItem(contentKey(firstId), xc);
@@ -1128,9 +1042,12 @@ onMounted(async () => {
       }
     }
   }
+
+  isSwitchingItem = true;
   cmStore.setCmCode(initialCode);
   lastSavedContent.value = initialCode || EMPTY_CONTENT;
   isDirty = false;
+  isSwitchingItem = false;
 
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("beforeunload", handleBeforeUnload);
@@ -1140,8 +1057,7 @@ function extractAndFormatUrl(rawUrl) {
   const regex = /https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)/;
   const match = rawUrl.match(regex);
   if (match) {
-    const formattedUrl = `https://github.com/${match[1]}/${match[2]}/blob/${match[3]}/${match[4]}`;
-    return formattedUrl;
+    return `https://github.com/${match[1]}/${match[2]}/blob/${match[3]}/${match[4]}`;
   } else return "Invalid URL";
 }
 
@@ -1187,7 +1103,6 @@ onBeforeUnmount(() => {
   flushCurrentSave();
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   window.removeEventListener("beforeunload", handleBeforeUnload);
-
   document.body.style.backgroundColor = "";
   const blurNavdiv = document.querySelector(".blurNavdiv");
   blurNavdiv?.classList.remove("blurNavdiv_code");
@@ -1266,14 +1181,13 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 
-/* 拖拽调整高度手柄 */
 .saves-resize-handle {
   position: absolute;
-  bottom: -10px;          /* 向下延伸 10px 触摸区 */
+  bottom: -10px;
   left: 50%;
   transform: translateX(-50%);
   width: 90px;
-  height: 40px;           /* 原 30px + 下移 10px */
+  height: 40px;
   cursor: row-resize;
   touch-action: none;
   user-select: none;
@@ -1281,10 +1195,9 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
-/* 横条用 absolute 固定在原来的视觉位置（面板底部上方 7px） */
 .saves-resize-bar {
   position: absolute;
-  bottom: 17px;           /* handle 下移了 10px，所以 bottom 要加 10: 7+10=17 */
+  bottom: 17px;
   left: 50%;
   transform: translateX(-50%);
   width: 90px;
@@ -1326,7 +1239,6 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1341,7 +1253,6 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-/* URL 项预览多行布局 */
 .saves-item-preview:has(.saves-url-line) {
   white-space: normal;
   overflow: visible;
@@ -1357,6 +1268,7 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .saves-url-line:hover {
   opacity: 1;
 }
@@ -1372,7 +1284,6 @@ onBeforeUnmount(() => {
 
 .saves-item-meta {
   margin-top: 4px;
-
   font-size: 11px;
   opacity: 0.5;
 }
@@ -1402,31 +1313,9 @@ onBeforeUnmount(() => {
   cursor: pointer;
   line-height: 1;
 }
+
 .saves-refresh-btn:disabled {
   opacity: 0.4;
-}
-
-.saves-url-line {
-  cursor: pointer;
-  text-decoration: underline;
-  opacity: 0.7;
-  font-size: 11px;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.saves-url-line:hover {
-  opacity: 1;
-}
-
-.saves-item-content-preview {
-  margin-top: 3px;
-  font-size: 12px;
-  opacity: 0.7;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ===== 自定义弹窗样式 ===== */

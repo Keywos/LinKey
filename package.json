@@ -1,7 +1,7 @@
 {
   "name": "linkey",
   "private": true,
-  "version": "9.10.26",
+  "version": "9.10.28",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -36,6 +36,7 @@
     "pinia": "^3.0.4",
     "punycode": "^2.3.1",
     "shiki": "^4.2.0",
+    "terser": "^5.48.0",
     "vant": "^4.8.4",
     "vite-plugin-pwa": "^0.17.5",
     "vue": "^3.4.15",

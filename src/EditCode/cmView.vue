@@ -48,7 +48,7 @@
           </div>
           <button @click="undoCode"><img :src="undoimg" /></button>
           <button @click="redoCode"><img :src="redoimg" /></button>
-          <button @click="formatCode"><img :src="format" /></button>
+          <button @click="formatCode" :title="formatCodeTitle"><img :src="format" /></button>
           <button @click="toggleSearch"><img :src="searchimg" /></button>
           <button @click="copyText"><img :src="copyimg" /></button>
           <button @click="delAllCode"><img :src="del" /></button>
@@ -79,8 +79,54 @@
     </div>
     <div ref="viewRef" style="width: 100%; font-size: 11px" />
     <div style="height: 10px" />
+
+    <!-- ★ 压缩选项弹窗 (terser) -->
+    <Teleport to="body">
+      <div v-if="compressOpts.visible" class="compress-overlay" @click.self="closeCompressDialog">
+        <div class="compress-dialog">
+          <div class="compress-title">压缩选项</div>
+          <div class="compress-body">
+            <div class="compress-group">
+              <div class="compress-label">压缩模式</div>
+              <label class="compress-radio">
+                <input type="radio" v-model="compressOpts.keepNames" :value="false" />
+                <span>标准压缩（混淆函数名）</span>
+              </label>
+              <label class="compress-radio">
+                <input type="radio" v-model="compressOpts.keepNames" :value="true" />
+                <span>不压缩函数名</span>
+              </label>
+            </div>
+            <div class="compress-group">
+              <div class="compress-label">Console</div>
+              <label class="compress-radio">
+                <input type="checkbox" v-model="compressOpts.keepConsole" />
+                <span>保留 console</span>
+              </label>
+            </div>
+            <div class="compress-group">
+              <div class="compress-label">中文编码</div>
+              <label class="compress-radio">
+                <input type="radio" v-model="compressOpts.charset" value="utf8" />
+                <span>UTF-8（保留中文）</span>
+              </label>
+              <label class="compress-radio">
+                <input type="radio" v-model="compressOpts.charset" value="ascii" />
+                <span>ASCII（\uXXXX）</span>
+              </label>
+            </div>
+          </div>
+          <div class="compress-buttons">
+            <button class="compress-btn cancel" @click="closeCompressDialog">取消</button>
+            <button class="compress-btn" @click="doFormat">格式化</button>
+            <button class="compress-btn primary" @click="doCompress">压缩</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
+
 <script setup>
 import { darkCode } from "./dark.js";
 import { lightCode } from "./light.js";
@@ -90,7 +136,7 @@ import { json } from "@codemirror/lang-json";
 import { canFormatEditorLanguage, detectEditorLanguage, EDITOR_LANGUAGE_OPTIONS, formatEditorCode, loadEditorLanguageExtension, normalizeEditorLanguage } from "@/EditCode/editorLanguages";
 import { renameFileExtension } from "@/EditCode/fileLanguageUtils";
 import { shikiHighlight } from "@/EditCode/shikiHighlight";
-import { computed, nextTick, ref, onBeforeUnmount, onMounted, watch, watchEffect } from "vue";
+import { computed, nextTick, ref, reactive, onBeforeUnmount, onMounted, watch, watchEffect } from "vue";
 import {
   highlightSelectionMatches,
   searchKeymap,
@@ -122,12 +168,22 @@ import undoimg from "@/img/svg/undo.svg";
 import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
 
-///
+const LARGE_FILE_PLAINTEXT_THRESHOLD = 1 * 1024 * 1024; // 超过 1MB 强制纯文本，不做语言检测和高亮
+const SYNC_DEBOUNCE_MS = 300;
+// 按文件大小分级延迟语言检测，避免大文件加载时主线程卡死
+const getSyncDelay = (length) => {
+  if (length > 1048576) return 2400;   // >1MB   
+  if (length > 800000) return 1600;   
+  if (length > 500000)  return 1000;   
+  if (length > 102400)   return 500;    
+  return SYNC_DEBOUNCE_MS;            
+};
+
+
 const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
-// const Length = ref("");
 const { isDarkModeEnabled } = useTheme();
-// const props = defineProps(["isReadOnly", "editorLanguage", "placeholder","toolbarActions"]);
+
 const props = defineProps({
   isReadOnly: {
     type: Boolean,
@@ -171,7 +227,6 @@ const selectedLanguage = ref(normalizeEditorLanguage(props.editorLanguage, "auto
 const activeLanguage = ref("plaintext");
 
 const autoDetectedLanguage = ref(null);
-
 const isFormatting = ref(false);
 
 const editorLanguage_short = {
@@ -198,7 +253,9 @@ const editorLanguage_json = {
     retry: "重试自动检测",
   },
 };
+
 const languageDetectionStatus = ref("idle");
+
 const getLanguageLabel = (language) => {
   const normalizedLanguage = normalizeEditorLanguage(language, "plaintext");
   return editorLanguage_json[normalizedLanguage] || editorLanguage_json.plaintext;
@@ -229,15 +286,24 @@ const scheduleLanguageDetectionBusy = (requestId) => {
 };
 const finishLanguageDetection = (requestId, status = "idle") => {
   if (requestId !== languageRequestId) return;
-
   clearLanguageDetectionTimer();
   languageDetectionStatus.value = status;
 };
 
 const emit = defineEmits(["update:editorLanguage"]);
 const onLanguageChange = () => {
-  selectedLanguage.value = normalizeEditorLanguage(selectedLanguage.value, "auto");
-  emit("update:editorLanguage", selectedLanguage.value === "auto" ? undefined : selectedLanguage.value);
+  const next = normalizeEditorLanguage(selectedLanguage.value, "auto");
+
+  // ★ 超过 1MB 不允许切换语言，强制纯文本
+  const docLen = view?.state.doc.length || 0;
+  if (docLen > LARGE_FILE_PLAINTEXT_THRESHOLD && next !== "plaintext") {
+    selectedLanguage.value = "auto";
+    showToast("文件超过 1MB，仅支持纯文本");
+    return;
+  }
+
+  selectedLanguage.value = next;
+  emit("update:editorLanguage", next === "auto" ? undefined : next);
   syncLanguageForDocument(view?.state.doc.toString() || "");
 };
 
@@ -258,7 +324,6 @@ const selectedLanguageTitle = computed(() => {
   if (normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto") {
     return selectedLanguageDisplayLabel.value;
   }
-
   return autoDetectedLanguage.value ? `${getShortLanguageLabel(autoDetectedLanguage.value)}` : getLanguageLabel("auto");
 });
 
@@ -272,11 +337,6 @@ const applyLanguage = async (language, requestId = ++languageRequestId) => {
   const nextLanguage = normalizeEditorLanguage(language, "plaintext");
   if (!view || requestId !== languageRequestId) return;
 
-  // 文件名改写是独立于"语法高亮是否需要重新配置"的副作用：
-  // 即使 nextLanguage 和当前 activeLanguage 相同（例如组件刚挂载、
-  // activeLanguage 的初始值本来就是 plaintext，检测结果也恰好是 plaintext），
-  // 文件名后缀也可能还没和这个语言同步过，所以每次调用都单独检查，不要被下面的
-  // "语言未变化则跳过"提前 return 一并挡住。
   const renamedFile = renameFileExtension(cmStore.currentFileName, nextLanguage);
   if (renamedFile !== cmStore.currentFileName) {
     cmStore.setCurrentFileName(renamedFile);
@@ -319,10 +379,19 @@ const applyLanguage = async (language, requestId = ++languageRequestId) => {
   });
 };
 
-// 自动识别：按文档内容检测语言（语言变化后会反向改写文件名后缀，见 applyLanguage）
 const syncLanguageForDocument = async (docContent) => {
   const requestId = ++languageRequestId;
   const docSnapshot = docContent || "";
+
+  // ★ 超过 1MB 强制纯文本，不做语言检测、不高亮
+  if (docSnapshot.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
+    clearLanguageDetectionTimer();
+    languageDetectionStatus.value = "idle";
+    autoDetectedLanguage.value = null;
+    await applyLanguage("plaintext", requestId);
+    return;
+  }
+
   const manualLanguage = normalizeEditorLanguage(selectedLanguage.value, "auto");
 
   if (manualLanguage === "auto") {
@@ -333,7 +402,6 @@ const syncLanguageForDocument = async (docContent) => {
       if (requestId !== languageRequestId || normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto" || (view && view.state.doc.toString() !== docSnapshot)) {
         return;
       }
-
       autoDetectedLanguage.value = detectedLanguage;
       await applyLanguage(detectedLanguage, requestId);
       finishLanguageDetection(requestId);
@@ -349,20 +417,32 @@ const syncLanguageForDocument = async (docContent) => {
   if (requestId !== languageRequestId || normalizeEditorLanguage(selectedLanguage.value, "auto") !== manualLanguage) {
     return;
   }
-
   await applyLanguage(manualLanguage, requestId);
 };
+
 const createEditorPlaceholder = () => (props.placeholder ? cmPlaceholder(props.placeholder) : []);
 
-const SYNC_DEBOUNCE_MS = 1000;
+
+
 let syncTimer = null;
+
 
 const debouncedSyncLanguage = (docContent) => {
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     syncLanguageForDocument(docContent);
-  }, SYNC_DEBOUNCE_MS);
+  }, getSyncDelay(docContent.length));
 };
+
+// ★ 修复：外部（cmHub）调用此方法可让下一次 setCmCode 跳过语言同步，
+//   等 CodeMirror 渲染稳定后再延迟触发，避免大文件加载时卡死
+let _skipNextLangSync = false;
+
+defineExpose({
+  skipNextLanguageSync() {
+    _skipNextLangSync = true;
+  },
+});
 
 let docUpdate = false;
 let view;
@@ -370,26 +450,26 @@ const CreateView = () => {
   view = new EditorView({
     state: EditorState.create({
       extensions: [
-        history(), //历史
+        history(),
         keymap.of([
           indentWithTab,
           ...searchKeymap,
-          ...defaultKeymap, // 注释 缩进 等等
+          ...defaultKeymap,
           ...historyKeymap,
         ]),
         langs.of([]),
         shikiSyntax.of(createShikiHighlight()),
         editorPlaceholder.of(createEditorPlaceholder()),
-        editorTheme.of(isDarkModeEnabled.value ? darkCode : lightCode), // 设置初始主题
+        editorTheme.of(isDarkModeEnabled.value ? darkCode : lightCode),
         EditorState.readOnly.of(props.isReadOnly ? true : false),
-        EditorView.lineWrapping, // 换行
+        EditorView.lineWrapping,
         lineNumbers(),
         highlightActiveLine(),
         bracketMatching(),
         highlightSelectionMatches(),
         indentationMarkers(),
-        closeBrackets(), // 括号闭合
-        autocompletion(), // 代码补全
+        closeBrackets(),
+        autocompletion(),
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return;
           const docContent = update.state.doc.toString();
@@ -397,9 +477,8 @@ const CreateView = () => {
           console.log("0 更新文档 - CodeValue");
           cmStore.setCmCode(docContent);
           docUpdate = false;
-          //++
-          if (selectedLanguage.value === "auto") {
-            debouncedSyncLanguage(docContent); // 防抖后再检测
+          if (selectedLanguage.value === "auto" && !(docContent.length > LARGE_FILE_PLAINTEXT_THRESHOLD)) {
+            debouncedSyncLanguage(docContent);
           }
         }),
         hyperLink,
@@ -417,7 +496,6 @@ const CreateView = () => {
     () => cmStore.CmCode,
     (newValue) => {
       const nextValue = newValue || "";
-
       if (!docUpdate && nextValue !== view.state.doc.toString()) {
         console.log("Code更新到文档");
         view.dispatch({
@@ -427,7 +505,26 @@ const CreateView = () => {
             insert: nextValue,
           },
         });
-        syncLanguageForDocument(nextValue);
+
+        // 外部加载新文件时重置格式化状态
+        isFormatted.value = false;
+
+        // ★ 超过 1MB 强制纯文本，清理前一个文件残留的高亮扩展
+        if (nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
+          syncLanguageForDocument(nextValue);
+          return;
+        }
+
+        // ★ 修复：如果外部标记了 skip，则等 CodeMirror 渲染完成后
+        //   再延迟触发语言同步，而不是立即排队
+        if (_skipNextLangSync) {
+          _skipNextLangSync = false;
+          nextTick(() => {
+            debouncedSyncLanguage(nextValue);
+          });
+        } else {
+          syncLanguageForDocument(nextValue);
+        }
       }
     },
   );
@@ -445,7 +542,6 @@ watch(
   (language) => {
     const nextLanguage = normalizeEditorLanguage(language, "auto");
     if (selectedLanguage.value === nextLanguage) return;
-
     selectedLanguage.value = nextLanguage;
     syncLanguageForDocument(view?.state.doc.toString() || "");
   },
@@ -461,26 +557,18 @@ watch(
   },
 );
 
-// function formatLength(length) {
-//   if (length < 1024) {
-//     return length === 0 ? "" : length + " bytes";
-//   } else if (length < 1024 * 1024) {
-//     return (length / 1024).toFixed(2) + " KB";
-//   } else {
-//     return (length / (1024 * 1024)).toFixed(2) + " MB";
-//   }
-// }
-
 onMounted(() => {
   CreateView();
   const initialCode = cmStore.CmCode || "";
-  syncLanguageForDocument(initialCode);
+  // ★ 超过 1MB 初次跳过语言检测
+  if (!(initialCode.length > LARGE_FILE_PLAINTEXT_THRESHOLD)) {
+    syncLanguageForDocument(initialCode);
+  }
 });
 
 onBeforeUnmount(() => {
   clearLanguageDetectionTimer();
   clearTimeout(syncTimer);
-  // 卸载前用当前最新内容强制保存一次，避免丢失防抖期间的最后改动
 });
 
 const collapsed = ref(localStorage.getItem("cm_collapsed") === "true");
@@ -583,6 +671,96 @@ const replaceAll = () => {
 const undoCode = () => undo(view);
 const redoCode = () => redo(view);
 
+// ===== 格式化 / 压缩 JS 切换 =====
+const isFormatted = ref(false);
+
+const formatCodeTitle = computed(() =>
+  activeLanguage.value === "javascript" ? "JS 选项" : "格式化"
+);
+
+const COMPRESS_OPTS_KEY = "compress_opts";
+function loadCompressOpts() {
+  try {
+    const saved = localStorage.getItem(COMPRESS_OPTS_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch { /* ignore */ }
+  return {};
+}
+
+// ★ esbuild 压缩选项状态（记忆到本地）
+const compressOpts = reactive({
+  visible: false,
+  keepNames: false,
+  keepConsole: false,
+  charset: "utf8",
+  ...loadCompressOpts(),
+});
+
+// 选项变化时自动保存到 localStorage
+watch(
+  () => [compressOpts.keepNames, compressOpts.keepConsole, compressOpts.charset],
+  () => {
+    localStorage.setItem(
+      COMPRESS_OPTS_KEY,
+      JSON.stringify({
+        keepNames: compressOpts.keepNames,
+        keepConsole: compressOpts.keepConsole,
+        charset: compressOpts.charset,
+      })
+    );
+  },
+  { deep: true }
+);
+
+function closeCompressDialog() {
+  compressOpts.visible = false;
+}
+
+// ★ terser 压缩（动态加载）
+async function doCompress() {
+  const code = cmStore.CmCode || "";
+  if (!code) return;
+  try {
+    const { minify } = await import("terser");
+    const result = await minify(code, {
+      compress: {
+        drop_console: !compressOpts.keepConsole,
+      },
+      mangle: !compressOpts.keepNames,
+      format: {
+        ascii_only: compressOpts.charset === "ascii",
+        comments: false,
+      },
+    });
+    cmStore.setCmCode(result.code);
+    closeCompressDialog();
+    isFormatted.value = false;
+    showToast("已压缩 JS");
+  } catch (e) {
+    console.error(e);
+    showToast("压缩失败: " + e.message);
+  }
+}
+
+// ★ 格式化（选项弹窗中的按钮）
+async function doFormat() {
+  const code = cmStore.CmCode || "";
+  if (!code) return;
+  closeCompressDialog();
+  if (!canFormatEditorLanguage(activeLanguage.value)) return;
+  isFormatting.value = true;
+  const result = await formatEditorCode(activeLanguage.value, code);
+  isFormatting.value = false;
+  if (result.ok) {
+    cmStore.setCmCode(result.code);
+    isFormatted.value = true;
+    showToast("已格式化");
+    return;
+  }
+  console.error(result.error);
+  showToast("格式化失败, 内容未修改");
+}
+
 const refreshEditorLayout = () => {
   nextTick(() => {
     view?.requestMeasure?.();
@@ -590,17 +768,24 @@ const refreshEditorLayout = () => {
 };
 
 async function formatCode() {
+  const code = cmStore.CmCode || "";
+  if (!code) return;
+
+  // JS：每次都弹出选项弹窗
+  if (activeLanguage.value === "javascript") {
+    compressOpts.visible = true;
+    return;
+  }
+
+  // 其他语言：只格式化，不切换
   if (!canFormatEditorLanguage(activeLanguage.value)) return;
-
   isFormatting.value = true;
-  const result = await formatEditorCode(activeLanguage.value, cmStore.CmCode || "");
+  const result = await formatEditorCode(activeLanguage.value, code);
   isFormatting.value = false;
-
   if (result.ok) {
     cmStore.setCmCode(result.code);
     return;
   }
-
   console.error(result.error);
   showToast("当前语言暂不支持格式化 : 格式化失败, 内容未修改");
 }
@@ -612,6 +797,7 @@ const copyText = async () => {
 
 const delAllCode = () => {
   showToast("已清空");
+  isFormatted.value = false;
   cmStore.setCmCode("");
 };
 
@@ -619,6 +805,7 @@ const pasteNav = async () => {
   try {
     const clipboardText = await navigator.clipboard.readText();
     if (clipboardText?.length > 0) {
+      isFormatted.value = false;
       cmStore.setCmCode(clipboardText);
       showToast("已粘贴字数: " + clipboardText.length);
     }
@@ -627,7 +814,7 @@ const pasteNav = async () => {
   }
 };
 
-// ===== 工具栏垂直拖拽（像素级，顺滑） =====
+// ===== 工具栏垂直拖拽 =====
 let dragStartY = 0;
 let dragStartTop = 0;
 const DRAG_THRESHOLD = 6;
@@ -643,16 +830,15 @@ const toggleCollapsed = () => {
   collapsed.value = !collapsed.value;
 };
 
-/* 拖拽移动≥6px 后，在捕获阶段拦截下一次工具栏内的 click 事件 */
 function blockClickAfterDrag(e) {
   if (e.target.closest(".cm-toolbar-wrapper, .cm-collapsed-dot")) {
     e.stopPropagation();
   }
 }
 
-/* 统一的拖拽处理器 — 折叠态 / 展开态共用 */
 function startDragPointer(e) {
-  if (e.target.closest("input, select, textarea, option")) return;
+  // ★ 跳过功能性按钮/输入框，但允许拖拽手柄（折叠按钮）正常拖拽
+  if (e.target.closest("input, select, textarea, option, button:not(.cm-collapse-btn)")) return;
   dragStartY = e.clientY;
   dragStartTop = toolbarTopPx.value;
   isDragging = false;
@@ -667,7 +853,6 @@ function onDragPointer(ev) {
   if (!isDragging && Math.abs(dy) < DRAG_THRESHOLD) return;
   isDragging = true;
   toolbarTopPx.value = Math.max(0, Math.min(window.innerHeight - 130, dragStartTop + dy));
-  /* 一旦确认拖拽，拦截紧接着的 click */
   document.addEventListener("click", blockClickAfterDrag, { capture: true, once: true });
 }
 
@@ -677,7 +862,6 @@ function endDragPointer(ev) {
   if (isDragging) {
     localStorage.setItem("cm_toolbar_top_px", toolbarTopPx.value.toString());
   } else if (ev) {
-    /* 非拖拽：手动触发点击，弥补 iOS 上 preventDefault 屏蔽的 click */
     const el = document.elementFromPoint(ev.clientX, ev.clientY);
     if (!el) return;
     const dot = el.closest(".cm-collapsed-dot");
@@ -695,10 +879,6 @@ function endDragPointer(ev) {
 </script>
 
 <style lang="scss" scoped>
-// .cmviewRef {
-// 工具栏通过 fixed 定位悬浮，无需额外 padding
-// }
-
 .language-select-wrap {
   position: relative;
   display: flex;
@@ -728,34 +908,6 @@ function endDragPointer(ev) {
   pointer-events: none;
   word-break: break-word;
 }
-
-// .language-select {
-//   // text-align: right;
-//   -webkit-appearance: none;
-//   appearance: none;
-//   display: block;
-//   position: relative;
-//   z-index: 2;
-//   box-sizing: border-box;
-//   height: 34px;
-//   // width: auto;
-//   min-width: 34px;
-//   max-width: 34px;
-//   max-width: 34vw;
-//   // padding: 0 20px 0 8px;
-//   // border: 1px solid #8b8b8b66;
-//   // border-radius: 16px;
-//   background-color: transparent;
-//   background-image: none;
-//   box-shadow: none;
-//   color: transparent;
-//   // font-size: 9px;
-//   // line-height: 14px;
-//   outline: none;
-//   // opacity: 1;/
-//   // text-overflow: ellipsis;
-//   // -webkit-text-fill-color: transparent;
-// }
 
 .language-select:focus {
   border-color: #8fb4e8;
@@ -789,55 +941,23 @@ function endDragPointer(ev) {
   box-sizing: border-box;
   overflow: hidden;
 }
+
 .cm-img-button button {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 31px;
-    height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 31px;
+  height: 30px;
+  justify-content: center;
+  align-items: center;
+}
 
-    // background: #000;
-    justify-content: center;
-    align-items: center;
-    // background: var(--cm-bg, rgba(0, 0, 0, 0.062));
-    // color: #222;
-    // opacity: .1;
-    // border-radius: 20px;
-    // border: 1px solid rgba(128, 128, 128, 0.3);
-  }
 @media (max-width: 480px) {
-  // .cm-img-button button {
-  //   display: flex;
-  //   align-items: center;
-  //   gap: 6px;
-  //   width: 31px;
-  //   height: 30px;
-
-  //   // background: #000;
-  //   justify-content: center;
-  //   align-items: center;
-  //   // background: var(--cm-bg, rgba(0, 0, 0, 0.062));
-  //   // color: #222;
-  //   // opacity: .1;
-  //   // border-radius: 20px;
-  //   // border: 1px solid rgba(128, 128, 128, 0.3);
-  // }
-
   .cm-img-button .language-detect-button {
     flex-basis: 22px;
     width: 22px;
     height: 22px;
     margin-right: 3px;
-  }
-
-  .language-select-wrap {
-    // margin-right: 3px;
-  }
-
-  .language-select {
-    // width: 34px;
-    // padding-right: 18px;
-    // padding-left: 7px;
   }
 
   .language-select-display {
@@ -865,7 +985,6 @@ function endDragPointer(ev) {
   opacity: 1;
   border-radius: 23px;
   border: 1px solid rgba(128, 128, 128, 0.3);
-
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.08);
   overflow: hidden;
   cursor: grab;
@@ -879,7 +998,6 @@ function endDragPointer(ev) {
   cursor: grabbing;
 }
 
-/* 折叠态小圆点 */
 .cm-collapsed-dot {
   position: fixed;
   right: 3%;
@@ -893,7 +1011,6 @@ function endDragPointer(ev) {
   background: var(--cm-bg, rgba(255, 255, 255, 0.96));
   border-radius: 23px;
   border: 1px solid rgba(128, 128, 128, 0.3);
-
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.08);
   cursor: grab;
   touch-action: none;
@@ -918,7 +1035,6 @@ function endDragPointer(ev) {
   pointer-events: none;
 }
 
-/* 折叠按钮（左侧圆点） */
 .cm-collapse-btn {
   display: flex;
   align-items: center;
@@ -961,7 +1077,6 @@ function endDragPointer(ev) {
   gap: 6px;
 }
 
-/* 非桌面端（移动端）底部留出安全区 */
 @media (hover: none) and (pointer: coarse) {
   .cm-toolbar-wrapper {
     top: calc(env(safe-area-inset-top, 0px) + 50px);
@@ -992,7 +1107,6 @@ function endDragPointer(ev) {
   }
 }
 
-/* ===== 自定义搜索框 ===== */
 .cm-search-box {
   display: grid;
   grid-template-columns: 1fr repeat(4, auto);
@@ -1049,7 +1163,6 @@ function endDragPointer(ev) {
   background: rgba(128, 128, 128, 0.1);
 }
 
-/* 搜索选项切换按钮: Aa / .* / ab */
 .cm-search-opt {
   display: flex;
   align-items: center;
@@ -1090,8 +1203,156 @@ function endDragPointer(ev) {
   background: rgba(128, 128, 128, 0.18);
 }
 
-/* 隐藏 CodeMirror 内置搜索面板 */
 :deep(.cm-editor .cm-search) {
   display: none !important;
+}
+
+/* ★ 压缩选项弹窗 */
+.compress-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  animation: compressFadeIn 0.15s ease;
+}
+
+@keyframes compressFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.compress-dialog {
+  width: 85%;
+  max-width: 340px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  animation: compressSlideUp 0.2s ease;
+}
+
+@keyframes compressSlideUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.compress-title {
+  padding: 18px 20px 10px;
+  font-size: 17px;
+  font-weight: 600;
+  color: #222;
+}
+
+.compress-body {
+  padding: 4px 20px 14px;
+}
+
+.compress-group {
+  margin-bottom: 12px;
+}
+
+.compress-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.compress-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+}
+
+.compress-radio input[type="radio"],
+.compress-radio input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #4a90d9;
+  cursor: pointer;
+}
+
+.compress-radio span {
+  user-select: none;
+}
+
+.compress-buttons {
+  display: flex;
+  border-top: 1px solid #eee;
+}
+
+.compress-btn {
+  flex: 1;
+  height: 44px;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.compress-btn:hover {
+  background: #f5f5f5;
+}
+
+.compress-btn:active {
+  background: #eee;
+}
+
+.compress-btn.cancel {
+  color: #999;
+}
+
+.compress-btn.primary {
+  color: #4a90d9;
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .compress-overlay {
+    background: rgba(0, 0, 0, 0.6);
+  }
+  .compress-dialog {
+    background: #2c2c2c;
+  }
+  .compress-title {
+    color: #e0e0e0;
+  }
+  .compress-label {
+    color: #999;
+  }
+  .compress-radio {
+    color: #ccc;
+  }
+  .compress-buttons {
+    border-top-color: #3a3a3a;
+  }
+  .compress-btn {
+    color: #ccc;
+  }
+  .compress-btn:hover {
+    background: #3a3a3a;
+  }
+  .compress-btn:active {
+    background: #444;
+  }
+  .compress-btn.cancel {
+    color: #888;
+  }
+  .compress-btn.primary {
+    color: #6a9ed8;
+  }
+  .compress-radio input[type="radio"],
+  .compress-radio input[type="checkbox"] {
+    accent-color: #6a9ed8;
+  }
 }
 </style>

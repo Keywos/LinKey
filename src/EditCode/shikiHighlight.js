@@ -271,7 +271,8 @@ export const shikiHighlight = ({ language, dark }) => {
       async highlight(view, requestId) {
         const code = view.state.doc.toString();
 
-        if (!code) {
+        // ★ 超过 2MB 不做 shiki 高亮
+        if (!code || code.length > 1048576) {
           this.setDecorations(
             view,
 
