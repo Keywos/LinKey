@@ -8,7 +8,7 @@
   </h2>
   <!-- 保存列表面板 -->
   <div v-if="showSaves" class="saves-panel">
-    <div class="saves-body">
+    <div class="saves-body" :style="{ height: savesPanelHeight + 'px' }">
       <div class="saves-toolbar">
         <button class="saves-btn" @click="toggleSelectMode">{{ selectMode ? "完成" : "选择" }}</button>
 
@@ -34,7 +34,7 @@
 
         <input ref="importInputRef" type="file" style="display: none" @change="onImportFileChange" />
       </div>
-      <div ref="savesListRef" class="saves-list" :style="{ maxHeight: savesPanelHeight + 'px' }">
+      <div ref="savesListRef" class="saves-list">
         <div v-if="savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
         <div v-for="item in savedItems" :key="item.id" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
           <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" />
@@ -73,7 +73,7 @@
       </div>
     </div>
     <!-- 拖拽调整高度手柄 -->
-    <div ref="savesHandleRef" class="saves-resize-handle" @mousedown="startSavesResize">
+    <div ref="savesHandleRef" class="saves-resize-handle" @pointerdown="startSavesResizePointer">
       <div class="saves-resize-bar"></div>
     </div>
   </div>
@@ -241,46 +241,39 @@ const selectMode = ref(false); // 是否处于"选择"模式（显示复选框/�
 const MIN_SAVES_HEIGHT = 10;
 const SAVES_HEIGHT_KEY = "codehub_saves_panel_height";
 const savesPanelHeight = ref(parseInt(localStorage.getItem(SAVES_HEIGHT_KEY), 10) || Math.round(window.innerHeight * 0.3));
-const savesHandleRef = ref(null);
+// const savesHandleRef = ref(null);
 let savesResizeStartY = 0;
 let savesResizeStartHeight = 0;
 
-function startSavesResize(e) {
+function startSavesResizePointer(e) {
+  // pointerdown fires even after the element is removed/re-added, unlike
+  // separate mouse/touch listeners that could be stripped during build.
+  // Using pointer events ensures both touch and mouse work identically
+  // in dev and production builds.
+  e.preventDefault();
   savesResizeStartY = e.clientY;
   savesResizeStartHeight = savesPanelHeight.value;
-  document.addEventListener("mousemove", onSavesResize);
-  document.addEventListener("mouseup", endSavesResize);
+  document.addEventListener("pointermove", onSavesResizePointer);
+  document.addEventListener("pointerup", endSavesResizePointer);
   document.body.style.cursor = "row-resize";
-  e.preventDefault();
+  // Capture pointer so we keep getting events even if the pointer
+  // moves outside the handle element (e.g. fast drag).
+  e.target.setPointerCapture(e.pointerId);
 }
 
-function startSavesResizeTouch(e) {
-  if (e.touches.length !== 1) return;
-  savesResizeStartY = e.touches[0].clientY;
-  savesResizeStartHeight = savesPanelHeight.value;
-  document.addEventListener("touchmove", onSavesResizeTouch);
-  document.addEventListener("touchend", endSavesResize);
-  e.preventDefault();
-}
-
-function onSavesResize(e) {
+function onSavesResizePointer(e) {
   const delta = e.clientY - savesResizeStartY;
   savesPanelHeight.value = Math.max(MIN_SAVES_HEIGHT, savesResizeStartHeight + delta);
 }
 
-function onSavesResizeTouch(e) {
-  if (e.touches.length !== 1) return;
-  const delta = e.touches[0].clientY - savesResizeStartY;
-  savesPanelHeight.value = Math.max(MIN_SAVES_HEIGHT, savesResizeStartHeight + delta);
-}
-
-function endSavesResize() {
-  document.removeEventListener("mousemove", onSavesResize);
-  document.removeEventListener("mouseup", endSavesResize);
-  document.removeEventListener("touchmove", onSavesResizeTouch);
-  document.removeEventListener("touchend", endSavesResize);
+function endSavesResizePointer(e) {
+  document.removeEventListener("pointermove", onSavesResizePointer);
+  document.removeEventListener("pointerup", endSavesResizePointer);
   document.body.style.cursor = "";
   localStorage.setItem(SAVES_HEIGHT_KEY, savesPanelHeight.value.toString());
+  if (e.target) {
+    try { e.target.releasePointerCapture(e.pointerId); } catch {}
+  }
 }
 // ===== 保存面板拖拽调整高度 end =====
 
@@ -1130,22 +1123,6 @@ onMounted(async () => {
 
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("beforeunload", handleBeforeUnload);
-
-  // 被动 touchstart 绑定，消除浏览器 warning
-  if (savesHandleRef.value) {
-    savesHandleRef.value.addEventListener("touchstart", startSavesResizeTouch, { passive: false });
-  }
-});
-
-// v-if 切换时重新绑定 touchstart 监听
-watch(showSaves, (val) => {
-  if (val) {
-    nextTick(() => {
-      if (savesHandleRef.value) {
-        savesHandleRef.value.addEventListener("touchstart", startSavesResizeTouch, { passive: false });
-      }
-    });
-  }
 });
 
 function extractAndFormatUrl(rawUrl) {
@@ -1217,7 +1194,7 @@ onBeforeUnmount(() => {
   z-index: 996;
   position: relative;
   line-height: 16px;
-  box-shadow: 0 0 5px #919db687;
+  box-shadow: 0 0 2px #919db687;
 }
 
 .saves-toolbar {
@@ -1232,6 +1209,9 @@ onBeforeUnmount(() => {
 .saves-body {
   overflow: hidden;
   border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .saves-btn {
@@ -1264,6 +1244,8 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 4px 0;
+  flex: 1;
+  min-height: 0;
 }
 
 .saves-empty {
