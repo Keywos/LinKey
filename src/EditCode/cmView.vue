@@ -783,8 +783,10 @@ function endDragTouch() {
   background: transparent;
   border: 0px solid rgba(128, 128, 128, 0.5);
   text-align: center;
+  text-align-last: center;
   color: var(--text);
   font-size: 11px;
+  line-height: 34px;
   width: 34px;
   min-width: 34px;
   max-width: 34px;
@@ -799,9 +801,7 @@ function endDragTouch() {
   box-sizing: border-box;
   overflow: hidden;
 }
-
-@media (max-width: 480px) {
-  .cm-img-button button {
+.cm-img-button button {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -817,6 +817,23 @@ function endDragTouch() {
     // border-radius: 20px;
     // border: 1px solid rgba(128, 128, 128, 0.3);
   }
+@media (max-width: 480px) {
+  // .cm-img-button button {
+  //   display: flex;
+  //   align-items: center;
+  //   gap: 6px;
+  //   width: 31px;
+  //   height: 30px;
+
+  //   // background: #000;
+  //   justify-content: center;
+  //   align-items: center;
+  //   // background: var(--cm-bg, rgba(0, 0, 0, 0.062));
+  //   // color: #222;
+  //   // opacity: .1;
+  //   // border-radius: 20px;
+  //   // border: 1px solid rgba(128, 128, 128, 0.3);
+  // }
 
   .cm-img-button .language-detect-button {
     flex-basis: 22px;
