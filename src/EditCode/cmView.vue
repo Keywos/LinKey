@@ -1,7 +1,7 @@
 <template>
   <div class="cmviewRef">
     <!-- 折叠态：小圆点 -->
-    <div v-if="collapsed" class="cm-collapsed-dot" :style="toolbarStyle" @mousedown="startDrag" @touchstart="startDragTouch" @click="toggleCollapsed">
+    <div v-if="collapsed" class="cm-collapsed-dot" :style="toolbarStyle" @pointerdown="startDragPointer" @click="toggleCollapsed">
       <span class="cm-collapsed-icon">
         <svg
           class="icon"
@@ -20,7 +20,7 @@
       </span>
     </div>
     <!-- 展开态：完整工具栏 -->
-    <div v-else class="cm-toolbar-wrapper" :style="toolbarStyle" @mousedown="startDrag" @touchstart="startDragTouch">
+    <div v-else class="cm-toolbar-wrapper" :style="toolbarStyle" @pointerdown="startDragPointer">
       <div class="cm-img-button">
         <div>
           <button class="cm-collapse-btn" :style="collapseBtnOrder" @click="onCollapseClick" title="折叠">
@@ -649,26 +649,18 @@ function blockClickAfterDrag(e) {
   }
 }
 
-function startDrag(e) {
+function startDragPointer(e) {
   if (e.target.closest("input, select, textarea, option")) return;
   dragStartY = e.clientY;
   dragStartTop = toolbarTopPx.value;
   isDragging = false;
-  document.addEventListener("mousemove", onDrag);
-  document.addEventListener("mouseup", endDrag);
+  e.preventDefault();
+  e.target.setPointerCapture(e.pointerId);
+  document.addEventListener("pointermove", onDragPointer);
+  document.addEventListener("pointerup", endDragPointer);
 }
 
-function startDragTouch(e) {
-  if (e.target.closest("input, select, textarea, option")) return;
-  const t = e.touches[0];
-  dragStartY = t.clientY;
-  dragStartTop = toolbarTopPx.value;
-  isDragging = false;
-  document.addEventListener("touchmove", onDragTouch, { passive: false });
-  document.addEventListener("touchend", endDragTouch);
-}
-
-function onDrag(ev) {
+function onDragPointer(ev) {
   const dy = ev.clientY - dragStartY;
   if (!isDragging && Math.abs(dy) < DRAG_THRESHOLD) return;
   isDragging = true;
@@ -677,28 +669,9 @@ function onDrag(ev) {
   document.addEventListener("click", blockClickAfterDrag, { capture: true, once: true });
 }
 
-function onDragTouch(ev) {
-  const t = ev.touches[0];
-  const dy = t.clientY - dragStartY;
-  if (!isDragging && Math.abs(dy) < DRAG_THRESHOLD) return;
-  ev.preventDefault();
-  isDragging = true;
-  toolbarTopPx.value = Math.max(0, Math.min(window.innerHeight - 60, dragStartTop + dy));
-  /* 一旦确认拖拽，拦截紧接着的 click */
-  document.addEventListener("click", blockClickAfterDrag, { capture: true, once: true });
-}
-
-function endDrag() {
-  document.removeEventListener("mousemove", onDrag);
-  document.removeEventListener("mouseup", endDrag);
-  if (isDragging) {
-    localStorage.setItem("cm_toolbar_top_px", toolbarTopPx.value.toString());
-  }
-}
-
-function endDragTouch() {
-  document.removeEventListener("touchmove", onDragTouch);
-  document.removeEventListener("touchend", endDragTouch);
+function endDragPointer() {
+  document.removeEventListener("pointermove", onDragPointer);
+  document.removeEventListener("pointerup", endDragPointer);
   if (isDragging) {
     localStorage.setItem("cm_toolbar_top_px", toolbarTopPx.value.toString());
   }

@@ -2,9 +2,10 @@
   <h2 style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%">
     <span @click="goFunction()">Code Hub</span>
     <div style="display: flex; align-items: center; gap: 10px; color: var(--text)">
-      <span @click="toggleSaves" style="font-size: 14px; padding: 6px 10px; cursor: pointer; color: var(--text)">{{ showSaves ? "关闭" : "载入" }}</span>
+      <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: .4;">{{ showSaves ? "▴" : "▾" }}</span>
       <!-- <span @click="rePwa()" style="font-size: 14px; padding: 6px 20px; opacity: 0.1">⟳</span> -->
     </div>
+
   </h2>
   <!-- 保存列表面板 -->
   <div v-if="showSaves" class="saves-panel">
@@ -238,7 +239,7 @@ const loadingItemId = ref(null); // 当前正在异步加载内容的项 id
 const selectMode = ref(false); // 是否处于"选择"模式（显示复选框/全选/删除/导出选中）
 
 // ===== 保存面板拖拽调整高度 =====
-const MIN_SAVES_HEIGHT = 10;
+const MIN_SAVES_HEIGHT = 57;
 const SAVES_HEIGHT_KEY = "codehub_saves_panel_height";
 const savesPanelHeight = ref(parseInt(localStorage.getItem(SAVES_HEIGHT_KEY), 10) || Math.round(window.innerHeight * 0.3));
 // const savesHandleRef = ref(null);
@@ -1190,7 +1191,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   background: transparent;
-  border-radius: 20px;
+  border-radius: 23px;
   z-index: 996;
   position: relative;
   line-height: 16px;
@@ -1201,8 +1202,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  padding: 12.5px 12px;
+  border-bottom: 0px solid rgba(128, 128, 128, 0);
   flex-wrap: wrap;
 }
 
@@ -1258,14 +1259,11 @@ onBeforeUnmount(() => {
 /* 拖拽调整高度手柄 */
 .saves-resize-handle {
   position: absolute;
-  bottom: 0;
+  bottom: -10px;          /* 向下延伸 10px 触摸区 */
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 4px;
-  height: 26px;
+  width: 90px;
+  height: 40px;           /* 原 30px + 下移 10px */
   cursor: row-resize;
   touch-action: none;
   user-select: none;
@@ -1273,8 +1271,13 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
+/* 横条用 absolute 固定在原来的视觉位置（面板底部上方 7px） */
 .saves-resize-bar {
-  width: 80px;
+  position: absolute;
+  bottom: 17px;           /* handle 下移了 10px，所以 bottom 要加 10: 7+10=17 */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90px;
   height: 4px;
   border-radius: 2px;
   background: rgba(128, 128, 128, 0.35);
@@ -1291,7 +1294,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.1);
+  border-bottom: 1px solid rgba(128, 128, 128, 0.03);
 }
 
 .saves-item-current {
