@@ -122,7 +122,26 @@ import { getExportExtensionByLanguage } from "@/EditCode/fileLanguageUtils";
 import useV3Clipboard from "vue-clipboard3";
 import { useRoute } from "vue-router";
 import { sendReq } from "@/http/http.js";
-import localforage from "localforage";
+import { openDB } from "idb";
+
+const dbPromise = openDB("codehub", 1, {
+  upgrade(db) {
+    db.createObjectStore("store");
+  },
+});
+
+const idbStorage = {
+  async getItem(key) {
+    return (await dbPromise).get("store", key);
+  },
+  async setItem(key, value) {
+    return (await dbPromise).put("store", value, key);
+  },
+  async removeItem(key) {
+    return (await dbPromise).delete("store", key);
+  },
+};
+
 import JSZip from "jszip";
 let skipWatchSave = false;
 const route = useRoute();
@@ -268,7 +287,7 @@ function endSavesResize() {
 const toggleSaves = async () => {
   showSaves.value = !showSaves.value;
 
-  await localforage.setItem("SHOW_SAVES_KEY", showSaves.value);
+  await idbStorage.setItem("SHOW_SAVES_KEY", showSaves.value);
 };
 const toggleSelectMode = () => {
   selectMode.value = !selectMode.value;
@@ -279,7 +298,7 @@ const toggleSelectMode = () => {
 
 const loadSaves = async () => {
   try {
-    const list = await localforage.getItem(SAVES_INDEX_KEY);
+    const list = await idbStorage.getItem(SAVES_INDEX_KEY);
     savedItems.value = Array.isArray(list) ? list : [];
   } catch (error) {
     console.error("读取保存列表失败", error);
@@ -290,7 +309,7 @@ const loadSaves = async () => {
 const persistIndex = async () => {
   try {
     const plainList = savedItems.value.map((item) => ({ ...item }));
-    await localforage.setItem(SAVES_INDEX_KEY, plainList);
+    await idbStorage.setItem(SAVES_INDEX_KEY, plainList);
   } catch (error) {
     console.error("写入保存列表索引失败", error);
     showToast("保存列表写入失败");
@@ -325,7 +344,7 @@ const createNewBlank = async () => {
   };
 
   try {
-    await localforage.setItem(contentKey(item.id), "");
+    await idbStorage.setItem(contentKey(item.id), "");
 
     savedItems.value.unshift(item);
     await persistIndex();
@@ -341,7 +360,7 @@ const createNewBlank = async () => {
     lastSavedContent.value = EMPTY_CONTENT;
 
     // 强制再写一次数据库（关键）
-    await localforage.setItem(contentKey(item.id), EMPTY_CONTENT);
+    await idbStorage.setItem(contentKey(item.id), EMPTY_CONTENT);
 
     isDirty = false;
 
@@ -365,7 +384,7 @@ const deleteSelected = async () => {
   if (!ok) return;
 
   try {
-    await Promise.all(ids.map((id) => localforage.removeItem(contentKey(id))));
+    await Promise.all(ids.map((id) => idbStorage.removeItem(contentKey(id))));
   } catch (error) {
     console.error("删除内容失败", error);
   }
@@ -384,7 +403,7 @@ const loadItem = async (item) => {
   loadingItemId.value = item.id;
 
   try {
-    const content = await localforage.getItem(contentKey(item.id));
+    const content = await idbStorage.getItem(contentKey(item.id));
 
     cmStore.setCmCode(content || EMPTY_CONTENT);
 
@@ -438,7 +457,7 @@ async function refreshUrlItem(item) {
     if (typeof content !== "string") {
       content = JSON.stringify(content, null, 2);
     }
-    await localforage.setItem(contentKey(item.id), content);
+    await idbStorage.setItem(contentKey(item.id), content);
     item.length = content.length;
     item.preview = content.slice(0, 60).replace(/\s+/g, " ").slice(0, 30);
     item.updatedAt = Date.now();
@@ -492,9 +511,9 @@ const setCurrentItem = async (id, fileName = "") => {
   cmStore.setCurrentFileName(fileName); // 同步当前文件名（仅展示用，语言识别以内容检测为准，后缀会被自动改写）
   try {
     if (id) {
-      await localforage.setItem(LAST_OPENED_KEY, id);
+      await idbStorage.setItem(LAST_OPENED_KEY, id);
     } else {
-      await localforage.removeItem(LAST_OPENED_KEY);
+      await idbStorage.removeItem(LAST_OPENED_KEY);
     }
   } catch (error) {
     console.error("记录最后打开项失败", error);
@@ -511,7 +530,7 @@ const syncCurrentItemContent = async () => {
   const content = cmStore.CmCode || "";
 
   try {
-    await localforage.setItem(contentKey(id), content);
+    await idbStorage.setItem(contentKey(id), content);
 
     lastSavedContent.value = content;
     isDirty = false;
@@ -586,7 +605,7 @@ const flushCurrentSave = async () => {
   const content = cmStore.CmCode;
   if (content == null) return;
   try {
-    await localforage.setItem(contentKey(id), content);
+    await idbStorage.setItem(contentKey(id), content);
 
     lastSavedContent.value = content;
     isDirty = false;
@@ -628,7 +647,7 @@ const onImportFileChange = async (e) => {
     cmStore.setCmCode(text);
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    await localforage.setItem(contentKey(id), text);
+    await idbStorage.setItem(contentKey(id), text);
     await setCurrentItem(id, file.name);
 
     savedItems.value.unshift({ id, name: file.name, ...buildMeta(text) });
@@ -720,7 +739,7 @@ const exportSelected = async () => {
   if (items.length === 1) {
     const item = items[0];
     try {
-      const content = await localforage.getItem(contentKey(item.id));
+      const content = await idbStorage.getItem(contentKey(item.id));
       const finalName = buildExportFilename(item.name, item.language);
       downloadTextFile(finalName, content || "");
       showToast("已导出");
@@ -738,7 +757,7 @@ const exportSelected = async () => {
 
   for (const item of items) {
     try {
-      const content = await localforage.getItem(contentKey(item.id));
+      const content = await idbStorage.getItem(contentKey(item.id));
       let finalName = buildExportFilename(item.name, item.language);
 
       // 避免重名条目互相覆盖（序号插在扩展名前面）
@@ -941,7 +960,7 @@ async function loadUrlContent(inputUrl) {
       blobUrl: bloburl,
     };
 
-    await localforage.setItem(contentKey(id), content);
+    await idbStorage.setItem(contentKey(id), content);
 
     savedItems.value.unshift(item);
 
@@ -968,7 +987,7 @@ onMounted(async () => {
   blurNavdiv?.classList.add("blurNavdiv_code");
   let currentURL = Object.keys(route.query)[0] || "";
   let bloburl = "";
-  const state = await localforage.getItem("SHOW_SAVES_KEY");
+  const state = await idbStorage.getItem("SHOW_SAVES_KEY");
 
   if (typeof state === "boolean") {
     showSaves.value = state;
@@ -1039,7 +1058,7 @@ onMounted(async () => {
     };
 
     // 保存内容
-    await localforage.setItem(contentKey(id), grc.value);
+    await idbStorage.setItem(contentKey(id), grc.value);
 
     // 插入列表顶部
     savedItems.value.unshift(item);
@@ -1062,7 +1081,7 @@ onMounted(async () => {
   } else {
     let lastId = null;
     try {
-      lastId = await localforage.getItem(LAST_OPENED_KEY);
+      lastId = await idbStorage.getItem(LAST_OPENED_KEY);
     } catch (error) {
       console.error("读取最后打开项失败", error);
     }
@@ -1070,7 +1089,7 @@ onMounted(async () => {
     let lastContent = null;
     if (lastId) {
       try {
-        lastContent = await localforage.getItem(contentKey(lastId));
+        lastContent = await idbStorage.getItem(contentKey(lastId));
       } catch (error) {
         console.error("读取最后打开内容失败", error);
       }
@@ -1085,12 +1104,23 @@ onMounted(async () => {
 
       console.log("0 已默认载入最后打开的内容");
     } else {
-      const storedUsername = await localforage.getItem("codehub");
+      const storedUsername = await idbStorage.getItem("codehub");
       if (storedUsername) {
         initialCode = storedUsername;
         console.log("0 读取到草稿数据");
       } else {
         initialCode = xc;
+        // 首次启动：把示例代码存为列表项
+        const firstId = createId();
+        const firstName = "example.js";
+        await idbStorage.setItem(contentKey(firstId), xc);
+        savedItems.value.unshift({
+          id: firstId,
+          name: firstName,
+          ...buildMeta(xc),
+        });
+        await persistIndex();
+        await setCurrentItem(firstId, firstName);
       }
     }
   }

@@ -177,7 +177,7 @@ const isFormatting = ref(false);
 const editorLanguage_short = {
   javascript: "JS",
   json: "JSON",
-  json5: "JSON5",
+  json5: "J..5",
   yaml: "YAML",
   ini: "INI",
   plaintext: "TXT",
@@ -188,7 +188,7 @@ const editorLanguage_json = {
   auto: "自动",
   javascript: "JavaScript",
   json: "JSON",
-  json5: "JSON5",
+  json5: "J..5",
   yaml: "YAML",
   ini: "INI",
   plaintext: "纯文本",
@@ -242,17 +242,17 @@ const onLanguageChange = () => {
 };
 
 const languageOptions = computed(() =>
-  EDITOR_LANGUAGE_OPTIONS.map((option) =>
-    option.value === "auto"
-      ? {
-          ...option,
-          label: autoDetectedLanguage.value ? `${getShortLanguageLabel(autoDetectedLanguage.value)}` : getLanguageLabel(option.value),
-        }
-      : {
-          ...option,
-          label: getLanguageLabel(option.value),
-        },
-  ),
+  EDITOR_LANGUAGE_OPTIONS.map((option) => {
+    let label;
+    if (option.value === "auto") {
+      label = autoDetectedLanguage.value ? `${getShortLanguageLabel(autoDetectedLanguage.value)}` : getLanguageLabel(option.value);
+    } else if (option.value === "javascript" || option.value === "plaintext") {
+      label = getShortLanguageLabel(option.value);
+    } else {
+      label = getLanguageLabel(option.value);
+    }
+    return { ...option, label };
+  }),
 );
 const selectedLanguageTitle = computed(() => {
   if (normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto") {
@@ -715,12 +715,14 @@ function endDragTouch() {
   position: relative;
   display: flex;
   align-items: center;
-  height: 24px;
-  // width: 110px;
-  padding: 0px 0px 0 20px;
-  margin-right: 6px;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  margin-right: 0px;
+  margin-left: 12px;
   color: var(--second-text-color);
-  flex: 0 1 auto;
+  flex-shrink: 0;
   border: 0px solid #8b8b8b66;
   border-radius: 16px;
 }
@@ -779,26 +781,23 @@ function endDragTouch() {
 
 .language-select {
   background: transparent;
-
   border: 0px solid rgba(128, 128, 128, 0.5);
-  text-align: right;
-  // border-radius: 16px;
+  text-align: center;
   color: var(--text);
-  // color: inherit;
+  font-size: 11px;
   width: 34px;
-  outline: none;
-
-  appearance: none;
-  // margin-left: 10px;
-  -webkit-appearance: none;
-
-  padding: 0 0 0 1px;
-  // margin-left: 10px;
+  min-width: 34px;
+  max-width: 34px;
   height: 34px;
-  // min-height: 34px;
-  // width: auto;
-  // min-width: 34px;
-  // max-width: px;
+  min-height: 34px;
+  max-height: 34px;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 @media (max-width: 480px) {
