@@ -861,7 +861,8 @@ function blockClickAfterDrag(e) {
 function startDragPointer(e) {
   // ★ 跳过功能性按钮/输入框，但允许拖拽手柄（折叠按钮）正常拖拽
   if (e.target.closest("input, select, textarea, option, button:not(.cm-collapse-btn)")) return;
-  dragStartY = e.clientY;
+  // ★ pageY 是文档坐标，不受 iOS 键盘弹出/收起导致的视觉视口变化影响
+  dragStartY = e.pageY;
   dragStartTop = toolbarTopPx.value;
   isDragging = false;
   e.preventDefault();
@@ -873,10 +874,13 @@ function startDragPointer(e) {
 }
 
 function onDragPointer(ev) {
-  const dy = ev.clientY - dragStartY;
+  // ★ pageY 是文档坐标，不受 iOS 键盘弹出/收起导致的视觉视口变化影响
+  const dy = ev.pageY - dragStartY;
   if (!isDragging && Math.abs(dy) < DRAG_THRESHOLD) return;
   isDragging = true;
-  toolbarTopPx.value = Math.max(0, Math.min(window.innerHeight - 130, dragStartTop + dy));
+  // ★ document.documentElement.clientHeight 是布局视口高度，iOS 键盘不影响它
+  const layoutHeight = document.documentElement.clientHeight;
+  toolbarTopPx.value = Math.max(0, Math.min(layoutHeight - 130, dragStartTop + dy));
   document.addEventListener("click", blockClickAfterDrag, { capture: true, once: true });
 }
 
