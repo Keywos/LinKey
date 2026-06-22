@@ -5,24 +5,18 @@ import { clientsClaim } from "workbox-core";
 self.skipWaiting();
 clientsClaim();
 
-// 注入预缓存清单（由 vite-plugin-pwa 构建时填充）
-precacheAndRoute(self.__WB_MANIFEST);
+// 保存预缓存清单引用（构建时被替换为实际数组）
+const precacheEntries = self.__WB_MANIFEST || [];
+precacheAndRoute(precacheEntries);
 
 // 导航请求统一返回 index.html
-// 若预缓存被清空，自动注销 SW，重载页面触发重新安装
+// 若预缓存被清空（用户删除了 Cache Storage），手动重建
 const handler = async ({ event }) => {
   const cached = await matchPrecache("/index.html");
 
   if (!cached) {
-    // 预缓存缺失（用户清空了 Cache Storage）→ 重新注册
-    event.waitUntil(
-      (async () => {
-        await self.registration.unregister();
-        const allClients = await self.clients.matchAll({ type: "window" });
-        allClients.forEach((c) => c.navigate(c.url));
-      })()
-    );
-    // 回退到网络
+    // 预缓存缺失 → 后台重建，当前导航从网络加载
+    event.waitUntil(rebuildPrecache());
     return fetch(event.request);
   }
 
@@ -41,3 +35,20 @@ const handler = async ({ event }) => {
 registerRoute(new NavigationRoute(handler, {
   allowlist: [/^\/.*$/],
 }));
+
+// 重建预缓存：从网络重新拉取所有资源
+async function rebuildPrecache() {
+  const cacheName = "workbox-precache-v2";
+  const cache = await caches.open(cacheName);
+  for (const entry of precacheEntries) {
+    const url = typeof entry === "string" ? entry : entry.url;
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        await cache.put(url, res);
+      }
+    } catch (e) {
+      console.warn("[SW] 重建缓存失败:", url);
+    }
+  }
+}
