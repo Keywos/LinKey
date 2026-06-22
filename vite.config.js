@@ -128,6 +128,7 @@ export default {
       workbox: {
         navigateFallback: "/index.html",
         navigateFallbackAllowlist: [/^\/[^/]*$/],
+        navigationPreload: false,
         globPatterns: [
           "144x144.png",
           "192x192.png",
