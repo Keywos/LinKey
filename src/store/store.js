@@ -1,7 +1,6 @@
 import { defineStore } from "pinia";
 
-export const useStore = defineStore({
-  id: "scroll",
+export const useStore = defineStore("scroll", {
   state: () => ({
     scrollPositions: {},
     count: localStorage.getItem("count") || "",

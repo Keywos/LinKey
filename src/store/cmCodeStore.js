@@ -1,7 +1,6 @@
 import { defineStore } from "pinia";
 
-export const useCmStore = defineStore({
-  id: "CmStore",
+export const useCmStore = defineStore("CmStore", {
   state: () => ({
     CmCode: "",
     currentFileName: "", // 当前文件名（含后缀），用于 auto 模式下按后缀识别语言

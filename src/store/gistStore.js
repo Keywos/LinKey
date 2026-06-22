@@ -1,7 +1,6 @@
 import { defineStore } from "pinia";
 
-export const useGistStore = defineStore({
-  id: "GistStore",
+export const useGistStore = defineStore("GistStore", {
   state: () => ({
     tname: "",
     getGistRes: [],
