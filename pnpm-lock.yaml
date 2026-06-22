@@ -1769,19 +1769,6 @@ packages:
       magic-string: 0.30.21
       rollup: 4.62.2
 
-  /@rollup/plugin-terser@1.0.0(rollup@4.62.2):
-    resolution: {integrity: sha512-FnCxhTBx6bMOYQrar6C8h3scPt8/JwIzw3+AJ2K++6guogH5fYaIFia+zZuhqv0eo1RN7W1Pz630SyvLbDjhtQ==}
-    engines: {node: '>=20.0.0'}
-    peerDependencies:
-      rollup: ^2.0.0||^3.0.0||^4.0.0
-    peerDependenciesMeta:
-      rollup:
-        optional: true
-    dependencies:
-      rollup: 4.62.2
-      serialize-javascript: 7.0.6
-      smob: 1.6.2
-      terser: 5.48.0
 
   /@rollup/pluginutils@5.4.0(rollup@4.62.2):
     resolution: {integrity: sha512-MfPp06CjRLfXQ3wY0R8vJDYBy/MvVcc9OulEfR0B8Iv9ko+GCNaRZ+EpJYFl27LhKsZK0o420sYCRHCjfCgeUg==}
