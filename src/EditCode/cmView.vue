@@ -48,7 +48,7 @@
           </div>
           <button @click="undoCode"><img :src="undoimg" /></button>
           <button @click="redoCode"><img :src="redoimg" /></button>
-          <button @click="formatCode" :title="formatCodeTitle" :class="{ 'format-btn-dimmed': !isJsLanguage }"><img :src="format" /></button>
+          <button @click="formatCode" title="JS 选项"><img :src="format" /></button>
           <button @click="toggleSearch"><img :src="searchimg" /></button>
           <button @click="copyText"><img :src="copyimg" /></button>
           <button @click="delAllCode"><img :src="del" /></button>
@@ -133,7 +133,7 @@ import { lightCode } from "./light.js";
 import { javascript } from "@/EditCode/lang-js";
 import { json } from "@codemirror/lang-json";
 
-import { canFormatEditorLanguage, detectEditorLanguage, EDITOR_LANGUAGE_OPTIONS, formatEditorCode, loadEditorLanguageExtension, normalizeEditorLanguage } from "@/EditCode/editorLanguages";
+import { detectEditorLanguage, EDITOR_LANGUAGE_OPTIONS, loadEditorLanguageExtension, normalizeEditorLanguage } from "@/EditCode/editorLanguages";
 import { renameFileExtension } from "@/EditCode/fileLanguageUtils";
 import { shikiHighlight } from "@/EditCode/shikiHighlight";
 import { computed, nextTick, ref, reactive, onBeforeUnmount, onMounted, watch, watchEffect } from "vue";
@@ -672,9 +672,6 @@ const redoCode = () => redo(view);
 // ===== 格式化 / 压缩 JS 切换 =====
 const isFormatted = ref(false);
 
-const isJsLanguage = computed(() => activeLanguage.value === "javascript" || selectedLanguage.value === "javascript");
-const formatCodeTitle = computed(() => (isJsLanguage.value ? "JS 选项" : "格式化"));
-
 const COMPRESS_OPTS_KEY = "compress_opts";
 function loadCompressOpts() {
   try {
@@ -763,23 +760,39 @@ async function doCompress() {
   }
 }
 
-// ★ 格式化（选项弹窗中的按钮）
+// ★ 格式化（选项弹窗中的按钮）— 使用 js-beautify
 async function doFormat() {
   const code = cmStore.CmCode || "";
   if (!code) return;
   closeCompressDialog();
-  if (!canFormatEditorLanguage(activeLanguage.value)) return;
-  isFormatting.value = true;
-  const result = await formatEditorCode(activeLanguage.value, code);
-  isFormatting.value = false;
-  if (result.ok) {
-    cmStore.setCmCode(result.code);
-    isFormatted.value = true;
-    showToast("已格式化");
+
+  let beautifyFn;
+  const lang = activeLanguage.value;
+  try {
+    const beautify = await import("js-beautify");
+    if (lang === "css") {
+      beautifyFn = beautify.css_beautify;
+    } else if (lang === "html" || lang === "xml" || lang === "svg") {
+      beautifyFn = beautify.html_beautify;
+    } else {
+      beautifyFn = beautify.js_beautify;
+    }
+  } catch (e) {
+    showToast("加载格式化模块失败");
     return;
   }
-  console.error(result.error);
-  showToast("格式化失败, 内容未修改");
+
+  isFormatting.value = true;
+  try {
+    const formatted = beautifyFn(code, { indent_size: 2 });
+    cmStore.setCmCode(formatted);
+    isFormatted.value = true;
+    showToast("已格式化");
+  } catch (e) {
+    console.error(e);
+    showToast("格式化失败: " + (e.message || "未知错误"));
+  }
+  isFormatting.value = false;
 }
 
 const refreshEditorLayout = () => {
@@ -789,27 +802,8 @@ const refreshEditorLayout = () => {
 };
 
 async function formatCode() {
-  const code = cmStore.CmCode || "";
-  if (!code) return;
-
-  // JS：每次都弹出选项弹窗
-  // 同时检查 activeLanguage（检测完成）和 selectedLanguage（用户手动选），避免首次加载时 activeLanguage 尚未检测完成
-  if (activeLanguage.value === "javascript" || selectedLanguage.value === "javascript") {
-    compressOpts.visible = true;
-    return;
-  }
-
-  // 其他语言：只格式化，不切换
-  if (!canFormatEditorLanguage(activeLanguage.value)) return;
-  isFormatting.value = true;
-  const result = await formatEditorCode(activeLanguage.value, code);
-  isFormatting.value = false;
-  if (result.ok) {
-    cmStore.setCmCode(result.code);
-    return;
-  }
-  console.error(result.error);
-  showToast("当前语言暂不支持格式化 : 格式化失败, 内容未修改");
+  // ★ 始终打开压缩选项弹窗
+  compressOpts.visible = true;
 }
 
 const copyText = async () => {
@@ -880,7 +874,7 @@ function onDragPointer(ev) {
   isDragging = true;
   // ★ document.documentElement.clientHeight 是布局视口高度，iOS 键盘不影响它
   const layoutHeight = document.documentElement.clientHeight;
-  toolbarTopPx.value = Math.max(0, Math.min(layoutHeight - 130, dragStartTop + dy));
+  toolbarTopPx.value = Math.max(0, Math.min(layoutHeight - 48, dragStartTop + dy));
   document.addEventListener("click", blockClickAfterDrag, { capture: true, once: true });
 }
 
@@ -984,10 +978,6 @@ function endDragPointer(ev) {
   height: 30px;
   justify-content: center;
   align-items: center;
-}
-
-.format-btn-dimmed {
-  opacity: 0.2;
 }
 
 @media (max-width: 480px) {
