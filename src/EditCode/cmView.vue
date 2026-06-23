@@ -132,6 +132,7 @@ import { darkCode } from "./dark.js";
 import { lightCode } from "./light.js";
 import { javascript } from "@/EditCode/lang-js";
 import { json } from "@codemirror/lang-json";
+import { yaml } from "@codemirror/lang-yaml";
 
 import { detectEditorLanguage, EDITOR_LANGUAGE_OPTIONS, loadEditorLanguageExtension, normalizeEditorLanguage } from "@/EditCode/editorLanguages";
 import { renameFileExtension } from "@/EditCode/fileLanguageUtils";
@@ -366,6 +367,14 @@ const applyLanguage = async (language, requestId = ++languageRequestId) => {
     console.log(`启用 ${nextLanguage} 语法高亮 3 - 使用 codemirror`);
     view.dispatch({
       effects: langs.reconfigure(json()),
+    });
+    return;
+  }
+
+  if (nextLanguage === "yaml") {
+    console.log(`启用 ${nextLanguage} 语法高亮 3 - 使用 codemirror`);
+    view.dispatch({
+      effects: langs.reconfigure(yaml()),
     });
     return;
   }
@@ -713,82 +722,87 @@ function closeCompressDialog() {
   compressOpts.visible = false;
 }
 
-// ★ terser 压缩（动态加载）
-let _terserMinify = null;
+// ── Web Worker：js-beautify（格式化）& terser（压缩） ──
+let formatWorker = null;
+let formatWorkerRequestId = 0;
+const formatWorkerPending = new Map();
 
-// 打开弹窗时预载 terser（先让弹窗渲染，再加载 terser）
-watch(
-  () => compressOpts.visible,
-  async (visible) => {
-    if (visible && !_terserMinify) {
-      // 等待弹窗 DOM 渲染完成后才加载 terser
-      await nextTick();
-      try {
-        const mod = await import("terser");
-        _terserMinify = mod.minify;
-      } catch (e) {
-        console.warn("terser 预载失败", e);
+function getFormatWorker() {
+  if (!formatWorker) {
+    formatWorker = new Worker(new URL("./formatWorker.js", import.meta.url), { type: "module" });
+    formatWorker.addEventListener("message", (e) => {
+      const { type, id, result, error } = e.data;
+      const resolve = formatWorkerPending.get(id);
+      if (!resolve) return;
+      formatWorkerPending.delete(id);
+      if (type === "error") {
+        resolve.reject(new Error(error));
+      } else {
+        resolve.resolve(result);
       }
-    }
-  },
-);
+    });
+  }
+  return formatWorker;
+}
+
+function callFormatWorker(type, payload) {
+  return new Promise((resolve, reject) => {
+    const id = ++formatWorkerRequestId;
+    formatWorkerPending.set(id, { resolve, reject });
+    getFormatWorker().postMessage({ type, payload: { ...payload, id } });
+  });
+}
 
 async function doCompress() {
   const code = cmStore.CmCode || "";
   if (!code) return;
-  if (!_terserMinify) {
-    showToast("terser 尚未加载完成，请稍后重试");
-    return;
-  }
+  showToast("正在压缩 JS…");
+  const start = performance.now();
   try {
-    const result = await _terserMinify(code, {
-      compress: {
-        drop_console: !compressOpts.keepConsole,
-      },
-      mangle: !compressOpts.keepNames,
-      format: {
-        ascii_only: compressOpts.charset === "ascii",
-        comments: false,
+    const result = await callFormatWorker("compress", {
+      code,
+      options: {
+        compress: {
+          drop_console: !compressOpts.keepConsole,
+        },
+        mangle: !compressOpts.keepNames,
+        format: {
+          ascii_only: compressOpts.charset === "ascii",
+          comments: false,
+        },
       },
     });
     cmStore.setCmCode(result.code);
     closeCompressDialog();
     isFormatted.value = false;
-    showToast("已压缩 JS");
+    const ms = (performance.now() - start).toFixed(1);
+    showToast("已压缩 JS (" + ms + "ms)");
   } catch (e) {
     console.error(e);
     showToast("压缩失败: " + e.message);
   }
 }
 
-// ★ 格式化（选项弹窗中的按钮）— 使用 js-beautify
+// ★ 格式化 — 使用 Web Worker 中的 js-beautify
 async function doFormat() {
   const code = cmStore.CmCode || "";
   if (!code) return;
   closeCompressDialog();
+  showToast("正在格式化…");
 
-  let beautifyFn;
   const lang = activeLanguage.value;
-  try {
-    const beautify = await import("js-beautify");
-    if (lang === "css") {
-      beautifyFn = beautify.css_beautify;
-    } else if (lang === "html" || lang === "xml" || lang === "svg") {
-      beautifyFn = beautify.html_beautify;
-    } else {
-      beautifyFn = beautify.js_beautify;
-    }
-  } catch (e) {
-    showToast("加载格式化模块失败");
-    return;
-  }
-
   isFormatting.value = true;
+  const start = performance.now();
   try {
-    const formatted = beautifyFn(code, { indent_size: 2 });
+    const formatted = await callFormatWorker("beautify", {
+      code,
+      lang,
+      options: { indent_size: 2 },
+    });
     cmStore.setCmCode(formatted);
     isFormatted.value = true;
-    showToast("已格式化");
+    const ms = (performance.now() - start).toFixed(1);
+    showToast("已格式化 (" + ms + "ms)");
   } catch (e) {
     console.error(e);
     showToast("格式化失败: " + (e.message || "未知错误"));

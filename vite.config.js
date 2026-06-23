@@ -46,6 +46,14 @@ export default {
       "@": path.resolve(__dirname, "src"),
     },
   },
+  // ★ shikiWorker.js 里用了 import("shiki/core") 等动态 import（代码分片），
+  //   Vite 的 worker 默认用 'iife' 格式打包，不支持代码分片，构建会直接报错：
+  //   "Invalid value 'iife' for option 'output.format' - UMD and IIFE output
+  //   formats are not supported for code-splitting builds."
+  //   所以 worker 输出格式必须显式指定为 'es'。
+  worker: {
+    format: "es",
+  },
   plugins: [
     vue(),
     fetchProxyPlugin(),

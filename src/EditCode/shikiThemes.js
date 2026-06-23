@@ -365,26 +365,3 @@ export const SHIKI_THEME_REGISTRATIONS = [
     colors: oneLight,
   }),
 ];
-
-export const YAML_KEY_LEVEL_COLORS = {
-  dark: [
-    oneDark.purple,
-    oneDark.blue,
-    oneDark.cyan,
-    oneDark.green,
-    oneDark.orange,
-    oneDark.red,
-    oneDark.yellow,
-    oneDark.fg,
-  ],
-  light: [
-    oneLight.purple,
-    oneLight.blue,
-    oneLight.cyan,
-    oneLight.green,
-    oneLight.orange,
-    oneLight.red,
-    oneLight.yellow,
-    oneLight.fg,
-  ],
-};

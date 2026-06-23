@@ -1,83 +1,94 @@
 import { RangeSetBuilder, StateEffect } from "@codemirror/state";
 import { Decoration, ViewPlugin } from "@codemirror/view";
-import { SHIKI_THEMES, SHIKI_THEME_REGISTRATIONS, YAML_KEY_LEVEL_COLORS } from "@/EditCode/shikiThemes.js";
 // by @xream
-const LANGUAGE_LOADERS = {
-  javascript: () => import("shiki/langs/javascript.mjs").then((module) => module.default),
-  json: () => import("shiki/langs/json.mjs").then((module) => module.default),
-  json5: () => import("shiki/langs/json5.mjs").then((module) => module.default),
-  yaml: () => import("shiki/langs/yaml.mjs").then((module) => module.default),
-  ini: () => import("shiki/langs/ini.mjs").then((module) => module.default),
-};
+// ★ Shiki 的 tokenize（codeToTokens）是纯 CPU 计算，已经搬进 shikiWorker.js
+//   在独立线程里跑，这里只负责：发请求 -> 拿到 token 数组 -> 在主线程
+//   构建轻量的 Decoration（这一步必须留在主线程，因为要用到 CodeMirror 的
+//   RangeSetBuilder/Decoration API 和当前的 view.state.doc）。
+
+// 现在只有 ini 走 shiki 高亮：javascript/json/json5/yaml 都改用了
+// CodeMirror 自带的语言扩展（见 cmView.vue 的 applyLanguage），不会再
+// 调用到这里。真正的语言 grammar 动态 import 只存在于 shikiWorker.js 里，
+// 主线程不会因为这个判断而把 shiki 相关代码打进主包。
+const SHIKI_SUPPORTED_LANGUAGES = new Set(["ini"]);
 
 const shikiRefreshEffect = StateEffect.define();
-const loadedLanguages = new Set();
-const languageLoadPromises = new Map();
 
-let highlighterPromise;
+// ===== 与 Worker 的通信层 =====
+let worker = null;
+let workerInitFailed = false;
+let workerRequestId = 0;
+const pendingRequests = new Map();
 
-const getHighlighter = () => {
-  if (!highlighterPromise) {
-    highlighterPromise = Promise.all([import("shiki/core"), import("shiki/engine/javascript")]).then(([{ createHighlighterCore }, { createJavaScriptRegexEngine }]) =>
-      createHighlighterCore({
-        themes: SHIKI_THEME_REGISTRATIONS,
-        langs: [],
-        engine: createJavaScriptRegexEngine(),
-      }),
-    );
+const rejectAllPending = (error) => {
+  for (const { reject } of pendingRequests.values()) {
+    reject(error);
+  }
+  pendingRequests.clear();
+};
+
+const getWorker = () => {
+  if (worker || workerInitFailed) return worker;
+
+  try {
+    worker = new Worker(new URL("./shikiWorker.js", import.meta.url), {
+      type: "module",
+    });
+
+    worker.onmessage = (event) => {
+      const { id, ok, tokens, error } = event.data || {};
+      const pending = pendingRequests.get(id);
+      if (!pending) return;
+
+      pendingRequests.delete(id);
+
+      if (ok) {
+        pending.resolve(tokens);
+      } else {
+        pending.reject(new Error(error || "Shiki worker error"));
+      }
+    };
+
+    // worker 内部出现未捕获异常（比如某次 import 失败）时，
+    // 不能让所有等待中的请求永远 pending，统一 reject 掉。
+    worker.onerror = (event) => {
+      console.error("Shiki worker crashed", event);
+      rejectAllPending(new Error((event && event.message) || "Shiki worker crashed"));
+    };
+  } catch (error) {
+    // 极少数环境（比如被 webview 禁用了 Worker）下创建失败，
+    // 降级为不高亮，而不是让整个编辑器崩掉。
+    console.error("Failed to create Shiki worker", error);
+    workerInitFailed = true;
+    worker = null;
   }
 
-  return highlighterPromise;
+  return worker;
 };
 
-const ensureLanguageLoaded = async (language) => {
-  const loadLanguage = LANGUAGE_LOADERS[language];
-  if (!loadLanguage) return null;
+const requestHighlightFromWorker = (code, language, dark) => {
+  const activeWorker = getWorker();
 
-  const highlighter = await getHighlighter();
-  if (loadedLanguages.has(language)) return highlighter;
-
-  if (!languageLoadPromises.has(language)) {
-    languageLoadPromises.set(
-      language,
-      loadLanguage()
-        .then((grammar) => highlighter.loadLanguage(grammar))
-        .then(() => {
-          loadedLanguages.add(language);
-        })
-        .catch((error) => {
-          languageLoadPromises.delete(language);
-          throw error;
-        }),
-    );
+  if (!activeWorker) {
+    return Promise.resolve([]);
   }
 
-  await languageLoadPromises.get(language);
-  return highlighter;
+  const id = ++workerRequestId;
+
+  return new Promise((resolve, reject) => {
+    pendingRequests.set(id, { resolve, reject });
+    activeWorker.postMessage({ id, code, language, dark });
+  });
 };
 
-const getYamlKeyLevel = (doc, from, to) => {
-  const line = doc.lineAt(from);
-  if (to > line.to) return undefined;
-
-  const text = line.text;
-  const match = text.match(/^(\s*)(?:-\s*)?([^#\s][^:]*?)\s*:/);
-  if (!match) return undefined;
-
-  const keyStart = line.from + match[0].indexOf(match[2]);
-  const keyEnd = keyStart + match[2].length;
-  if (from < keyStart || to > keyEnd) return undefined;
-
-  return Math.floor(match[1].length / 2);
-};
-
-const tokenStyle = (token, colorOverride) => {
+// ===== Decoration 构建（必须留在主线程，依赖 view.state.doc） =====
+const tokenStyle = (token) => {
   const styles = [];
   const textDecorations = [];
   const fontStyle = token.fontStyle;
 
-  if (colorOverride || token.color) {
-    styles.push(`color: ${colorOverride || token.color} !important`);
+  if (token.color) {
+    styles.push(`color: ${token.color} !important`);
   }
 
   if (typeof fontStyle === "number" && fontStyle > 0) {
@@ -94,10 +105,9 @@ const tokenStyle = (token, colorOverride) => {
   return styles.join("; ");
 };
 
-const buildDecorations = (doc, tokenLines, { language, dark }) => {
+const buildDecorations = (doc, tokenLines) => {
   const builder = new RangeSetBuilder();
   let fallbackOffset = 0;
-  const yamlKeyColors = language === "yaml" ? YAML_KEY_LEVEL_COLORS[dark ? "dark" : "light"] : null;
 
   for (const line of tokenLines) {
     for (const token of line) {
@@ -110,9 +120,7 @@ const buildDecorations = (doc, tokenLines, { language, dark }) => {
         continue;
       }
 
-      const yamlKeyLevel = yamlKeyColors ? getYamlKeyLevel(doc, from, to) : undefined;
-      const colorOverride = yamlKeyLevel === undefined ? undefined : yamlKeyColors[yamlKeyLevel % yamlKeyColors.length];
-      const style = tokenStyle(token, colorOverride);
+      const style = tokenStyle(token);
       if (!style) continue;
 
       builder.add(
@@ -131,91 +139,10 @@ const buildDecorations = (doc, tokenLines, { language, dark }) => {
   return builder.finish();
 };
 
-// const shikiHighlightPlugin = ViewPlugin.fromClass(
-//   class {
-//     constructor(view, options) {
-//       this.options = options;
-//       this.decorations = Decoration.none;
-//       this.destroyed = false;
-//       this.requestId = 0;
-//       this.timer = undefined;
-//       this.schedule(view, 0);
-//     }
-
-//     update(update) {
-//       if (update.docChanged) {
-//         this.decorations = this.decorations.map(update.changes);
-//         this.schedule(update.view, 80);
-//       }
-//     }
-
-//     destroy() {
-//       this.destroyed = true;
-//       this.requestId += 1;
-//       if (this.timer !== undefined) {
-//         clearTimeout(this.timer);
-//       }
-//     }
-
-//     schedule(view, delay) {
-//       const requestId = ++this.requestId;
-//       if (this.timer !== undefined) {
-//         clearTimeout(this.timer);
-//       }
-
-//       this.timer = setTimeout(() => {
-//         this.timer = undefined;
-//         this.highlight(view, requestId);
-//       }, delay);
-//     }
-
-//     async highlight(view, requestId) {
-//       const language = this.options.language;
-//       const theme = this.options.dark ? SHIKI_THEMES.dark : SHIKI_THEMES.light;
-//       const code = view.state.doc.toString();
-
-//       if (!code) {
-//         this.setDecorations(view, requestId, Decoration.none);
-//         return;
-//       }
-
-//       try {
-//         const highlighter = await ensureLanguageLoaded(language);
-//         if (!highlighter) return;
-
-//         const result = highlighter.codeToTokens(code, { lang: language, theme });
-//         this.setDecorations(
-//           view,
-//           requestId,
-//           buildDecorations(view.state.doc, result.tokens, {
-//             language,
-//             dark: this.options.dark,
-//           })
-//         );
-//       } catch (error) {
-//         console.error("Shiki highlight failed", error);
-//         this.setDecorations(view, requestId, Decoration.none);
-//       }
-//     }
-
-//     setDecorations(view, requestId, decorations) {
-//       if (this.destroyed || requestId !== this.requestId) return;
-
-//       this.decorations = decorations;
-//       view.dispatch({
-//         effects: shikiRefreshEffect.of(null),
-//       });
-//     }
-//   },
-//   {
-//     decorations: (plugin) => plugin.decorations,
-//   }
-// );
-
 export const shikiHighlight = ({ language, dark }) => {
-  if (!LANGUAGE_LOADERS[language]) {
-    return [];
-  }
+  // if (!LANGUAGE_LOADERS[language]) {
+  //   return [];
+  // }
 
   return ViewPlugin.fromClass(
     class {
@@ -273,53 +200,22 @@ export const shikiHighlight = ({ language, dark }) => {
 
         // ★ 超过 2MB 不做 shiki 高亮
         if (!code || code.length > 1048576) {
-          this.setDecorations(
-            view,
-
-            requestId,
-
-            Decoration.none,
-          );
-
+          this.setDecorations(view, requestId, Decoration.none);
           return;
         }
 
         try {
-          const highlighter = await ensureLanguageLoaded(language);
+          // ★ 真正的 tokenize 已经丢给 worker 线程，这里只是 await 结果，
+          //   不会阻塞主线程/输入响应。
+          const tokens = await requestHighlightFromWorker(code, language, dark);
 
-          if (!highlighter) {
+          // 文档在等待 worker 返回期间可能已经又变了，
+          // 过期的结果直接丢弃，不要浪费时间去构建 Decoration。
+          if (this.destroyed || requestId !== this.requestId) {
             return;
           }
 
-          const theme = dark ? SHIKI_THEMES.dark : SHIKI_THEMES.light;
-
-          const result = highlighter.codeToTokens(
-            code,
-
-            {
-              lang: language,
-
-              theme,
-            },
-          );
-
-          this.setDecorations(
-            view,
-
-            requestId,
-
-            buildDecorations(
-              view.state.doc,
-
-              result.tokens,
-
-              {
-                language,
-
-                dark,
-              },
-            ),
-          );
+          this.setDecorations(view, requestId, buildDecorations(view.state.doc, tokens));
         } catch (e) {
           console.error(e);
         }
@@ -343,12 +239,3 @@ export const shikiHighlight = ({ language, dark }) => {
     },
   );
 };
-
-// export const shikiHighlight = ({ language, dark }) => {
-//   if (!LANGUAGE_LOADERS[language]) return [];
-
-//   return shikiHighlightPlugin.of({
-//     language,
-//     dark,
-//   });
-// };
