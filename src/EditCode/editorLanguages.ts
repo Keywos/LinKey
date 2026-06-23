@@ -304,7 +304,47 @@ export const getEditorLanguage = (value: unknown) =>
 export const canFormatEditorLanguage = (value: unknown) =>
   getEditorLanguage(value).canFormat;
 
-export const detectEditorLanguage = async (
+// ── Web Worker：语言自动检测 ──
+let detectWorker: Worker | null = null;
+let detectWorkerInitFailed = false;
+let detectWorkerRequestId = 0;
+const detectWorkerPending = new Map<
+  number,
+  { resolve: (value: ActiveEditorLanguageId) => void; reject: (reason: unknown) => void }
+>();
+
+function getDetectWorker(): Worker | null {
+  if (detectWorker || detectWorkerInitFailed) return detectWorker;
+
+  try {
+    detectWorker = new Worker(new URL("./detectLanguageWorker.js", import.meta.url), {
+      type: "module",
+    });
+    detectWorker.onmessage = (e) => {
+      const { id, language, error } = e.data || {};
+      const pending = detectWorkerPending.get(id);
+      if (!pending) return;
+      detectWorkerPending.delete(id);
+      if (error) {
+        pending.reject(new Error(error));
+      } else {
+        pending.resolve(language);
+      }
+    };
+    detectWorker.onerror = () => {
+      detectWorkerInitFailed = true;
+      detectWorker = null;
+    };
+  } catch {
+    detectWorkerInitFailed = true;
+    detectWorker = null;
+  }
+
+  return detectWorker;
+}
+
+/** 主线程兜底检测（Worker 不可用时） */
+const detectEditorLanguageFallback = async (
   code: string
 ): Promise<ActiveEditorLanguageId> => {
   const sample = toSample(code);
@@ -317,6 +357,23 @@ export const detectEditorLanguage = async (
   if (isLikelyIni(sample)) return "ini";
 
   return "plaintext";
+};
+
+/** 语言自动检测：优先使用 Worker，Worker 不可用时回退到主线程 */
+export const detectEditorLanguage = async (
+  code: string
+): Promise<ActiveEditorLanguageId> => {
+  const worker = getDetectWorker();
+
+  if (!worker) {
+    return detectEditorLanguageFallback(code);
+  }
+
+  return new Promise<ActiveEditorLanguageId>((resolve, reject) => {
+    const id = ++detectWorkerRequestId;
+    detectWorkerPending.set(id, { resolve, reject });
+    worker.postMessage({ id, code });
+  });
 };
 
 export const loadEditorLanguageExtension = async (

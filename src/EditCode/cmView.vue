@@ -169,14 +169,14 @@ import undoimg from "@/img/svg/undo.svg";
 import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
 
-const LARGE_FILE_PLAINTEXT_THRESHOLD = 1 * 1024 * 1024; // 超过 1MB 强制纯文本，不做语言检测和高亮
-const SYNC_DEBOUNCE_MS = 300;
+const LARGE_FILE_PLAINTEXT_THRESHOLD = 5 * 1024 * 1024; // 超过 5MB 强制纯文本，不做语言检测和高亮
+const SYNC_DEBOUNCE_MS = 50;
 // 按文件大小分级延迟语言检测，避免大文件加载时主线程卡死
 const getSyncDelay = (length) => {
-  if (length > 1048576) return 2400; // >1MB
-  if (length > 800000) return 1600;
-  if (length > 500000) return 1000;
-  if (length > 102400) return 500;
+  // if (length > 1048576) return 2400; // >5MB
+  // if (length > 800000) return 1600;
+  // if (length > 500000) return 1000;
+  // if (length > 102400) return 500;
   return SYNC_DEBOUNCE_MS;
 };
 
@@ -294,11 +294,11 @@ const emit = defineEmits(["update:editorLanguage"]);
 const onLanguageChange = () => {
   const next = normalizeEditorLanguage(selectedLanguage.value, "auto");
 
-  // ★ 超过 1MB 不允许切换语言，强制纯文本
+  // ★ 超过 5MB 不允许切换语言，强制纯文本
   const docLen = view?.state.doc.length || 0;
   if (docLen > LARGE_FILE_PLAINTEXT_THRESHOLD && next !== "plaintext") {
     selectedLanguage.value = "auto";
-    showToast("文件超过 1MB，仅支持纯文本");
+    showToast("文件超过 5MB，仅支持纯文本");
     return;
   }
 
@@ -391,7 +391,7 @@ const syncLanguageForDocument = async (docContent) => {
   const requestId = ++languageRequestId;
   const docSnapshot = docContent || "";
 
-  // ★ 超过 1MB 强制纯文本，不做语言检测、不高亮
+  // ★ 超过 5MB 强制纯文本，不做语言检测、不高亮
   if (docSnapshot.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
     clearLanguageDetectionTimer();
     languageDetectionStatus.value = "idle";
@@ -506,7 +506,7 @@ const CreateView = () => {
     // 外部加载新文件时重置格式化状态
     isFormatted.value = false;
 
-    // ★ 超过 1MB 强制纯文本，清理前一个文件残留的高亮扩展
+    // ★ 超过 5MB 强制纯文本，清理前一个文件残留的高亮扩展
     if (nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
       syncLanguageForDocument(nextValue);
       return;
