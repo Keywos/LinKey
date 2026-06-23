@@ -363,16 +363,18 @@ const detectEditorLanguageFallback = async (
 export const detectEditorLanguage = async (
   code: string
 ): Promise<ActiveEditorLanguageId> => {
+  const sample = toSample(code);
+
   const worker = getDetectWorker();
 
   if (!worker) {
-    return detectEditorLanguageFallback(code);
+    return detectEditorLanguageFallback(sample);
   }
 
   return new Promise<ActiveEditorLanguageId>((resolve, reject) => {
     const id = ++detectWorkerRequestId;
     detectWorkerPending.set(id, { resolve, reject });
-    worker.postMessage({ id, code });
+    worker.postMessage({ id, code: sample });
   });
 };
 
