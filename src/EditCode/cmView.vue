@@ -822,8 +822,17 @@ async function formatCode() {
 }
 
 const copyText = async () => {
-  const x = await toClipboard(cmStore.CmCode);
-  if (x) showToast("已复制字符串数: " + x?.text?.length);
+  const code = cmStore.CmCode || "";
+  const code_length =code.length
+  const isLarge = code_length > 819200; // > 800KB
+  if (isLarge) showToast("正在复制…");
+  try {
+    const x = await toClipboard(code);
+    if (isLarge) showToast("已复制 (" + code_length + " 字符)");
+    else if (x) showToast("已复制 (" + (x?.text?.length || code_length) + " 字符)");
+  } catch (e) {
+    showToast("复制失败: " + (e.message || "未知错误"));
+  }
 };
 
 const delAllCode = () => {
