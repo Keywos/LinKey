@@ -228,6 +228,7 @@ const activeLanguage = ref("plaintext");
 
 const autoDetectedLanguage = ref(null);
 const isFormatting = ref(false);
+const isCopying = ref(false);
 
 const editorLanguage_short = {
   javascript: "JS",
@@ -754,8 +755,11 @@ function callFormatWorker(type, payload) {
 }
 
 async function doCompress() {
+  if (isFormatting.value) return;
   const code = cmStore.CmCode || "";
   if (!code) return;
+  isFormatting.value = true;
+  closeCompressDialog();
   showToast("正在压缩 JS…");
   const start = performance.now();
   try {
@@ -773,25 +777,27 @@ async function doCompress() {
       },
     });
     cmStore.setCmCode(result.code);
-    closeCompressDialog();
     isFormatted.value = false;
     const ms = (performance.now() - start).toFixed(1);
     showToast("已压缩 JS (" + ms + "ms)");
   } catch (e) {
     console.error(e);
     showToast("压缩失败: " + e.message);
+  } finally {
+    isFormatting.value = false;
   }
 }
 
 // ★ 格式化 — 使用 Web Worker 中的 js-beautify
 async function doFormat() {
+  if (isFormatting.value) return;
   const code = cmStore.CmCode || "";
   if (!code) return;
+  isFormatting.value = true;
   closeCompressDialog();
   showToast("正在格式化…");
 
   const lang = activeLanguage.value;
-  isFormatting.value = true;
   const start = performance.now();
   try {
     const formatted = await callFormatWorker("beautify", {
@@ -806,8 +812,9 @@ async function doFormat() {
   } catch (e) {
     console.error(e);
     showToast("格式化失败: " + (e.message || "未知错误"));
+  } finally {
+    isFormatting.value = false;
   }
-  isFormatting.value = false;
 }
 
 const refreshEditorLayout = () => {
@@ -822,8 +829,10 @@ async function formatCode() {
 }
 
 const copyText = async () => {
+  if (isCopying.value) return;
+  isCopying.value = true;
   const code = cmStore.CmCode || "";
-  const code_length =code.length
+  const code_length = code.length;
   const isLarge = code_length > 819200; // > 800KB
   if (isLarge) showToast("正在复制…");
   try {
@@ -832,6 +841,8 @@ const copyText = async () => {
     else if (x) showToast("已复制 (" + (x?.text?.length || code_length) + " 字符)");
   } catch (e) {
     showToast("复制失败: " + (e.message || "未知错误"));
+  } finally {
+    isCopying.value = false;
   }
 };
 
