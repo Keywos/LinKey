@@ -76,6 +76,17 @@ const routes = [
       isNavTop: false,
     },
   },
+    {
+    path: "/j",
+    component: () => import("./EditCode/EditCode.vue"),
+    name: "j",
+    meta: {
+      title: "Edit Code",
+      needTabBar: false,
+      isNavBack: true,
+      isNavTop: false,
+    },
+  },
   {
     path: "/s",
     component: search,

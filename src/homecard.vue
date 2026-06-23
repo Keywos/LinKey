@@ -81,7 +81,7 @@ const hcard = ref([
   {
     id: "极简代码编辑器",
     img: w,
-    r: "/EditCode_noNav",
+    r: "/j",
   },
   {
     id: "Base64 转换",
