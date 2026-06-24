@@ -372,6 +372,13 @@ const createNewBlank = async () => {
     await saveMeta(item);
     await persistIndex();
 
+    // 先滚动列表到顶部再加载 cmView
+    await nextTick();
+    if (savesListRef.value) {
+      savesListRef.value.scrollTop = 0;
+    }
+    await nextTick();
+
     skipWatchSave = true;
 
     cmViewRef.value?.skipNextHistory();
@@ -452,9 +459,10 @@ const loadItem = async (item) => {
 
     lastSavedContent.value = content || EMPTY_CONTENT;
 
-    await nextTick();
-    clearTimeout(autosaveTimer);
-    isDirty = false;
+    nextTick(() => {
+      clearTimeout(autosaveTimer);
+      isDirty = false;
+    });
 
     showToast("已加载：" + item.name);
   } catch (e) {
@@ -729,6 +737,19 @@ const onImportFileChange = async (e) => {
       cmViewRef.value?.skipNextLanguageSync();
     }
 
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    await idbStorage.setItem(contentKey(id), text);
+    savedItems.value.unshift({ id, name: file.name, ...buildMeta(text) });
+    await saveMeta(savedItems.value[0]);
+    await persistIndex();
+
+    // 先滚动列表到顶部并确保列表渲染完成，再加载 cmView
+    await nextTick();
+    if (savesListRef.value) {
+      savesListRef.value.scrollTop = 0;
+    }
+    await nextTick();
+
     cmViewRef.value?.skipNextHistory();
     cmViewRef.value?.skipNextFileRename();
 
@@ -736,18 +757,8 @@ const onImportFileChange = async (e) => {
     cmStore.setCurrentFileName(file.name);
     cmStore.setManualLanguage(""); // 新导入文件清除手动语言
     cmStore.setCmCode(text);
-
-    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    await idbStorage.setItem(contentKey(id), text);
     await setCurrentItem(id, file.name);
-
-    savedItems.value.unshift({ id, name: file.name, ...buildMeta(text) });
-    await saveMeta(savedItems.value[0]);
-    await persistIndex();
-
     lastSavedContent.value = text;
-
-    await nextTick();
     clearTimeout(autosaveTimer);
     isDirty = false;
     isSwitchingItem = false;
@@ -1035,6 +1046,13 @@ async function loadUrlContent(inputUrl) {
     savedItems.value.unshift(item);
     await saveMeta(item);
     await persistIndex();
+
+    // 先滚动列表到顶部并确保列表渲染完成，再加载 cmView
+    await nextTick();
+    if (savesListRef.value) {
+      savesListRef.value.scrollTop = 0;
+    }
+    await nextTick();
 
     // ★ URL 加载大文件同样保护
     if (content.length > LARGE_FILE_THRESHOLD) {
