@@ -1100,9 +1100,8 @@ onMounted(async () => {
     clearTimeout(autosaveTimer);
     isDirty = false;
     initialCode = grc.value;
-  } else if (cc != "") {
-    initialCode = cc;
   } else {
+    // ★ 始终从 LAST_OPENED_KEY 恢复，避免导航回退时读到 Pinia 的旧缓存
     let lastId = null;
     try {
       lastId = await idbStorage.getItem(LAST_OPENED_KEY);
@@ -1131,6 +1130,9 @@ onMounted(async () => {
       cmStore.setCurrentFileName(lastItem?.name || "");
       cmStore.setManualLanguage(lastItem?.manualLanguage || "");
       console.log("0 已默认载入最后打开的内容");
+    } else if (cc != "") {
+      // ★ 没有 LAST_OPENED_KEY 但 Pinia 有缓存时，用它兜底
+      initialCode = cc;
     } else {
       const storedUsername = await idbStorage.getItem("codehub");
       if (storedUsername) {

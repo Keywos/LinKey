@@ -633,8 +633,6 @@ const CreateView = () => {
         // }
       }
     },
-    // ,
-    // { immediate: true },
   );
 
   watch(isDarkModeEnabled, (isDark) => {
@@ -646,6 +644,14 @@ const CreateView = () => {
     }
     view.dispatch({ effects });
   });
+
+  // ★ 导航回来时 Pinia 已有缓存内容但 watch 不会重复触发，
+  //    手动将已有内容推送到编辑器，确保编辑器不会空白
+  if (!view) return;
+  const existing = cmStore.CmCode;
+  if (existing && existing !== view.state.doc.toString()) {
+    applyContentToEditor(existing);
+  }
 };
 
 watch(
