@@ -315,6 +315,10 @@ const onLanguageChange = () => {
 
   selectedLanguage.value = next;
   emit("update:editorLanguage", next === "auto" ? undefined : next);
+
+  // ★ 手动选择非 auto 时保存到 store，选 auto 时清除
+  cmStore.setManualLanguage(next !== "auto" ? next : "");
+
   syncLanguageForDocument(view?.state.doc.toString() || "");
 };
 
@@ -348,10 +352,19 @@ const applyLanguage = async (language, requestId = ++languageRequestId) => {
   const nextLanguage = normalizeEditorLanguage(language, "plaintext");
   if (!view || requestId !== languageRequestId) return;
 
-  const renamedFile = renameFileExtension(cmStore.currentFileName, nextLanguage);
-  if (renamedFile !== cmStore.currentFileName) {
-    cmStore.setCurrentFileName(renamedFile);
+  // ★ 只有文件名无扩展名时才自动改写后缀（例如 example → example.js）
+  //   有扩展名的文件保留原始后缀，避免 .json 被改写成 .js 或 .sg 被改写成 .txt
+  if (!_skipNextFileRename) {
+    const name = cmStore.currentFileName || "";
+    const hasExt = name.includes(".") && !name.endsWith(".");
+    if (!hasExt) {
+      const renamedFile = renameFileExtension(name, nextLanguage);
+      if (renamedFile !== name) {
+        cmStore.setCurrentFileName(renamedFile);
+      }
+    }
   }
+  _skipNextFileRename = false; // 用完即重置
 
   if (nextLanguage === activeLanguage.value) return;
 
@@ -445,6 +458,33 @@ const syncLanguageForDocument = async (docContent) => {
   await applyLanguage(manualLanguage, requestId);
 };
 
+/** 根据文件名扩展名映射语言，无匹配返回 null */
+const EXT_TO_LANG = {
+  js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
+  ts: "javascript", tsx: "javascript",
+  json: "json", json5: "json5",
+  yaml: "yaml", yml: "yaml",
+  ini: "ini",
+};
+function detectLanguageFromFilename(filename) {
+  if (!filename) return null;
+  const ext = filename.split(".").pop()?.toLowerCase();
+  return EXT_TO_LANG[ext] || null;
+}
+
+/**
+ * 根据文件名扩展名判断是否需要锁定语言模式。
+ * 有扩展名（即使不在 EXT_TO_LANG 映射中）就锁定，避免后续编辑触发自动检测覆盖语言。
+ * 无扩展名返回 null 保持 auto 模式。
+ */
+function shouldLockLanguageFromFilename(filename) {
+  if (!filename) return null;
+  const parts = filename.split(".");
+  if (parts.length < 2 || !parts.at(-1)) return null;  // 无扩展名
+  const ext = parts.at(-1).toLowerCase();
+  return EXT_TO_LANG[ext] || "plaintext";
+}
+
 const createEditorPlaceholder = () => (props.placeholder ? cmPlaceholder(props.placeholder) : []);
 
 let syncTimer = null;
@@ -464,12 +504,19 @@ let _skipNextLangSync = false;
 //   让 applyContentToEditor 使用 addToHistory.of(false)
 let _skipNextHistory = false;
 
+// ★ 外部加载新文件时跳过 applyLanguage 中的文件名后缀改写，
+//   保留 URL/导入文件的原始扩展名
+let _skipNextFileRename = false;
+
 defineExpose({
   skipNextLanguageSync() {
     _skipNextLangSync = true;
   },
   skipNextHistory() {
     _skipNextHistory = true;
+  },
+  skipNextFileRename() {
+    _skipNextFileRename = true;
   },
 });
 
@@ -517,6 +564,22 @@ const CreateView = () => {
     console.log("Code更新到文档");
     const isLargeFile = nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
 
+    // ★ 用户手动选过语言 → 始终用它覆盖
+    const manualLang = cmStore.manualLanguage;
+    if (manualLang) {
+      selectedLanguage.value = manualLang;
+      autoDetectedLanguage.value = manualLang;
+      await applyLanguage(manualLang);
+    } else {
+      // ★ 没有手动语言 → 根据文件名扩展名锁定语言
+      const extLang = shouldLockLanguageFromFilename(cmStore.currentFileName);
+      if (extLang && normalizeEditorLanguage(selectedLanguage.value, "auto") === "auto") {
+        selectedLanguage.value = extLang;
+        autoDetectedLanguage.value = extLang;
+        await applyLanguage(extLang);
+      }
+    }
+
     view.dispatch({
       changes: {
         from: 0,
@@ -534,15 +597,13 @@ const CreateView = () => {
     // 外部加载新文件时重置格式化状态
     isFormatted.value = false;
 
-    // ★ 超过 5MB 强制纯文本，清理前一个文件残留的高亮扩展
-    if (nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
+    // ★ 如果语言已由 manualLang / extLang 锁定，无需再走 syncLanguageForDocument
+    if (normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto") {
+      // 语言已在上方 applyLanguage，跳过后续同步
+    } else if (nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
       syncLanguageForDocument(nextValue);
       return;
-    }
-
-    // ★ 修复：如果外部标记了 skip，则等 CodeMirror 渲染完成后
-    //   再延迟触发语言同步，而不是立即排队
-    if (_skipNextLangSync) {
+    } else if (_skipNextLangSync) {
       _skipNextLangSync = false;
       nextTick(() => {
         debouncedSyncLanguage(nextValue);

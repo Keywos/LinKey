@@ -5,6 +5,7 @@ export const useCmStore = defineStore("CmStore", {
     CmCode: "",
     currentFileName: "", // 当前文件名（含后缀），用于 auto 模式下按后缀识别语言
     activeLanguage: "plaintext", // 编辑器当前实际生效的语言，用于导出时决定文件后缀
+    manualLanguage: "", // 用户手动选择的语言（非空时锁定语言），空字符串表示自动检测
   }),
   actions: {
     setCmCode(i) {
@@ -15,6 +16,9 @@ export const useCmStore = defineStore("CmStore", {
     },
     setActiveLanguage(lang) {
       this.activeLanguage = lang || "plaintext";
+    },
+    setManualLanguage(lang) {
+      this.manualLanguage = lang || "";
     },
   },
 });

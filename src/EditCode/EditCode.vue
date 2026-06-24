@@ -315,6 +315,7 @@ const buildMeta = (content) => ({
   preview: content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100),
   updatedAt: Date.now(),
   language: cmStore.activeLanguage,
+  manualLanguage: cmStore.manualLanguage || "",
 });
 
 const createNewBlank = async () => {
@@ -324,6 +325,9 @@ const createNewBlank = async () => {
   }
 
   clearTimeout(autosaveTimer);
+
+  // ★ 新建文件清除手动语言（需在 buildMeta 之前）
+  cmStore.setManualLanguage("");
 
   const defaultName = `CH_${new Date()
     .toLocaleString("zh-CN")
@@ -345,9 +349,11 @@ const createNewBlank = async () => {
     skipWatchSave = true;
 
     cmViewRef.value?.skipNextHistory();
+    cmViewRef.value?.skipNextFileRename();
 
     await setCurrentItem(item.id, item.name);
 
+    cmStore.setCurrentFileName(item.name);
     cmStore.setCmCode(EMPTY_CONTENT);
     lastSavedContent.value = EMPTY_CONTENT;
 
@@ -405,9 +411,12 @@ const loadItem = async (item) => {
     }
 
     cmViewRef.value?.skipNextHistory();
+    cmViewRef.value?.skipNextFileRename();
 
     // 🔥 切换期间抑制自动保存 watch，避免内容设置触发 isDirty / 错误保存
     isSwitchingItem = true;
+    cmStore.setCurrentFileName(item.name);
+    cmStore.setManualLanguage(item.manualLanguage || "");
     cmStore.setCmCode(content || EMPTY_CONTENT);
 
     await setCurrentItem(item.id, item.name);
@@ -461,6 +470,7 @@ async function refreshUrlItem(item) {
     item.length = content.length;
     item.preview = content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100);
     item.updatedAt = Date.now();
+    item.manualLanguage = cmStore.manualLanguage || "";
     await persistIndex();
 
     // ★ 刷新 URL 内容同样走大文件保护
@@ -469,10 +479,16 @@ async function refreshUrlItem(item) {
     }
 
     cmViewRef.value?.skipNextHistory();
+    cmViewRef.value?.skipNextFileRename();
+
+    // ★ 用 URL 的文件名/后缀设置语言识别用的文件名，列表名不变
+    const urlFileName = getFileNameFromUrl(item.url || "");
 
     isSwitchingItem = true;
+    cmStore.setCurrentFileName(urlFileName);
+    cmStore.setManualLanguage(item.manualLanguage || "");
     cmStore.setCmCode(content);
-    await setCurrentItem(item.id, item.name);
+    await setCurrentItem(item.id, urlFileName);
     lastSavedContent.value = content;
     await nextTick();
     clearTimeout(autosaveTimer);
@@ -602,6 +618,22 @@ watch(
   },
 );
 
+// ★ 手动语言变化时自动入库
+watch(
+  () => cmStore.manualLanguage,
+  () => {
+    if (skipWatchSave || isSwitchingItem) return;
+    if (!currentItemId.value) return;
+
+    isDirty = true;
+
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      syncCurrentItemContent();
+    }, AUTOSAVE_BASE_DELAY);
+  },
+);
+
 const flushCurrentSave = async () => {
   clearTimeout(autosaveTimer);
   const id = currentItemId.value;
@@ -654,8 +686,11 @@ const onImportFileChange = async (e) => {
     }
 
     cmViewRef.value?.skipNextHistory();
+    cmViewRef.value?.skipNextFileRename();
 
     isSwitchingItem = true;
+    cmStore.setCurrentFileName(file.name);
+    cmStore.setManualLanguage(""); // 新导入文件清除手动语言
     cmStore.setCmCode(text);
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -941,6 +976,8 @@ async function loadUrlContent(inputUrl) {
 
     const fileName = getFileNameFromUrl(bloburl || currentURL);
     const id = createId();
+    // ★ 新 URL 清除手动语言（需在 buildMeta 之前）
+    cmStore.setManualLanguage("");
     const item = {
       id,
       name: fileName,
@@ -959,8 +996,10 @@ async function loadUrlContent(inputUrl) {
     }
 
     cmViewRef.value?.skipNextHistory();
+    cmViewRef.value?.skipNextFileRename();
 
     isSwitchingItem = true;
+    cmStore.setCurrentFileName(fileName);
     cmStore.setCmCode(content);
     await setCurrentItem(id, fileName);
     lastSavedContent.value = content;
@@ -1000,6 +1039,7 @@ onMounted(async () => {
   if (israw.value) {
     const fileName = getFileNameFromUrl(bloburl || currentURL);
     const id = createId();
+    cmStore.setManualLanguage("");
     const item = {
       id,
       name: fileName,
@@ -1042,16 +1082,21 @@ onMounted(async () => {
       }
       const lastItem = savedItems.value.find((i) => i.id === lastId);
       cmStore.setCurrentFileName(lastItem?.name || "");
+      cmStore.setManualLanguage(lastItem?.manualLanguage || "");
       console.log("0 已默认载入最后打开的内容");
     } else {
       const storedUsername = await idbStorage.getItem("codehub");
       if (storedUsername) {
         initialCode = storedUsername;
+        cmStore.setCurrentFileName("");
+        cmStore.setManualLanguage("");
         console.log("0 读取到草稿数据");
       } else {
         initialCode = xc;
         const firstId = createId();
         const firstName = "example.js";
+        cmStore.setCurrentFileName(firstName);
+        cmStore.setManualLanguage("");
         await idbStorage.setItem(contentKey(firstId), xc);
         savedItems.value.unshift({
           id: firstId,
@@ -1066,6 +1111,7 @@ onMounted(async () => {
 
   // ★ 大文件初始加载：通知 cmView 延迟语言同步，防止首次滚动时卡死
   cmViewRef.value?.skipNextHistory();
+  cmViewRef.value?.skipNextFileRename();
 
   if (initialCode.length > LARGE_FILE_THRESHOLD) {
     cmViewRef.value?.skipNextLanguageSync();
