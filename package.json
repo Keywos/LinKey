@@ -1,7 +1,7 @@
 {
   "name": "linkey",
   "private": true,
-  "version": "5.20.020",
+  "version": "5.20.021",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,7 +17,7 @@
     "@codemirror/language": "^6.10.1",
     "@codemirror/legacy-modes": "^6.5.3",
     "@codemirror/state": "^6.4.0",
-    "@codemirror/view": "^6.23.1",
+    "@codemirror/view": "^6.43.1",
     "@lezer/common": "^1.2.1",
     "@lezer/highlight": "1.2.3",
     "@lezer/javascript": "^1.4.13",
