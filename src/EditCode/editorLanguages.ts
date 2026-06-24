@@ -345,10 +345,18 @@ function getDetectWorker(): Worker | null {
 
 /** 主线程兜底检测（Worker 不可用时） */
 const detectEditorLanguageFallback = async (
-  code: string
+  code: string,
+  filename: string = ""
 ): Promise<ActiveEditorLanguageId> => {
   const sample = toSample(code);
   if (!sample) return "plaintext";
+
+  // 文件名优先
+  const lowerFile = filename.toLowerCase();
+  if (/\\.(js|jsx)$/i.test(lowerFile)) return "javascript";
+  if (/\\.(ts|tsx)$/i.test(lowerFile)) return "javascript";
+  if (/\\.json$/i.test(lowerFile)) return "json";
+  if (/\\.(yaml|yml)$/i.test(lowerFile)) return "yaml";
 
   if (isValidJson(sample)) return "json";
   if (await isLikelyJson5(sample)) return "json5";
@@ -361,20 +369,21 @@ const detectEditorLanguageFallback = async (
 
 /** 语言自动检测：优先使用 Worker，Worker 不可用时回退到主线程 */
 export const detectEditorLanguage = async (
-  code: string
+  code: string,
+  filename: string = ""
 ): Promise<ActiveEditorLanguageId> => {
   const sample = toSample(code);
 
   const worker = getDetectWorker();
 
   if (!worker) {
-    return detectEditorLanguageFallback(sample);
+    return detectEditorLanguageFallback(sample, filename);
   }
 
   return new Promise<ActiveEditorLanguageId>((resolve, reject) => {
     const id = ++detectWorkerRequestId;
     detectWorkerPending.set(id, { resolve, reject });
-    worker.postMessage({ id, code: sample });
+    worker.postMessage({ id, code: sample, filename });
   });
 };
 

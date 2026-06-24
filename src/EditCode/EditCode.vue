@@ -2,7 +2,7 @@
   <h2 style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%">
     <span @click="goFunction()">Code Hub</span>
     <div style="display: flex; align-items: center; gap: 10px; color: var(--text)">
-      <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: .4;">{{ showSaves ? "▴" : "▾" }}</span>
+      <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: 0.4">{{ showSaves ? "▴" : "▾" }}</span>
     </div>
   </h2>
 
@@ -61,9 +61,7 @@
           <template v-if="item.url">
             <button class="saves-refresh-btn" :disabled="loadingItemId === item.id" @click="refreshUrlItem(item)" title="重新请求 URL 更新当前文件">请求</button>
           </template>
-          <button class="saves-load-btn" :disabled="loadingItemId === item.id" @click="loadItem(item)">
-            加载
-          </button>
+          <button class="saves-load-btn" :disabled="loadingItemId === item.id" @click="loadItem(item)">加载</button>
         </div>
       </div>
     </div>
@@ -165,13 +163,16 @@ const cmViewRef = ref(null);
 const promptState = ref({ visible: false, title: "", value: "", resolve: null });
 const confirmState = ref({ visible: false, title: "", resolve: null });
 
-watch(() => promptState.value.visible, (visible) => {
-  if (visible) {
-    nextTick(() => {
-      promptInputRef.value?.focus();
-    });
-  }
-});
+watch(
+  () => promptState.value.visible,
+  (visible) => {
+    if (visible) {
+      nextTick(() => {
+        promptInputRef.value?.focus();
+      });
+    }
+  },
+);
 
 async function requestUrlContent() {
   const url = await askPrompt("输入 Github/raw/普通文本链接");
@@ -270,7 +271,9 @@ function endSavesResizePointer(e) {
   document.body.style.cursor = "";
   localStorage.setItem(SAVES_HEIGHT_KEY, savesPanelHeight.value.toString());
   if (e.target) {
-    try { e.target.releasePointerCapture(e.pointerId); } catch {}
+    try {
+      e.target.releasePointerCapture(e.pointerId);
+    } catch {}
   }
 }
 // ===== 保存面板拖拽调整高度 end =====
@@ -385,7 +388,7 @@ const deleteSelected = async () => {
 };
 
 // ★ 修复：loadItem 加载大文件前通知 cmView 延迟语言同步
-const LARGE_FILE_THRESHOLD = 50000;
+const LARGE_FILE_THRESHOLD = 1.4 * 1024 * 1024;
 
 const loadItem = async (item) => {
   loadingItemId.value = item.id;
@@ -714,10 +717,7 @@ const exportCurrent = () => {
     .toLocaleString("zh-CN")
     .replace(/[^\d\s]/g, "")
     .replace(/\D/g, "_")}`;
-  const finalName = buildExportFilename(
-    cmStore.currentFileName || fallbackName,
-    cmStore.activeLanguage,
-  );
+  const finalName = buildExportFilename(cmStore.currentFileName || fallbackName, cmStore.activeLanguage);
   downloadTextFile(finalName, content);
   showToast("已导出");
 };
@@ -798,7 +798,7 @@ const rePwa = async () => {
 
   if ("caches" in window) {
     const keys = await caches.keys();
-    await Promise.all(keys.map(k => caches.delete(k)));
+    await Promise.all(keys.map((k) => caches.delete(k)));
   }
 
   // 强制阻止旧 SW 复活
@@ -807,7 +807,7 @@ const rePwa = async () => {
   }
 
   showToast("重置完成");
-  setTimeout(() => location.href = location.href + "?t=" + Date.now(), 300);
+  setTimeout(() => (location.href = location.href + "?t=" + Date.now()), 300);
 };
 
 function getFileNameFromUrl(url) {
@@ -1025,6 +1025,11 @@ onMounted(async () => {
     if (lastId && lastContent !== null && lastContent !== undefined) {
       initialCode = lastContent;
       currentItemId.value = lastId;
+      if (lastContent.length > LARGE_FILE_THRESHOLD) {
+        nextTick(() => {
+          cmViewRef.value?.skipNextLanguageSync();
+        });
+      }
       const lastItem = savedItems.value.find((i) => i.id === lastId);
       cmStore.setCurrentFileName(lastItem?.name || "");
       console.log("0 已默认载入最后打开的内容");
@@ -1047,6 +1052,12 @@ onMounted(async () => {
         await setCurrentItem(firstId, firstName);
       }
     }
+  }
+
+  // ★ 大文件初始加载：通知 cmView 延迟语言同步，防止首次滚动时卡死
+  if (initialCode.length > LARGE_FILE_THRESHOLD) {
+    cmViewRef.value?.skipNextLanguageSync();
+    await nextTick();
   }
 
   isSwitchingItem = true;

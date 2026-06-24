@@ -423,7 +423,7 @@ const syncLanguageForDocument = async (docContent) => {
     languageDetectionStatus.value = "idle";
     scheduleLanguageDetectionBusy(requestId);
     try {
-      const detectedLanguage = await detectEditorLanguage(docSnapshot);
+      const detectedLanguage = await detectEditorLanguage(docSnapshot, cmStore.currentFileName);
       if (requestId !== languageRequestId || normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto" || (view && view.state.doc.toString() !== docSnapshot)) {
         return;
       }
@@ -485,7 +485,7 @@ const CreateView = () => {
         highlightActiveLine(),
         bracketMatching(),
         highlightSelectionMatches(),
-        closeBrackets(), 
+        closeBrackets(),
         autocompletion(), // js
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return;
@@ -494,7 +494,7 @@ const CreateView = () => {
           console.log("0 更新文档 - CodeValue");
           cmStore.setCmCode(docContent);
           docUpdate = false;
-          if (selectedLanguage.value === "auto" && !(docContent.length > LARGE_FILE_PLAINTEXT_THRESHOLD)) {
+          if (selectedLanguage.value === "auto" && !(docContent.length > LARGE_FILE_PLAINTEXT_THRESHOLD) && !_skipNextLangSync) {
             debouncedSyncLanguage(docContent);
           }
         }),
@@ -506,7 +506,7 @@ const CreateView = () => {
     parent: viewRef.value,
   });
 
-  const applyContentToEditor = (nextValue) => {
+  const applyContentToEditor = async (nextValue) => {
     console.log("Code更新到文档");
     const isLargeFile = nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
 
@@ -519,6 +519,9 @@ const CreateView = () => {
       effects: heavyDecorations.reconfigure(isLargeFile ? [] : createHeavyDecorations()),
       annotations: Transaction.addToHistory.of(false),
     });
+
+    await nextTick();
+    // await new Promise((r) => setTimeout(r, isLarge ? 120 : 50));
 
     // 外部加载新文件时重置格式化状态
     isFormatted.value = false;
@@ -541,6 +544,8 @@ const CreateView = () => {
     }
   };
 
+
+
   watch(
     () => cmStore.CmCode,
     (newValue) => {
@@ -554,7 +559,8 @@ const CreateView = () => {
         // }
       }
     },
-    { immediate: true },
+    // ,
+    // { immediate: true },
   );
 
   watch(isDarkModeEnabled, (isDark) => {
