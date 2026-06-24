@@ -136,7 +136,7 @@ import { yaml } from "@codemirror/lang-yaml";
 
 import { detectEditorLanguage, EDITOR_LANGUAGE_OPTIONS, loadEditorLanguageExtension, normalizeEditorLanguage } from "@/EditCode/editorLanguages";
 import { renameFileExtension } from "@/EditCode/fileLanguageUtils";
-import { shikiHighlight } from "@/EditCode/shikiHighlight";
+import { shikiHighlight, SHIKI_SUPPORTED_LANGUAGES } from "@/EditCode/shikiHighlight";
 import { computed, nextTick, ref, reactive, onBeforeUnmount, onMounted, watch, watchEffect } from "vue";
 import {
   highlightSelectionMatches,
@@ -154,7 +154,7 @@ import { lineNumbers, EditorView, highlightActiveLine, keymap, placeholder as cm
 import { foldGutter, bracketMatching } from "@codemirror/language";
 import { undo, redo, history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { closeBrackets, autocompletion } from "@codemirror/autocomplete";
-import { Compartment, EditorState } from "@codemirror/state";
+import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import { hyperLink } from "@/EditCode/link";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { showToast } from "vant";
@@ -169,16 +169,17 @@ import undoimg from "@/img/svg/undo.svg";
 import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
 
+const LARGE_FILE_PLAINTEXT_THRESHOLD_1 = 1.4 * 1024 * 1024;
 const LARGE_FILE_PLAINTEXT_THRESHOLD = 5 * 1024 * 1024; // 超过 5MB 强制纯文本，不做语言检测和高亮
 const SYNC_DEBOUNCE_MS = 50;
 // 按文件大小分级延迟语言检测，避免大文件加载时主线程卡死
-const getSyncDelay = (length) => {
-  // if (length > 1048576) return 2400; // >5MB
-  // if (length > 800000) return 1600;
-  // if (length > 500000) return 1000;
-  // if (length > 102400) return 500;
-  return SYNC_DEBOUNCE_MS;
-};
+// const getSyncDelay = (length) => {
+//   // if (length > 1048576) return 2400; // >5MB
+//   // if (length > 800000) return 1600;
+//   // if (length > 500000) return 1000;
+//   // if (length > 102400) return 500;
+//   return SYNC_DEBOUNCE_MS;
+// };
 
 const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
@@ -223,6 +224,15 @@ const langs = new Compartment();
 const editorTheme = new Compartment();
 const shikiSyntax = new Compartment();
 const editorPlaceholder = new Compartment();
+
+const heavyDecorations = new Compartment();
+const createHeavyDecorations = () => [
+  foldGutter({
+    closedText: "▸",
+    openText: "▾",
+  }),
+  indentationMarkers(),
+];
 const selectedLanguage = ref(normalizeEditorLanguage(props.editorLanguage, "auto"));
 const activeLanguage = ref("plaintext");
 
@@ -382,10 +392,16 @@ const applyLanguage = async (language, requestId = ++languageRequestId) => {
 
   const extension = await loadEditorLanguageExtension(nextLanguage);
   if (requestId !== languageRequestId) return;
-  console.log(`启用 ${getLanguageLabel(nextLanguage)} 语法高亮 4 - 使用 shiki`);
-  view.dispatch({
-    effects: [langs.reconfigure(extension), shikiSyntax.reconfigure(createShikiHighlight(nextLanguage))],
-  });
+
+  const effects = [langs.reconfigure(extension)];
+  if (SHIKI_SUPPORTED_LANGUAGES.has(nextLanguage)) {
+    console.log(`启用 ${getLanguageLabel(nextLanguage)} 语法高亮 - 使用 shiki`);
+    effects.push(shikiSyntax.reconfigure(createShikiHighlight(nextLanguage)));
+  } else {
+    console.log(`启用 ${getLanguageLabel(nextLanguage)} 语法高亮 - 使用 codemirror`);
+    effects.push(shikiSyntax.reconfigure([]));
+  }
+  view.dispatch({ effects });
 };
 
 const syncLanguageForDocument = async (docContent) => {
@@ -437,7 +453,7 @@ const debouncedSyncLanguage = (docContent) => {
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
     syncLanguageForDocument(docContent);
-  }, getSyncDelay(docContent.length));
+  }, SYNC_DEBOUNCE_MS);
 };
 
 // ★ 修复：外部（cmHub）调用此方法可让下一次 setCmCode 跳过语言同步，
@@ -452,7 +468,7 @@ defineExpose({
 
 let docUpdate = false;
 let view;
-const isFirstLoad = ref(true);
+// const isFirstLoad = ref(true);
 const CreateView = () => {
   view = new EditorView({
     state: EditorState.create({
@@ -460,18 +476,17 @@ const CreateView = () => {
         history(),
         keymap.of([indentWithTab, ...searchKeymap, ...defaultKeymap, ...historyKeymap]),
         langs.of([]),
-        shikiSyntax.of(createShikiHighlight()),
+        shikiSyntax.of([]), // ★ 初始不加载，由 applyLanguage 按需开启
         editorPlaceholder.of(createEditorPlaceholder()),
         editorTheme.of(isDarkModeEnabled.value ? darkCode : lightCode),
         EditorState.readOnly.of(props.isReadOnly ? true : false),
-        EditorView.lineWrapping,
+        EditorView.lineWrapping, // 换行
         lineNumbers(),
         highlightActiveLine(),
         bracketMatching(),
         highlightSelectionMatches(),
-        indentationMarkers(),
-        closeBrackets(),
-        autocompletion(),
+        closeBrackets(), 
+        autocompletion(), // js
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return;
           const docContent = update.state.doc.toString();
@@ -484,10 +499,7 @@ const CreateView = () => {
           }
         }),
         hyperLink,
-        foldGutter({
-          closedText: "▸",
-          openText: "▾",
-        }),
+        heavyDecorations.of(createHeavyDecorations()),
       ],
       doc: "", // ★ 初始空文档，首次内容由 isFirstLoad 延迟注入
     }),
@@ -496,12 +508,16 @@ const CreateView = () => {
 
   const applyContentToEditor = (nextValue) => {
     console.log("Code更新到文档");
+    const isLargeFile = nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
+
     view.dispatch({
       changes: {
         from: 0,
         to: view.state.doc.length,
         insert: nextValue,
       },
+      effects: heavyDecorations.reconfigure(isLargeFile ? [] : createHeavyDecorations()),
+      annotations: Transaction.addToHistory.of(false),
     });
 
     // 外部加载新文件时重置格式化状态
@@ -530,14 +546,12 @@ const CreateView = () => {
     (newValue) => {
       const nextValue = newValue || "";
       if (!docUpdate && nextValue !== view.state.doc.toString()) {
-        // ★ 首次加载延迟 300ms，让编辑器先渲染空白壳
-        if (isFirstLoad.value) {
-          isFirstLoad.value = false;
-          console.log("首次加载延迟 345ms");
-          setTimeout(() => applyContentToEditor(nextValue), 345);
-        } else {
-          applyContentToEditor(nextValue);
-        }
+        // if (isFirstLoad.value) {
+        //   isFirstLoad.value = false;
+        //   setTimeout(() => applyContentToEditor(nextValue), 6);
+        // } else {
+        applyContentToEditor(nextValue);
+        // }
       }
     },
     { immediate: true },
@@ -545,9 +559,12 @@ const CreateView = () => {
 
   watch(isDarkModeEnabled, (isDark) => {
     console.log(isDarkModeEnabled);
-    view.dispatch({
-      effects: [editorTheme.reconfigure(isDark ? darkCode : lightCode), shikiSyntax.reconfigure(createShikiHighlight())],
-    });
+    const effects = [editorTheme.reconfigure(isDark ? darkCode : lightCode)];
+    // 只有当前语言用了 shiki 才更新 shiki 主题
+    if (SHIKI_SUPPORTED_LANGUAGES.has(activeLanguage.value)) {
+      effects.push(shikiSyntax.reconfigure(createShikiHighlight()));
+    }
+    view.dispatch({ effects });
   });
 };
 

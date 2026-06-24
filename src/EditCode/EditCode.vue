@@ -710,14 +710,15 @@ const exportCurrent = () => {
     showToast("当前内容为空，无需导出");
     return;
   }
-  const ext = getExportExtensionByLanguage(cmStore.activeLanguage);
-  downloadTextFile(
-    `CH_${new Date()
-      .toLocaleString("zh-CN")
-      .replace(/[^\d\s]/g, "")
-      .replace(/\D/g, "_")}.${ext}`,
-    content,
+  const fallbackName = `CH_${new Date()
+    .toLocaleString("zh-CN")
+    .replace(/[^\d\s]/g, "")
+    .replace(/\D/g, "_")}`;
+  const finalName = buildExportFilename(
+    cmStore.currentFileName || fallbackName,
+    cmStore.activeLanguage,
   );
+  downloadTextFile(finalName, content);
   showToast("已导出");
 };
 

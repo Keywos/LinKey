@@ -10,7 +10,7 @@ import { Decoration, ViewPlugin } from "@codemirror/view";
 // CodeMirror 自带的语言扩展（见 cmView.vue 的 applyLanguage），不会再
 // 调用到这里。真正的语言 grammar 动态 import 只存在于 shikiWorker.js 里，
 // 主线程不会因为这个判断而把 shiki 相关代码打进主包。
-const SHIKI_SUPPORTED_LANGUAGES = new Set(["ini"]);
+export const SHIKI_SUPPORTED_LANGUAGES = new Set(["ini"]);
 
 const shikiRefreshEffect = StateEffect.define();
 
