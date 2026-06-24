@@ -571,9 +571,14 @@ const CreateView = () => {
       autoDetectedLanguage.value = manualLang;
       await applyLanguage(manualLang);
     } else {
-      // ★ 没有手动语言 → 根据文件名扩展名锁定语言
+      // ★ 没有手动语言 → 重置 selectedLanguage 为 auto，
+      //    避免上一个文件的语言残留导致扩展名检测/自动检测被跳过
+      selectedLanguage.value = "auto";
+      autoDetectedLanguage.value = null;
+
+      // ★ 根据文件名扩展名锁定语言
       const extLang = shouldLockLanguageFromFilename(cmStore.currentFileName);
-      if (extLang && normalizeEditorLanguage(selectedLanguage.value, "auto") === "auto") {
+      if (extLang) {
         selectedLanguage.value = extLang;
         autoDetectedLanguage.value = extLang;
         await applyLanguage(extLang);

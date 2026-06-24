@@ -42,8 +42,8 @@
 
             <div class="saves-item-preview">
               <template v-if="item.url">
-                <div v-if="item.blobUrl" class="saves-url-line" title="点击复制 blob URL" @click.stop="copyUrl(item, 'blob')">{{ item.blobUrl }}</div>
-                <div class="saves-url-line" title="点击复制 raw URL" @click.stop="copyUrl(item, 'raw')">{{ item.url }}</div>
+                <div v-if="item.blobUrl" class="saves-url-line" title="点击复制 blob URL" @click.stop="copyUrl(item, 'blob')">{{ truncateUrl(item.blobUrl) }}</div>
+                <div class="saves-url-line" title="点击复制 raw URL" @click.stop="copyUrl(item, 'raw')">{{ truncateUrl(item.url) }}</div>
                 <div class="saves-item-content-preview">{{ item.preview || "" }}</div>
               </template>
               <template v-else>
@@ -229,19 +229,34 @@ const confirmNo = () => {
 const SAVES_INDEX_KEY = "codehub_saves_index";
 const createId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-const createMeta = (name, content) => ({
-  id: createId(),
-  name,
-  ...buildMeta(content),
-});
-
 const contentKey = (id) => `codehub_save_content:${id}`;
+const metaKey = (id) => `codehub_save_meta:${id}`;
+
+const saveMeta = async (item) => {
+  try {
+    await idbStorage.setItem(metaKey(item.id), {
+      name: item.name,
+      length: item.length,
+      preview: item.preview,
+      updatedAt: item.updatedAt,
+      language: item.language,
+      manualLanguage: item.manualLanguage || "",
+      url: item.url || "",
+      blobUrl: item.blobUrl || "",
+    });
+  } catch (error) {
+    console.error("保存元数据失败", error);
+  }
+};
 
 const savedItems = ref([]);
 const checkedIds = ref([]);
 const showSaves = ref(false);
 const loadingItemId = ref(null);
 const selectMode = ref(false);
+const savesListWidth = ref(0);
+const savesListRef = ref(null);
+let savesListObserver = null;
 
 // ===== 保存面板拖拽调整高度 =====
 const MIN_SAVES_HEIGHT = 57;
@@ -293,7 +308,17 @@ const toggleSelectMode = () => {
 const loadSaves = async () => {
   try {
     const list = await idbStorage.getItem(SAVES_INDEX_KEY);
-    savedItems.value = Array.isArray(list) ? list : [];
+    const ids = Array.isArray(list) ? list : [];
+    const items = [];
+    for (const id of ids) {
+      try {
+        const meta = await idbStorage.getItem(metaKey(id));
+        if (meta) {
+          items.push({ id, ...meta });
+        }
+      } catch {}
+    }
+    savedItems.value = items;
   } catch (error) {
     console.error("读取保存列表失败", error);
     savedItems.value = [];
@@ -302,8 +327,8 @@ const loadSaves = async () => {
 
 const persistIndex = async () => {
   try {
-    const plainList = savedItems.value.map((item) => ({ ...item }));
-    await idbStorage.setItem(SAVES_INDEX_KEY, plainList);
+    const idList = savedItems.value.map((item) => item.id);
+    await idbStorage.setItem(SAVES_INDEX_KEY, idList);
   } catch (error) {
     console.error("写入保存列表索引失败", error);
     showToast("保存列表写入失败");
@@ -344,6 +369,7 @@ const createNewBlank = async () => {
     await idbStorage.setItem(contentKey(item.id), "");
 
     savedItems.value.unshift(item);
+    await saveMeta(item);
     await persistIndex();
 
     skipWatchSave = true;
@@ -380,7 +406,10 @@ const deleteSelected = async () => {
   if (!ok) return;
 
   try {
-    await Promise.all(ids.map((id) => idbStorage.removeItem(contentKey(id))));
+    await Promise.all(ids.map((id) => Promise.all([
+      idbStorage.removeItem(contentKey(id)),
+      idbStorage.removeItem(metaKey(id)),
+    ])));
   } catch (error) {
     console.error("删除内容失败", error);
   }
@@ -471,6 +500,7 @@ async function refreshUrlItem(item) {
     item.preview = content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100);
     item.updatedAt = Date.now();
     item.manualLanguage = cmStore.manualLanguage || "";
+    await saveMeta(item);
     await persistIndex();
 
     // ★ 刷新 URL 内容同样走大文件保护
@@ -508,6 +538,18 @@ const allChecked = computed(() => savedItems.value.length > 0 && checkedIds.valu
 const toggleCheckAll = () => {
   checkedIds.value = allChecked.value ? [] : savedItems.value.map((i) => i.id);
 };
+
+function truncateUrl(url) {
+  if (!url) return url;
+  // savesListWidth ≈ 容器可用宽度，按钮区域约 120px、padding 约 24px
+  const availableWidth = Math.max(100, savesListWidth.value - 150);
+  // 11px 字体平均字符宽约 6.2px
+  const maxChars = Math.floor(availableWidth / 6.2);
+  if (url.length <= maxChars) return url;
+  const front = Math.floor(maxChars * 0.55);
+  const back = maxChars - front - 3;
+  return url.slice(0, front) + "..." + url.slice(-back);
+}
 
 function formatBytes(length) {
   if (!length) return "0 B";
@@ -570,6 +612,7 @@ const syncCurrentItemContent = async () => {
       ...buildMeta(content),
     };
 
+    await saveMeta(savedItems.value[idx]);
     await persistIndex();
   } catch (e) {
     console.log(e);
@@ -648,6 +691,7 @@ const flushCurrentSave = async () => {
     const idx = savedItems.value.findIndex((i) => i.id === id);
     if (idx !== -1) {
       savedItems.value[idx] = { ...savedItems.value[idx], name: cmStore.currentFileName || savedItems.value[idx].name, ...buildMeta(content) };
+      await saveMeta(savedItems.value[idx]);
       await persistIndex();
     }
   } catch (error) {
@@ -698,6 +742,7 @@ const onImportFileChange = async (e) => {
     await setCurrentItem(id, file.name);
 
     savedItems.value.unshift({ id, name: file.name, ...buildMeta(text) });
+    await saveMeta(savedItems.value[0]);
     await persistIndex();
 
     lastSavedContent.value = text;
@@ -988,6 +1033,7 @@ async function loadUrlContent(inputUrl) {
 
     await idbStorage.setItem(contentKey(id), content);
     savedItems.value.unshift(item);
+    await saveMeta(item);
     await persistIndex();
 
     // ★ URL 加载大文件同样保护
@@ -1047,6 +1093,7 @@ onMounted(async () => {
     };
     await idbStorage.setItem(contentKey(id), grc.value);
     savedItems.value.unshift(item);
+    await saveMeta(item);
     await persistIndex();
     await setCurrentItem(id, fileName);
     lastSavedContent.value = grc.value;
@@ -1103,6 +1150,7 @@ onMounted(async () => {
           name: firstName,
           ...buildMeta(xc),
         });
+        await saveMeta(savedItems.value[0]);
         await persistIndex();
         await setCurrentItem(firstId, firstName);
       }
@@ -1126,6 +1174,16 @@ onMounted(async () => {
 
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("beforeunload", handleBeforeUnload);
+
+  // 监听 saves-list 宽度变化，动态计算 URL 截断长度
+  savesListObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      savesListWidth.value = entry.contentRect.width;
+    }
+  });
+  if (savesListRef.value) {
+    savesListObserver.observe(savesListRef.value);
+  }
 });
 
 function extractAndFormatUrl(rawUrl) {
@@ -1181,6 +1239,10 @@ onBeforeUnmount(() => {
   document.body.style.backgroundColor = "";
   const blurNavdiv = document.querySelector(".blurNavdiv");
   blurNavdiv?.classList.remove("blurNavdiv_code");
+  if (savesListObserver) {
+    savesListObserver.disconnect();
+    savesListObserver = null;
+  }
 });
 </script>
 
