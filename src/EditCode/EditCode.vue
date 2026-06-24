@@ -344,6 +344,8 @@ const createNewBlank = async () => {
 
     skipWatchSave = true;
 
+    cmViewRef.value?.skipNextHistory();
+
     await setCurrentItem(item.id, item.name);
 
     cmStore.setCmCode(EMPTY_CONTENT);
@@ -401,6 +403,8 @@ const loadItem = async (item) => {
     if (content && content.length > LARGE_FILE_THRESHOLD) {
       cmViewRef.value?.skipNextLanguageSync();
     }
+
+    cmViewRef.value?.skipNextHistory();
 
     // 🔥 切换期间抑制自动保存 watch，避免内容设置触发 isDirty / 错误保存
     isSwitchingItem = true;
@@ -463,6 +467,8 @@ async function refreshUrlItem(item) {
     if (content.length > LARGE_FILE_THRESHOLD) {
       cmViewRef.value?.skipNextLanguageSync();
     }
+
+    cmViewRef.value?.skipNextHistory();
 
     isSwitchingItem = true;
     cmStore.setCmCode(content);
@@ -646,6 +652,8 @@ const onImportFileChange = async (e) => {
     if (text.length > LARGE_FILE_THRESHOLD) {
       cmViewRef.value?.skipNextLanguageSync();
     }
+
+    cmViewRef.value?.skipNextHistory();
 
     isSwitchingItem = true;
     cmStore.setCmCode(text);
@@ -950,6 +958,8 @@ async function loadUrlContent(inputUrl) {
       cmViewRef.value?.skipNextLanguageSync();
     }
 
+    cmViewRef.value?.skipNextHistory();
+
     isSwitchingItem = true;
     cmStore.setCmCode(content);
     await setCurrentItem(id, fileName);
@@ -1055,6 +1065,8 @@ onMounted(async () => {
   }
 
   // ★ 大文件初始加载：通知 cmView 延迟语言同步，防止首次滚动时卡死
+  cmViewRef.value?.skipNextHistory();
+
   if (initialCode.length > LARGE_FILE_THRESHOLD) {
     cmViewRef.value?.skipNextLanguageSync();
     await nextTick();

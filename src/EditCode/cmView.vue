@@ -460,9 +460,16 @@ const debouncedSyncLanguage = (docContent) => {
 //   等 CodeMirror 渲染稳定后再延迟触发，避免大文件加载时卡死
 let _skipNextLangSync = false;
 
+// ★ 外部加载新内容时标记跳过历史记录（新建/URL/导入/切换文件），
+//   让 applyContentToEditor 使用 addToHistory.of(false)
+let _skipNextHistory = false;
+
 defineExpose({
   skipNextLanguageSync() {
     _skipNextLangSync = true;
+  },
+  skipNextHistory() {
+    _skipNextHistory = true;
   },
 });
 
@@ -517,8 +524,9 @@ const CreateView = () => {
         insert: nextValue,
       },
       effects: heavyDecorations.reconfigure(isLargeFile ? [] : createHeavyDecorations()),
-      annotations: Transaction.addToHistory.of(false),
+      annotations: Transaction.addToHistory.of(!_skipNextHistory),
     });
+    _skipNextHistory = false; // 用完即重置
 
     await nextTick();
     // await new Promise((r) => setTimeout(r, isLarge ? 120 : 50));
