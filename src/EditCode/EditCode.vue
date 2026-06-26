@@ -1089,13 +1089,14 @@ onMounted(async () => {
     showSaves.value = state;
   }
 
+  // ★ 先加载已有列表，再处理 URL 请求，避免 loadUrlContent 的 persistIndex 覆盖已有索引
+  await loadSaves();
+
   try {
     if (currentURL) {
       await loadUrlContent(currentURL);
     }
   } catch {}
-
-  await loadSaves();
 
   const cc = cmStore.CmCode;
   let initialCode;
