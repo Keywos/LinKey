@@ -135,6 +135,9 @@ const idbStorage = {
   async removeItem(key) {
     return (await dbPromise).delete("store", key);
   },
+  async getAllKeys() {
+    return (await dbPromise).getAllKeys("store");
+  },
 };
 
 import JSZip from "jszip";
@@ -318,6 +321,60 @@ const loadSaves = async () => {
         }
       } catch {}
     }
+
+    // ★ 索引恢复：扫描 IDB 中的 meta/content 键，找回索引丢失的项
+    try {
+      const allKeys = await idbStorage.getAllKeys();
+      const existingIds = new Set(items.map((i) => i.id));
+      let recovered = 0;
+
+      for (const key of allKeys) {
+        if (typeof key !== "string") continue;
+
+        if (key.startsWith("codehub_save_meta:")) {
+          const id = key.slice(19);
+          if (!existingIds.has(id)) {
+            const meta = await idbStorage.getItem(key);
+            if (meta) {
+              items.push({ id, ...meta });
+              existingIds.add(id);
+              recovered++;
+            }
+          }
+        } else if (key.startsWith("codehub_save_content:")) {
+          const id = key.slice(21);
+          if (!existingIds.has(id)) {
+            const content = await idbStorage.getItem(key);
+            if (typeof content === "string" && content.length > 0) {
+              items.push({
+                id,
+                name: `recovered_${id}`,
+                length: content.length,
+                preview: content.slice(0, 100).replace(/\s+/g, " "),
+                updatedAt: Date.now(),
+                language: "",
+                manualLanguage: "",
+                url: "",
+                blobUrl: "",
+              });
+              existingIds.add(id);
+              recovered++;
+            }
+          }
+        }
+      }
+
+      if (recovered > 0) {
+        console.log(`索引恢复：找回 ${recovered} 个丢失的项`);
+        showToast(`找回 ${recovered} 个丢失的项`);
+        // 恢复后立即持久化索引
+        const idList = items.map((item) => item.id);
+        await idbStorage.setItem(SAVES_INDEX_KEY, idList);
+      }
+    } catch (e) {
+      console.error("索引恢复扫描失败", e);
+    }
+
     savedItems.value = items;
   } catch (error) {
     console.error("读取保存列表失败", error);
@@ -328,6 +385,17 @@ const loadSaves = async () => {
 const persistIndex = async () => {
   try {
     const idList = savedItems.value.map((item) => item.id);
+    // ★ 防御：空列表写入前检查 IDB 是否仍有数据，防止意外清空索引
+    if (idList.length === 0) {
+      try {
+        const allKeys = await idbStorage.getAllKeys();
+        const hasData = allKeys.some((k) => typeof k === "string" && k.startsWith("codehub_save_meta:"));
+        if (hasData) {
+          console.warn("persistIndex: 拒绝写入空索引，IDB 中仍有保存数据");
+          return;
+        }
+      } catch {}
+    }
     await idbStorage.setItem(SAVES_INDEX_KEY, idList);
   } catch (error) {
     console.error("写入保存列表索引失败", error);
@@ -995,6 +1063,7 @@ console.log(i.o.c[2])
 // end`;
 
 async function loadUrlContent(inputUrl) {
+  let addedItemId = null;
   try {
     let currentURL = inputUrl;
     let bloburl = "";
@@ -1032,6 +1101,7 @@ async function loadUrlContent(inputUrl) {
 
     const fileName = getFileNameFromUrl(bloburl || currentURL);
     const id = createId();
+    addedItemId = id;
     // ★ 新 URL 清除手动语言（需在 buildMeta 之前）
     cmStore.setManualLanguage("");
     const item = {
@@ -1075,6 +1145,14 @@ async function loadUrlContent(inputUrl) {
     console.log(e);
     showToast("请求失败");
     isSwitchingItem = false;
+    // ★ 失败时清理可能残留的临时项，防止幽灵项
+    if (addedItemId) {
+      savedItems.value = savedItems.value.filter((i) => i.id !== addedItemId);
+      try {
+        await idbStorage.removeItem(contentKey(addedItemId));
+        await idbStorage.removeItem(metaKey(addedItemId));
+      } catch {}
+    }
   }
 }
 
@@ -1092,16 +1170,21 @@ onMounted(async () => {
   // ★ 先加载已有列表，再处理 URL 请求，避免 loadUrlContent 的 persistIndex 覆盖已有索引
   await loadSaves();
 
+  let urlLoaded = false;
   try {
     if (currentURL) {
       await loadUrlContent(currentURL);
+      urlLoaded = true;
     }
   } catch {}
 
   const cc = cmStore.CmCode;
   let initialCode;
 
-  if (israw.value) {
+  if (urlLoaded) {
+    // ★ URL 已由 loadUrlContent 完成加载，无需再走后续恢复逻辑
+    initialCode = cmStore.CmCode;
+  } else if (israw.value) {
     const fileName = getFileNameFromUrl(bloburl || currentURL);
     const id = createId();
     cmStore.setManualLanguage("");
@@ -1182,16 +1265,19 @@ onMounted(async () => {
   cmViewRef.value?.skipNextHistory();
   cmViewRef.value?.skipNextFileRename();
 
-  if (initialCode.length > LARGE_FILE_THRESHOLD) {
+  if (initialCode && initialCode.length > LARGE_FILE_THRESHOLD) {
     cmViewRef.value?.skipNextLanguageSync();
     await nextTick();
   }
 
-  isSwitchingItem = true;
-  cmStore.setCmCode(initialCode);
-  lastSavedContent.value = initialCode || EMPTY_CONTENT;
-  isDirty = false;
-  isSwitchingItem = false;
+  // ★ URL 加载已由 loadUrlContent 完成设置，跳过重复赋值避免触发多余 watcher
+  if (!urlLoaded) {
+    isSwitchingItem = true;
+    cmStore.setCmCode(initialCode);
+    lastSavedContent.value = initialCode || EMPTY_CONTENT;
+    isDirty = false;
+    isSwitchingItem = false;
+  }
 
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("beforeunload", handleBeforeUnload);
