@@ -1,6 +1,6 @@
 <template>
-  <h2 style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%">
-    <span @click="goFunction()">Code Hub</span>
+  <h2 style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%; margin-top: -10px;">
+    <span style="opacity: 0.6" @click="goFunction()">Code Hub</span>
     <div style="display: flex; align-items: center; gap: 10px; color: var(--text)">
       <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: 0.4">{{ showSaves ? "▴" : "▾" }}</span>
     </div>
@@ -141,6 +141,7 @@ const idbStorage = {
 };
 
 import JSZip from "jszip";
+import envSource from "./env.js?raw";
 let skipWatchSave = false;
 let isSwitchingItem = false; // 切换文件期间抑制自动保存 watch
 const route = useRoute();
@@ -1342,28 +1343,48 @@ function extractAndFormatUrl(rawUrl) {
   } else return "Invalid URL";
 }
 
-const goFunction = async () => {
-  try {
-    const logs = [];
-    const Consoles = {
-      log: function (...args) {
-        logs.push(args.map((arg) => String(arg)).join(" "));
-      },
-      error: function (...args) {
-        logs.push("[Error] " + args.map((arg) => String(arg)).join(" "));
-      },
+let _sandboxWorker = null;
+function getSandboxWorker() {
+  if (!_sandboxWorker) {
+    const w = new Worker(new URL("./sandboxWorker.js", import.meta.url), { type: "module" });
+    _sandboxWorker = { worker: w, pending: null };
+    w.onmessage = (e) => {
+      _sandboxWorker.pending?.resolve(e.data);
+      _sandboxWorker.pending = null;
     };
-    try {
-      const myFunction = new Function("console", cmStore.CmCode);
-      await myFunction(Consoles);
-    } catch (error) {
-      logs.push(`[Err]: ${error.message}`);
-    }
+    w.onerror = () => {
+      console.log( "Worker 加载失败")
+      _sandboxWorker.pending?.reject(new Error("Worker 加载失败"));
+      _sandboxWorker.pending = null;
+    };
+  }
+  return _sandboxWorker;
+}
+
+const goFunction = async () => {
+  const code = cmStore.CmCode;
+  if (!code || !code.trim()) {
+    showToast("没有可执行的代码");
+    return;
+  }
+
+  try {
+    const sw = getSandboxWorker();
+    const p = new Promise((resolve, reject) => {
+      sw.pending = { resolve, reject };
+    });
+    sw.worker.postMessage({ code: envSource + "\n" + code });
+    const { logs } = await p;
+
     showlog.value = true;
-    logAll.value = "· " + logs.join("\n· ");
+    if (logs && logs.length) {
+      logAll.value = "· " + logs.join("\n· ");
+    } else {
+      logAll.value = "· (无输出)";
+    }
   } catch (error) {
     showlog.value = true;
-    logAll.value = error.message;
+    logAll.value = "· " + (error.message || "Worker 执行失败");
   }
 };
 
@@ -1397,16 +1418,19 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .saves-panel {
-  width: 92%;
-  margin: 2% 4% 4% 4%;
+  /* width: 92%; */
+  margin: 0 1% 2% 1%;
+  /* margin-bottom: 13px; */
   display: flex;
   flex-direction: column;
   background: transparent;
-  border-radius: 23px;
+
   z-index: 996;
   position: relative;
   line-height: 16px;
-  box-shadow: 0 0 2px #919db687;
+  border-radius: 23px;
+  /* box-shadow: 0 0 2px #919db687; */
+  box-shadow: 0 2px 4px -2px #919db656;
 }
 
 .saves-toolbar {
@@ -1430,9 +1454,9 @@ onBeforeUnmount(() => {
   font-size: 13px;
   padding: 5px;
   border-radius: 14px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  background: transparent;
-  color: inherit;
+  border: 0px;
+  background: #8f98c60e;
+  color: var(--text);
   flex: 1;
 }
 
@@ -1531,8 +1555,9 @@ onBeforeUnmount(() => {
   background: rgba(128, 128, 128, 0.15);
 }
 
-.saves-item-current {
-  background: rgba(92, 125, 190, 0.15);
+.saves-item-current .saves-load-btn {
+  background: rgba(92, 125, 190, 0.2);
+  border-color: rgba(92, 125, 190, 0.5);
 }
 
 .saves-item-info {
@@ -1550,6 +1575,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+  opacity: 0.8;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1595,7 +1621,7 @@ onBeforeUnmount(() => {
 
 .saves-item-meta {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 10.5px;
   opacity: 0.5;
 }
 
@@ -1603,11 +1629,11 @@ onBeforeUnmount(() => {
   font-size: 12px;
   padding: 4px 10px;
   border-radius: 14px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  background: transparent;
-  color: inherit;
+  border: 0px;
+  background: #8f98c60e;
+  color: var(--text);
   margin-right: 10px;
-  margin-left: -4px; 
+  margin-left: -4px;
   flex-shrink: 0;
 }
 
@@ -1616,12 +1642,12 @@ onBeforeUnmount(() => {
 }
 
 .saves-refresh-btn {
-  font-size: 14px;
-  padding: 4px 8px;
+  font-size: 12px;
+  padding: 4px 10px;
   border-radius: 14px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  background: transparent;
-  color: inherit;
+  border: 0px;
+  background: #8f98c60e;
+  color: var(--text);
   flex-shrink: 0;
   cursor: pointer;
   line-height: 1;

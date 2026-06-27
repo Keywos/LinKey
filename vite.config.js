@@ -5,37 +5,6 @@ import { VantResolver } from "@vant/auto-import-resolver";
 import { VitePWA } from "vite-plugin-pwa";
 import fs from "fs";
 
-function fetchProxyPlugin() {
-  return {
-    name: "fetch-proxy",
-    configureServer(server) {
-      server.middlewares.use("/api/fetch", async (req, res) => {
-        const url = new URL(req.url, `http://${req.headers.host}`);
-        const target = url.searchParams.get("url");
-        if (!target) {
-          res.statusCode = 400;
-          res.end("Missing ?url= parameter");
-          return;
-        }
-        try {
-          const response = await fetch(target);
-          if (!response.ok) {
-            res.statusCode = response.status;
-            res.end(`Fetch failed: ${response.statusText}`);
-            return;
-          }
-          const text = await response.text();
-          res.setHeader("Content-Type", response.headers.get("content-type") || "text/plain");
-          res.end(text);
-        } catch (e) {
-          res.statusCode = 502;
-          res.end(`Fetch error: ${e.message}`);
-        }
-      });
-    },
-  };
-}
-
 export default {
   server: {
     host: "0.0.0.0",
@@ -51,7 +20,6 @@ export default {
   },
   plugins: [
     vue(),
-    fetchProxyPlugin(),
     Components({
       resolvers: [VantResolver()],
     }),
