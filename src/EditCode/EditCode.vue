@@ -33,6 +33,7 @@
       <div ref="savesListRef" class="saves-list">
         <div v-if="savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
         <div v-for="item in savedItems" :key="item.id" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
+          <button class="saves-item-del" @click.stop="deleteSingleItem(item)" title="删除">×</button>
           <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" />
 
           <div class="saves-item-info">
@@ -471,6 +472,25 @@ const createNewBlank = async () => {
   }
 };
 
+// ★ 单条删除
+const deleteSingleItem = async (item) => {
+  const ok = await askConfirm(`确定删除 "${item.name}" 吗？`);
+  if (!ok) return;
+  try {
+    await idbStorage.removeItem(contentKey(item.id));
+    await idbStorage.removeItem(metaKey(item.id));
+  } catch (error) {
+    console.error("删除失败", error);
+  }
+  savedItems.value = savedItems.value.filter((i) => i.id !== item.id);
+  await persistIndex();
+
+  if (currentItemId.value === item.id) {
+    await setCurrentItem(null, "");
+  }
+  showToast("已删除");
+};
+
 const deleteSelected = async () => {
   if (checkedIds.value.length === 0) {
     showToast("请先勾选要删除的项");
@@ -481,10 +501,7 @@ const deleteSelected = async () => {
   if (!ok) return;
 
   try {
-    await Promise.all(ids.map((id) => Promise.all([
-      idbStorage.removeItem(contentKey(id)),
-      idbStorage.removeItem(metaKey(id)),
-    ])));
+    await Promise.all(ids.map((id) => Promise.all([idbStorage.removeItem(contentKey(id)), idbStorage.removeItem(metaKey(id))])));
   } catch (error) {
     console.error("删除内容失败", error);
   }
@@ -1487,6 +1504,31 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 12px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.03);
+  position: relative;
+}
+
+.saves-item-del {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  line-height: 16px;
+  text-align: center;
+  font-size: 13px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  opacity: 0.35;
+  cursor: pointer;
+  border-radius: 50%;
+  padding: 0;
+  z-index: 1;
+}
+
+.saves-item-del:hover {
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.15);
 }
 
 .saves-item-current {
@@ -1564,6 +1606,8 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(128, 128, 128, 0.4);
   background: transparent;
   color: inherit;
+  margin-right: 10px;
+  margin-left: -4px; 
   flex-shrink: 0;
 }
 
@@ -1581,6 +1625,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   cursor: pointer;
   line-height: 1;
+  /* margin-right: -4px; */
 }
 
 .saves-refresh-btn:disabled {
