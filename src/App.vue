@@ -27,14 +27,13 @@ import { ref, watchEffect, computed, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useTheme } from "@/hooks/theme";
 import { onWidth } from "@/hooks/winWidth";
-const { isLandscape, notSmall, isPWA } = onWidth();
+const { isLandscape, notSmall, isPWA, screenWidth } = onWidth();
 
 import { sendReq } from "./http/http";
 
 import { useStore } from "./store/store";
 const store = useStore();
 const count = ref(store.count);
-//const version = import.meta.env.PACKAGE_VERSION;
 
 const fetchData = async () => {
   try {
@@ -49,14 +48,7 @@ const fetchData = async () => {
     console.error("Error fetching data:", error);
   }
 };
-const topHeights = () => {
-  let x = 20;
-  if (!notSmall.value) {
-    x = 59;
-  } else x = 20;
-
-  return x;
-};
+const topHeights = () => (notSmall.value ? 20 : 59);
 
 const tabHeight = computed(() => {
   if (isPWA.value && !isLandscape.value) {
@@ -67,9 +59,8 @@ const tabHeight = computed(() => {
 
 const tabbar_height = computed(() => {
   if (isPWA.value) {
-    if (!notSmall.value) {
-      return "76px";
-    } else if (isLandscape.value) return "46px";
+    if (!notSmall.value) return "76px";
+    if (isLandscape.value) return "46px";
   }
   return "60px";
 });
@@ -80,7 +71,6 @@ const tabbaring = computed(() => {
 });
 
 const { theme } = useTheme();
-const { screenWidth } = onWidth();
 
 const breakpoints = [
   { width: 359, value: "20px" },
@@ -90,13 +80,9 @@ const breakpoints = [
   { width: 431, value: "18px" },
 ];
 
-const getPixelValue = (screenWidth) => {
-  const breakpoint = breakpoints.find((breakpoint) => screenWidth.value < breakpoint.width);
-  return breakpoint ? breakpoint.value : "18px";
-};
-
 const noWmargin = computed(() => {
-  return getPixelValue(screenWidth);
+  const bp = breakpoints.find((b) => screenWidth.value < b.width);
+  return bp ? bp.value : "18px";
 });
 
 const showElement = ref(false);
@@ -110,14 +96,15 @@ onMounted(() => {
     fetchData();
     store.setIsCount();
   }
-  window.addEventListener("scroll", handleScroll);
+  window.addEventListener("scroll", handleScroll, { passive: true });
 });
 
 const router = useRouter();
 const onClickLeft = () => {
-  if (router.currentRoute.value.path === "/s") {
+  const r = router.currentRoute.value.path
+  if (r === "/s") {
     router.replace("/");
-  } else if (router.currentRoute.value.path !== "/") {
+  } else if (r !== "/") {
     router.replace("/");
   } else {
     history.back();
@@ -132,35 +119,21 @@ const isbgc = ref(localStorage.getItem("ISBGC") == "1" || false);
 
 const route = useRoute();
 
-const isBar = ref(true);
 const metatittleRef = ref("");
 watchEffect(() => {
-  isBar.value = isBar.value;
-  const isNeedTabBars = computed(() => {
-    return route.meta?.needTabBar ?? false;
-  });
-  const isNavBack = computed(() => {
-    return route.meta?.isNavBack ?? false;
-  });
-  const isNav = computed(() => {
-    return route.meta?.isNavTop ?? false;
-  });
-  const metatittle = computed(() => {
-    return route.meta?.title ?? "";
-  });
-
+  const meta = route.meta || {};
   const titleElement = document.querySelector(".blurNavdiv");
 
   if (showElement.value) {
     titleElement?.classList.add("blurNavdiv_border");
-    metatittleRef.value = metatittle.value;
+    metatittleRef.value = meta.title ?? "";
   } else {
     titleElement?.classList.remove("blurNavdiv_border");
     metatittleRef.value = "";
   }
-  isNavBackRef.value = isNavBack.value;
-  isNeedNav.value = isNav.value;
-  isNeedTabBarRef.value = isNeedTabBars.value;
+  isNavBackRef.value = !!meta.isNavBack;
+  isNeedNav.value = !!meta.isNavTop;
+  isNeedTabBarRef.value = !!meta.needTabBar;
 });
 </script>
 

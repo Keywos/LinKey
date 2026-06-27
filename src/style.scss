@@ -141,9 +141,9 @@
 
 .blurNavdiv {
   /* 顶部毛玻璃 */
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  background-color: #f3f3f3eb;
+  // backdrop-filter: blur(10px);
+  // -webkit-backdrop-filter: blur(10px);
+  background-color: #f3f3f3;
 }
 /* 底部导航栏 */
 .van-tabbar-item {
@@ -462,7 +462,7 @@
     filter: invert(0);
   } */
   .blurNavdiv {
-    background-color: #141414df;
+    background-color: #141414;
   }
   :root {
     /* 输入时间戳  */

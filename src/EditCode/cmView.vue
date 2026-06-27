@@ -169,21 +169,13 @@ import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
 
 const LARGE_FILE_PLAINTEXT_THRESHOLD_1 = 1.4 * 1024 * 1024;
-const LARGE_FILE_PLAINTEXT_THRESHOLD = 5 * 1024 * 1024; // 超过 5MB 强制纯文本，不做语言检测和高亮
+const LARGE_FILE_PLAINTEXT_THRESHOLD = 10 * 1024 * 1024; // 超过 5MB 强制纯文本，不做语言检测和高亮
 const SYNC_DEBOUNCE_MS = 50;
 
 // ★ iOS 检测 — iOS Safari 内存限制更严格，大文件需要分块加载防闪退
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const CHUNKED_LOAD_THRESHOLD = IS_IOS ? 300 * 1024 : 3 * 1024 * 1024; // iOS 300KB / 其他 3MB
 const CHUNK_SIZE = IS_IOS ? 200 * 1024 : 512 * 1024;
-// 按文件大小分级延迟语言检测，避免大文件加载时主线程卡死
-// const getSyncDelay = (length) => {
-//   // if (length > 1048576) return 2400; // >5MB
-//   // if (length > 800000) return 1600;
-//   // if (length > 500000) return 1000;
-//   // if (length > 102400) return 500;
-//   return SYNC_DEBOUNCE_MS;
-// };
 
 const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
