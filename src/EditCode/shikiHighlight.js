@@ -105,18 +105,25 @@ const tokenStyle = (token) => {
   return styles.join("; ");
 };
 
-const buildDecorations = (doc, tokenLines) => {
+const buildDecorations = (doc, tokenLines, viewFrom = 0, viewTo = Infinity) => {
   const builder = new RangeSetBuilder();
   let fallbackOffset = 0;
+  // ★ 在 viewport 外加一些余量，避免滚动时频繁闪烁
+  const margin = 2000;
+  const from = Math.max(0, viewFrom - margin);
+  const to = Math.min(doc.length, viewTo + margin);
 
   for (const line of tokenLines) {
     for (const token of line) {
       const content = token.content || "";
-      const from = typeof token.offset === "number" ? token.offset : fallbackOffset;
-      const to = from + content.length;
-      fallbackOffset = to;
+      const tokenFrom = typeof token.offset === "number" ? token.offset : fallbackOffset;
+      const tokenTo = tokenFrom + content.length;
+      fallbackOffset = tokenTo;
 
-      if (!content || !/\S/.test(content) || from >= to || to > doc.length) {
+      // ★ 跳过 viewport 之外的 token
+      if (tokenTo < from || tokenFrom > to) continue;
+
+      if (!content || !/\S/.test(content) || tokenFrom >= tokenTo || tokenTo > doc.length) {
         continue;
       }
 
@@ -124,8 +131,8 @@ const buildDecorations = (doc, tokenLines) => {
       if (!style) continue;
 
       builder.add(
-        from,
-        to,
+        tokenFrom,
+        tokenTo,
         Decoration.mark({
           class: "cm-shiki-token",
           attributes: { style },
@@ -153,7 +160,7 @@ export const shikiHighlight = ({ language, dark }) => {
         };
 
         this.decorations = Decoration.none;
-
+        this.cachedTokens = null; // ★ 缓存 tokens，viewport 变化时直接重建装饰
         this.destroyed = false;
 
         this.requestId = 0;
@@ -166,8 +173,12 @@ export const shikiHighlight = ({ language, dark }) => {
       update(update) {
         if (update.docChanged) {
           this.decorations = this.decorations.map(update.changes);
-
+          this.cachedTokens = null; // 文档变了，缓存失效
           this.schedule(update.view, 80);
+        } else if (update.viewportChanged && this.cachedTokens) {
+          // ★ viewport 变化（滚动）时用缓存 tokens 重建可见区域装饰（同步，不请求 worker）
+          this.decorations = buildDecorations(update.view.state.doc, this.cachedTokens, update.view.viewport.from, update.view.viewport.to);
+          update.view.dispatch({ effects: shikiRefreshEffect.of(null) });
         }
       }
 
@@ -215,7 +226,8 @@ export const shikiHighlight = ({ language, dark }) => {
             return;
           }
 
-          this.setDecorations(view, requestId, buildDecorations(view.state.doc, tokens));
+          this.cachedTokens = tokens; // ★ 缓存 tokens
+          this.setDecorations(view, requestId, buildDecorations(view.state.doc, tokens, view.viewport.from, view.viewport.to));
         } catch (e) {
           console.error(e);
         }

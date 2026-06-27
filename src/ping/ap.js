@@ -10,5 +10,9 @@ export const apis = {
   VIVO: "http://wifi.vivo.com.cn/generate_204",
   HUAWEI: "http://connectivitycheck.platform.hicloud.com/generate_204",
   Netease:"http://interface.music.163.com/eapi/check",
+  BiliBili: "https://www.bilibili.com/favicon.ico",
+  DouYin: "https://www.douyin.com/favicon.ico",
+  YouTube: "https://www.youtube.com/favicon.ico",
+  Openai: "https://chat.openai.com/favicon.ico",
   test: "test",
 };

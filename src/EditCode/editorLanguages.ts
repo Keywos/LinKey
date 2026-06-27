@@ -18,13 +18,6 @@ export interface EditorLanguageOption {
   label: string;
 }
 
-export interface FormatResult {
-  ok: boolean;
-  code: string;
-  error?: unknown;
-  reason?: "unsupported" | "invalid";
-}
-
 interface EditorLanguageDefinition {
   value: EditorLanguageId;
   label: string;
@@ -34,10 +27,6 @@ interface EditorLanguageDefinition {
 
 type Json5Module = typeof import("json5");
 type YamlModule = typeof import("yaml");
-
-interface JsBeautifyModule {
-  js_beautify: (source: string, options?: Record<string, unknown>) => string;
-}
 
 const SAMPLE_LIMIT = 4200;
 
@@ -107,18 +96,7 @@ const loadJson5 = async (): Promise<Json5Module> => {
   return module.parse ? module : module.default ?? module;
 };
 
-const loadJsBeautify = async (): Promise<JsBeautifyModule> => {
-  const module = (await import("js-beautify")) as JsBeautifyModule & {
-    default?: JsBeautifyModule;
-  };
-
-  return module.js_beautify ? module : module.default ?? module;
-};
-
 const loadYaml = async (): Promise<YamlModule> => import("yaml");
-
-const ensureTrailingNewline = (value: string) =>
-  value.endsWith("\n") ? value : `${value}\n`;
 
 const isValidJson = (text: string) => {
   if (!text || !hasJsonContainerShape(text)) return false;
@@ -393,76 +371,4 @@ export const loadEditorLanguageExtension = async (
   const definition = EDITOR_LANGUAGES[value];
   if (!definition?.load) return [];
   return definition.load();
-};
-
-export const formatEditorCode = async (
-  value: ActiveEditorLanguageId,
-  code: string
-): Promise<FormatResult> => {
-  try {
-    if (value === "javascript") {
-      const beautify = await loadJsBeautify();
-      return {
-        ok: true,
-        code: beautify
-          .js_beautify(code, { indent_size: 2 })
-          .replace(/^\s*[\r\n]/gm, "\n"),
-      };
-    }
-
-    if (value === "json") {
-      return {
-        ok: true,
-        code: `${JSON.stringify(JSON.parse(code), null, 2)}\n`,
-      };
-    }
-
-    if (value === "json5") {
-      const [JSON5, beautify] = await Promise.all([
-        loadJson5(),
-        loadJsBeautify(),
-      ]);
-      JSON5.parse(code);
-      return {
-        ok: true,
-        code: `${beautify
-          .js_beautify(code, { indent_size: 2 })
-          .replace(/^\s*[\r\n]/gm, "\n")}\n`,
-      };
-    }
-
-    if (value === "yaml") {
-      const YAML = await loadYaml();
-      const document = YAML.parseDocument(code, { prettyErrors: false });
-      if (document.errors.length) throw document.errors[0];
-      if (!document.contents) {
-        return {
-          ok: true,
-          code: code.trim() ? ensureTrailingNewline(code.trimEnd()) : "",
-        };
-      }
-
-      const formatted = document.toString({
-        indent: 2,
-        lineWidth: 0,
-      });
-      return {
-        ok: true,
-        code: ensureTrailingNewline(formatted),
-      };
-    }
-
-    return {
-      ok: false,
-      code,
-      reason: "unsupported",
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      code,
-      error,
-      reason: "invalid",
-    };
-  }
 };

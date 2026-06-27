@@ -113,7 +113,6 @@ import { ref, computed, nextTick, watch, watchEffect, onMounted, onBeforeUnmount
 import { showToast } from "vant";
 import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
-import { getExportExtensionByLanguage } from "@/EditCode/fileLanguageUtils";
 import useV3Clipboard from "vue-clipboard3";
 import { useRoute } from "vue-router";
 import { sendReq } from "@/http/http.js";
@@ -322,57 +321,58 @@ const loadSaves = async () => {
       } catch {}
     }
 
-    // ★ 索引恢复：扫描 IDB 中的 meta/content 键，找回索引丢失的项
-    try {
-      const allKeys = await idbStorage.getAllKeys();
-      const existingIds = new Set(items.map((i) => i.id));
-      let recovered = 0;
+    // ★ 索引恢复：仅当列表为空时扫描 IDB 中的 meta/content 键，找回索引丢失的项
+    if (items.length === 0) {
+      try {
+        const allKeys = await idbStorage.getAllKeys();
+        const existingIds = new Set(items.map((i) => i.id));
+        let recovered = 0;
 
-      for (const key of allKeys) {
-        if (typeof key !== "string") continue;
+        for (const key of allKeys) {
+          if (typeof key !== "string") continue;
 
-        if (key.startsWith("codehub_save_meta:")) {
-          const id = key.slice(19);
-          if (!existingIds.has(id)) {
-            const meta = await idbStorage.getItem(key);
-            if (meta) {
-              items.push({ id, ...meta });
-              existingIds.add(id);
-              recovered++;
+          if (key.startsWith("codehub_save_meta:")) {
+            const id = key.slice(19);
+            if (!existingIds.has(id)) {
+              const meta = await idbStorage.getItem(key);
+              if (meta) {
+                items.push({ id, ...meta });
+                existingIds.add(id);
+                recovered++;
+              }
             }
-          }
-        } else if (key.startsWith("codehub_save_content:")) {
-          const id = key.slice(21);
-          if (!existingIds.has(id)) {
-            const content = await idbStorage.getItem(key);
-            if (typeof content === "string" && content.length > 0) {
-              items.push({
-                id,
-                name: `recovered_${id}`,
-                length: content.length,
-                preview: content.slice(0, 100).replace(/\s+/g, " "),
-                updatedAt: Date.now(),
-                language: "",
-                manualLanguage: "",
-                url: "",
-                blobUrl: "",
-              });
-              existingIds.add(id);
-              recovered++;
+          } else if (key.startsWith("codehub_save_content:")) {
+            const id = key.slice(21);
+            if (!existingIds.has(id)) {
+              const content = await idbStorage.getItem(key);
+              if (typeof content === "string" && content.length > 0) {
+                items.push({
+                  id,
+                  name: `recovered_${id}`,
+                  length: content.length,
+                  preview: content.slice(0, 100).replace(/\s+/g, " "),
+                  updatedAt: Date.now(),
+                  language: "",
+                  manualLanguage: "",
+                  url: "",
+                  blobUrl: "",
+                });
+                existingIds.add(id);
+                recovered++;
+              }
             }
           }
         }
-      }
 
-      if (recovered > 0) {
-        console.log(`索引恢复：找回 ${recovered} 个丢失的项`);
-        showToast(`找回 ${recovered} 个丢失的项`);
-        // 恢复后立即持久化索引
-        const idList = items.map((item) => item.id);
-        await idbStorage.setItem(SAVES_INDEX_KEY, idList);
+        if (recovered > 0) {
+          console.log(`索引恢复：找回 ${recovered} 个丢失的项`);
+          // 恢复后立即持久化索引
+          const idList = items.map((item) => item.id);
+          await idbStorage.setItem(SAVES_INDEX_KEY, idList);
+        }
+      } catch (e) {
+        console.error("索引恢复扫描失败", e);
       }
-    } catch (e) {
-      console.error("索引恢复扫描失败", e);
     }
 
     savedItems.value = items;
@@ -503,6 +503,13 @@ const deleteSelected = async () => {
 const LARGE_FILE_THRESHOLD = 1.4 * 1024 * 1024;
 
 const loadItem = async (item) => {
+  // ★ 切换文件前先刷新防抖 store 同步，确保当前编辑内容已保存
+  cmViewRef.value?.flushStoreSync?.();
+  // 刷新后再保存当前项（如果有）
+  if (isDirty && currentItemId.value) {
+    await syncCurrentItemContent();
+  }
+
   loadingItemId.value = item.id;
 
   try {
@@ -670,6 +677,9 @@ const syncCurrentItemContent = async () => {
   const id = currentItemId.value;
   if (!id) return;
   if (!isDirty) return;
+
+  // ★ 大文件编辑后先刷新 store，确保拿到最新的编辑内容
+  cmViewRef.value?.flushStoreSync?.();
 
   const content = cmStore.CmCode || "";
 
@@ -851,13 +861,8 @@ const downloadTextFile = (filename, content) => {
   URL.revokeObjectURL(url);
 };
 
-const buildExportFilename = (name, language, fallbackBase = "CH") => {
-  const safeBase = (name || fallbackBase).replace(/[\\/:*?"<>|]/g, "_");
-  const ext = getExportExtensionByLanguage(language);
-  const dotIndex = safeBase.lastIndexOf(".");
-  const currentExt = dotIndex > 0 ? safeBase.slice(dotIndex + 1).toLowerCase() : "";
-  if (currentExt === ext) return safeBase;
-  return `${safeBase}.${ext}`;
+const buildExportFilename = (name, fallbackBase = "CH") => {
+  return (name || fallbackBase).replace(/[\\/:*?"<>|]/g, "_");
 };
 
 const dedupeFilename = (name, usedNames) => {
@@ -884,7 +889,7 @@ const exportCurrent = () => {
     .toLocaleString("zh-CN")
     .replace(/[^\d\s]/g, "")
     .replace(/\D/g, "_")}`;
-  const finalName = buildExportFilename(cmStore.currentFileName || fallbackName, cmStore.activeLanguage);
+  const finalName = buildExportFilename(cmStore.currentFileName || fallbackName);
   downloadTextFile(finalName, content);
   showToast("已导出");
 };
@@ -901,7 +906,7 @@ const exportSelected = async () => {
     const item = items[0];
     try {
       const content = await idbStorage.getItem(contentKey(item.id));
-      const finalName = buildExportFilename(item.name, item.language);
+      const finalName = buildExportFilename(item.name);
       downloadTextFile(finalName, content || "");
       showToast("已导出");
     } catch (error) {
@@ -918,7 +923,7 @@ const exportSelected = async () => {
   for (const item of items) {
     try {
       const content = await idbStorage.getItem(contentKey(item.id));
-      let finalName = buildExportFilename(item.name, item.language);
+      let finalName = buildExportFilename(item.name);
       finalName = dedupeFilename(finalName, usedNames);
       usedNames.add(finalName);
       zip.file(finalName, content || "");
@@ -1291,7 +1296,26 @@ onMounted(async () => {
   if (savesListRef.value) {
     savesListObserver.observe(savesListRef.value);
   }
+
+  // ★ 初始加载完成后，如果有当前项且面板显示，滚动到该项
+  scrollToCurrentItem();
 });
+
+// ★ 面板打开/关闭时，打开后自动滚动到当前项
+watch(showSaves, (visible) => {
+  if (visible) {
+    nextTick(scrollToCurrentItem);
+  }
+});
+
+function scrollToCurrentItem() {
+  const id = currentItemId.value;
+  if (!id || !savesListRef.value) return;
+  nextTick(() => {
+    const el = savesListRef.value.querySelector(".saves-item-current");
+    el?.scrollIntoView?.({ block: "nearest", behavior: "auto" });
+  });
+}
 
 function extractAndFormatUrl(rawUrl) {
   const regex = /https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)/;
@@ -1340,6 +1364,7 @@ watchEffect(() => {
 });
 
 onBeforeUnmount(() => {
+  cmViewRef.value?.flushStoreSync?.(); // ★ 确保最后编辑内容同步到 store
   flushCurrentSave();
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   window.removeEventListener("beforeunload", handleBeforeUnload);

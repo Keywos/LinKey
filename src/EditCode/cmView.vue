@@ -79,8 +79,7 @@
     </div>
     <div ref="viewRef" style="width: 100%; font-size: 11px" />
     <div style="height: 10px" />
-
-    <!-- ★ 压缩选项弹窗 (terser) -->
+ 
     <Teleport to="body">
       <div v-if="compressOpts.visible" class="compress-overlay" @click.self="closeCompressDialog">
         <div class="compress-dialog">
@@ -172,6 +171,11 @@ import { useCmStore } from "@/store/cmCodeStore.js";
 const LARGE_FILE_PLAINTEXT_THRESHOLD_1 = 1.4 * 1024 * 1024;
 const LARGE_FILE_PLAINTEXT_THRESHOLD = 5 * 1024 * 1024; // 超过 5MB 强制纯文本，不做语言检测和高亮
 const SYNC_DEBOUNCE_MS = 50;
+
+// ★ iOS 检测 — iOS Safari 内存限制更严格，大文件需要分块加载防闪退
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const CHUNKED_LOAD_THRESHOLD = IS_IOS ? 300 * 1024 : 3 * 1024 * 1024; // iOS 300KB / 其他 3MB
+const CHUNK_SIZE = IS_IOS ? 200 * 1024 : 512 * 1024;
 // 按文件大小分级延迟语言检测，避免大文件加载时主线程卡死
 // const getSyncDelay = (length) => {
 //   // if (length > 1048576) return 2400; // >5MB
@@ -226,13 +230,25 @@ const shikiSyntax = new Compartment();
 const editorPlaceholder = new Compartment();
 
 const heavyDecorations = new Compartment();
-const createHeavyDecorations = () => [
-  foldGutter({
-    closedText: "▸",
-    openText: "▾",
-  }),
-  indentationMarkers(),
-];
+const FOLD_GUTTER_THRESHOLD = 1 * 1024 * 1024;     // ★ 1MB+ 关闭折叠槽
+const INDENT_MARKER_THRESHOLD = 500 * 1024;         // ★ 500KB+ 关闭缩进标记
+const createHeavyDecorations = (docLen = 0) => {
+  const deco = [];
+  if (docLen < FOLD_GUTTER_THRESHOLD) deco.push(foldGutter({ closedText: "▸", openText: "▾" }));
+  if (docLen < INDENT_MARKER_THRESHOLD) deco.push(indentationMarkers());
+  return deco;
+};
+
+// ★ 大文件时可关闭的编辑辅助扩展（自动补全、括号匹配、选区高亮、自动闭合）
+const editAssist = new Compartment();
+const createEditAssist = (enabled) => enabled ? [autocompletion(), bracketMatching(), highlightSelectionMatches(), closeBrackets()] : [];
+
+// ★ 历史记录深度限制 — 大文件减少撤销步数以节省内存
+const historyCompartment = new Compartment();
+const createHistoryExt = (isLarge) => history({ minDepth: isLarge ? 50 : 200 });
+
+// ★ 超链接装饰 — 大文件时禁用避免每次按键全文正则扫描
+const hyperLinkCompartment = new Compartment();
 const selectedLanguage = ref(normalizeEditorLanguage(props.editorLanguage, "auto"));
 const activeLanguage = ref("plaintext");
 
@@ -488,12 +504,28 @@ function shouldLockLanguageFromFilename(filename) {
 const createEditorPlaceholder = () => (props.placeholder ? cmPlaceholder(props.placeholder) : []);
 
 let syncTimer = null;
+let syncIdleId = null; // requestIdleCallback ID
 
 const debouncedSyncLanguage = (docContent) => {
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => {
-    syncLanguageForDocument(docContent);
-  }, SYNC_DEBOUNCE_MS);
+  if (syncIdleId != null && typeof cancelIdleCallback !== "undefined") {
+    cancelIdleCallback(syncIdleId);
+    syncIdleId = null;
+  }
+
+  const isLarge = docContent.length > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
+
+  if (isLarge && typeof requestIdleCallback !== "undefined") {
+    // ★ 大文件使用 requestIdleCallback，让浏览器在空闲时再做语言检测
+    syncIdleId = requestIdleCallback(() => {
+      syncIdleId = null;
+      syncLanguageForDocument(docContent);
+    }, { timeout: 2000 });
+  } else {
+    syncTimer = setTimeout(() => {
+      syncLanguageForDocument(docContent);
+    }, SYNC_DEBOUNCE_MS);
+  }
 };
 
 // ★ 修复：外部（cmHub）调用此方法可让下一次 setCmCode 跳过语言同步，
@@ -518,16 +550,46 @@ defineExpose({
   skipNextFileRename() {
     _skipNextFileRename = true;
   },
+  // ★ 大文件编辑后手动刷新 store，确保自动保存拿到最新内容
+  flushStoreSync() {
+    flushStoreSync();
+  },
 });
 
 let docUpdate = false;
+let _chunkedLoading = false; // ★ 分块加载中，跳过 updateListener 的 store 同步
+
+// ★ 大文件编辑时防抖同步到 store — 避免每次按键都复制整个文档字符串
+let _storeSyncTimer = null;
+const STORE_SYNC_DELAY = 300; // 大文件编辑时 300ms 防抖
+let _pendingStoreContent = null;
+
+const flushStoreSync = () => {
+  if (_storeSyncTimer) {
+    clearTimeout(_storeSyncTimer);
+    _storeSyncTimer = null;
+  }
+  if (_pendingStoreContent != null) {
+    docUpdate = true;
+    cmStore.setCmCode(_pendingStoreContent);
+    docUpdate = false;
+    _pendingStoreContent = null;
+  }
+};
+
+const debouncedStoreSync = (content) => {
+  _pendingStoreContent = content;
+  clearTimeout(_storeSyncTimer);
+  _storeSyncTimer = setTimeout(flushStoreSync, STORE_SYNC_DELAY);
+};
+
 let view;
 // const isFirstLoad = ref(true);
 const CreateView = () => {
   view = new EditorView({
     state: EditorState.create({
       extensions: [
-        history(),
+        historyCompartment.of(history()),
         keymap.of([indentWithTab, ...searchKeymap, ...defaultKeymap, ...historyKeymap]),
         langs.of([]),
         shikiSyntax.of([]), // ★ 初始不加载，由 applyLanguage 按需开启
@@ -537,22 +599,20 @@ const CreateView = () => {
         EditorView.lineWrapping, // 换行
         lineNumbers(),
         highlightActiveLine(),
-        bracketMatching(),
-        highlightSelectionMatches(),
-        closeBrackets(),
-        autocompletion(), // js
+        editAssist.of(createEditAssist(true)), // ★ 初始启用，大文件时动态关闭
         EditorView.updateListener.of((update) => {
-          if (!update.docChanged) return;
+          if (!update.docChanged || _chunkedLoading) return; // ★ 分块加载时跳过
           const docContent = update.state.doc.toString();
-          docUpdate = true;
-          console.log("0 更新文档 - CodeValue");
-          cmStore.setCmCode(docContent);
-          docUpdate = false;
-          if (selectedLanguage.value === "auto" && !(docContent.length > LARGE_FILE_PLAINTEXT_THRESHOLD) && !_skipNextLangSync) {
+          const docLen = docContent.length;
+
+          // ★ 统一防抖同步到 store — 避免每次按键都 toString + 同步
+          debouncedStoreSync(docContent);
+
+          if (selectedLanguage.value === "auto" && !(docLen > LARGE_FILE_PLAINTEXT_THRESHOLD) && !_skipNextLangSync) {
             debouncedSyncLanguage(docContent);
           }
         }),
-        hyperLink,
+        hyperLinkCompartment.of(hyperLink),
         heavyDecorations.of(createHeavyDecorations()),
       ],
       doc: "", // ★ 初始空文档，首次内容由 isFirstLoad 延迟注入
@@ -563,6 +623,7 @@ const CreateView = () => {
   const applyContentToEditor = async (nextValue) => {
     console.log("Code更新到文档");
     const isLargeFile = nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
+    const needChunked = nextValue.length > CHUNKED_LOAD_THRESHOLD;
 
     // ★ 用户手动选过语言 → 始终用它覆盖
     const manualLang = cmStore.manualLanguage;
@@ -585,19 +646,71 @@ const CreateView = () => {
       }
     }
 
-    view.dispatch({
-      changes: {
-        from: 0,
-        to: view.state.doc.length,
-        insert: nextValue,
-      },
-      effects: heavyDecorations.reconfigure(isLargeFile ? [] : createHeavyDecorations()),
-      annotations: Transaction.addToHistory.of(!_skipNextHistory),
-    });
+    const skipHist = _skipNextHistory;
     _skipNextHistory = false; // 用完即重置
 
+    // ★ 根据文件大小动态调整编辑辅助和历史深度
+    const editAssistEnabled = !isLargeFile;
+    const historyLimited = isLargeFile;
+
+    if (!needChunked) {
+      // ★ 小文件：单次 dispatch 直接替换
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: nextValue },
+        effects: [
+          heavyDecorations.reconfigure(createHeavyDecorations(nextValue.length)),
+          editAssist.reconfigure(createEditAssist(editAssistEnabled)),
+          historyCompartment.reconfigure(createHistoryExt(historyLimited)),
+          hyperLinkCompartment.reconfigure(isLargeFile ? [] : hyperLink),
+        ],
+        annotations: Transaction.addToHistory.of(!skipHist),
+      });
+    } else {
+      // ★ 大文件分块加载 — 防止 iOS 闪退
+      _chunkedLoading = true; // 暂停 updateListener 的 store 同步
+      try {
+        // Phase 1: 先清空文档、关闭重型装饰，释放旧文档内存
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: "" },
+          effects: [
+            heavyDecorations.reconfigure([]),
+            editAssist.reconfigure(createEditAssist(false)),
+            historyCompartment.reconfigure(createHistoryExt(true)),
+            hyperLinkCompartment.reconfigure([]),
+          ],
+          annotations: Transaction.addToHistory.of(false),
+        });
+        // 让出主线程，等待 GC 回收旧文档 + 浏览器绘制
+        await new Promise((r) => setTimeout(r, 0));
+
+        // Phase 2: 分块插入内容
+        for (let offset = 0; offset < nextValue.length; offset += CHUNK_SIZE) {
+          const chunk = nextValue.slice(offset, Math.min(offset + CHUNK_SIZE, nextValue.length));
+          const pos = view.state.doc.length;
+          const isFirstChunk = offset === 0;
+          view.dispatch({
+            changes: { from: pos, insert: chunk },
+            // 仅第一块记录历史（整个内容算一步撤销）
+            annotations: isFirstChunk ? Transaction.addToHistory.of(!skipHist) : Transaction.addToHistory.of(false),
+          });
+          // 每块之间让出主线程，防止 iOS watchdog 超时
+          if (offset + CHUNK_SIZE < nextValue.length) {
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        }
+      } finally {
+        _chunkedLoading = false;
+      }
+
+      // 分块完成，同步最终内容到 store
+      docUpdate = true;
+      cmStore.setCmCode(nextValue);
+      docUpdate = false;
+
+      console.log(`分块加载完成: ${(nextValue.length / 1024).toFixed(0)}KB, ${Math.ceil(nextValue.length / CHUNK_SIZE)} 块`);
+    }
+
     await nextTick();
-    // await new Promise((r) => setTimeout(r, isLarge ? 120 : 50));
 
     // 外部加载新文件时重置格式化状态
     isFormatted.value = false;
@@ -624,13 +737,19 @@ const CreateView = () => {
     () => cmStore.CmCode,
     (newValue) => {
       const nextValue = newValue || "";
-      if (!docUpdate && nextValue !== view.state.doc.toString()) {
-        // if (isFirstLoad.value) {
-        //   isFirstLoad.value = false;
-        //   setTimeout(() => applyContentToEditor(nextValue), 6);
-        // } else {
+      if (docUpdate) return; // 来自编辑器自身的更新，跳过
+
+      // ★ 大文件优化：先比较长度（O(1)），长度不同直接替换，避免 toString() 复制整个文档
+      const docLen = view.state.doc.length;
+      if (nextValue.length !== docLen) {
         applyContentToEditor(nextValue);
-        // }
+        return;
+      }
+
+      // 长度相同时才做完整比较
+      if (nextValue.length === 0 && docLen === 0) return; // 都为空，跳过
+      if (nextValue !== view.state.doc.toString()) {
+        applyContentToEditor(nextValue);
       }
     },
   );
@@ -681,6 +800,20 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearLanguageDetectionTimer();
   clearTimeout(syncTimer);
+  if (syncIdleId != null && typeof cancelIdleCallback !== "undefined") {
+    cancelIdleCallback(syncIdleId);
+    syncIdleId = null;
+  }
+  // ★ 销毁 EditorView 释放内存（文档、装饰、扩展状态等）
+  if (view) {
+    view.destroy();
+    view = null;
+  }
+  // ★ 清理格式化 Worker
+  if (formatWorker) {
+    formatWorker.terminate();
+    formatWorker = null;
+  }
 });
 
 const collapsed = ref(localStorage.getItem("cm_collapsed") === "true");
@@ -879,7 +1012,9 @@ async function doCompress() {
         },
       },
     });
-    cmStore.setCmCode(result.code);
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: result.code },
+    });
     isFormatted.value = false;
     const ms = (performance.now() - start).toFixed(1);
     showToast("已压缩 JS (" + ms + "ms)");
@@ -908,7 +1043,9 @@ async function doFormat() {
       lang,
       options: { indent_size: 2 },
     });
-    cmStore.setCmCode(formatted);
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: formatted },
+    });
     isFormatted.value = true;
     const ms = (performance.now() - start).toFixed(1);
     showToast("已格式化 (" + ms + "ms)");

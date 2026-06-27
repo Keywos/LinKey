@@ -17,7 +17,8 @@ self.addEventListener("message", async (e) => {
       } else {
         beautifyFn = beautify.js_beautify;
       }
-      const result = beautifyFn(code, options || { indent_size: 2 });
+      let result = beautifyFn(code, options || { indent_size: 2 });
+      result = result.replace(/\n{3,}/g, "\n\n");
       self.postMessage({ type: "result", id: payload.id, result });
     } else if (type === "compress") {
       const { code, options } = payload;
