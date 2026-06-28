@@ -1,5 +1,5 @@
 <template>
-  <h2 style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%; margin-top: -10px;">
+  <h2 style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%; margin-top: -10px">
     <span style="opacity: 0.6" @click="goFunction()">Code Hub</span>
     <div style="display: flex; align-items: center; gap: 10px; color: var(--text)">
       <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: 0.4">{{ showSaves ? "▴" : "▾" }}</span>
@@ -75,12 +75,38 @@
   <!-- ★ 修复：加上 ref="cmViewRef" 供 loadItem 调用 skipNextLanguageSync -->
   <cmView ref="cmViewRef" id="main" :isReadOnly="false" />
 
-  <div v-if="showlog" style="padding: 0 2%; position: fixed; bottom: 0; left: 0; width: 96%; z-index: 999">
-    <div style="display: flex; justify-content: space-between">
-      <div class="pretitcode" @click="showlogs" />
-      <div @click="goFunction()" style="position: relative; top: 40px; position: relative; height: 25px; right: 0; width: 40%" />
+  <!-- ★ 可拖拽控制台面板 -->
+  <div
+    v-if="showlog"
+    class="log-panel"
+    ref="logPanelRef"
+    :style="{ left: logPos.x + 'px', top: logPos.y + 'px', width: logSize.w + 'px', height: logSize.h + 'px', maxWidth: '100vw', maxHeight: MAX_H + 'px' }"
+  >
+    <div class="log-header" @pointerdown.prevent="startDrag">
+      <span class="log-title">
+        <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 450 130" width="60" height="17" @click.stop="onClickLogo">
+          <ellipse cx="65" cy="65" rx="50" ry="52" stroke="rgb(220,60,54)" stroke-width="2" fill="rgb(237,108,96)" />
+          <ellipse cx="225" cy="65" rx="50" ry="52" stroke="rgb(218,151,33)" stroke-width="2" fill="rgb(247,193,81)" />
+          <ellipse cx="385" cy="65" rx="50" ry="52" stroke="rgb(27,161,37)" stroke-width="2" fill="rgb(100,200,86)" />
+        </svg>
+      </span>
+      <span class="log-time">{{ logTime }}</span>
+      <div class="log-actions">
+        <button class="log-btn log-copy" @click.stop="copyText(logAllReactive)" title="复制日志">
+          <svg viewBox="0 1 26 17" width="14" height="14" fill="currentColor">
+            <rect x="9" y="3" width="12" height="15" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"></rect>
+            <path d="M15 21H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2" stroke="currentColor" stroke-width="1.5" fill="none"></path>
+          </svg>
+        </button>
+        <button class="log-btn log-run" @click.stop="goFunction()" title="运行脚本">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+        </button>
+      </div>
     </div>
-    <pre @click="copyText(logAll)" class="prem-code"> {{ logAll.replace(/ /g, "&nbsp;") }}</pre>
+    <div class="log-body" ref="logBodyRef">
+      <pre class="log-pre">{{ logAllReactive }}</pre>
+    </div>
+    <div class="log-resize-handle" @pointerdown.prevent="startResize">↘</div>
   </div>
 
   <!-- 自定义输入弹窗 -->
@@ -141,7 +167,7 @@ const idbStorage = {
 };
 
 import JSZip from "jszip";
-import envSource from "./env.js?raw";
+import "./env.js";
 let skipWatchSave = false;
 let isSwitchingItem = false; // 切换文件期间抑制自动保存 watch
 const route = useRoute();
@@ -150,12 +176,74 @@ const grc = ref("");
 const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
 const showlog = ref(false);
-const showlogs = () => {
-  showlog.value = false;
-};
 const EMPTY_CONTENT = "\n".repeat(19);
 const { isDarkModeEnabled } = useTheme();
-const logAll = ref("");
+const logAllReactive = ref("");
+const logTime = ref("");
+
+// ===== 控制台面板位置/大小 =====
+// const logPanelRef = ref(null);
+const logBodyRef = ref(null);
+const savedPos = localStorage.getItem("logPos");
+const savedSize = localStorage.getItem("logSize");
+const logPos = ref(savedPos ? JSON.parse(savedPos) : { x: 16, y: 80 });
+const logSize = ref(
+  savedSize
+    ? JSON.parse(savedSize)
+    : {
+        w: Math.round(window.innerWidth * 0.99),
+        h: Math.min(window.innerHeight * 0.35, 360),
+      },
+);
+const MAX_H = Math.round(window.innerHeight * 0.6);
+
+// 拖拽移动
+let _dragData = null;
+function startDrag(e) {
+  _dragData = { sx: e.clientX, sy: e.clientY, ox: logPos.value.x, oy: logPos.value.y, moved: false };
+  document.addEventListener("pointermove", onDrag);
+  document.addEventListener("pointerup", endDrag);
+}
+function onDrag(e) {
+  if (!_dragData) return;
+  _dragData.moved = true;
+  logPos.value.x = _dragData.ox + (e.clientX - _dragData.sx);
+  logPos.value.y = Math.max(0, _dragData.oy + (e.clientY - _dragData.sy));
+}
+function endDrag() {
+  if (_dragData) {
+    localStorage.setItem("logPos", JSON.stringify(logPos.value));
+  }
+  _dragData = null;
+  document.removeEventListener("pointermove", onDrag);
+  document.removeEventListener("pointerup", endDrag);
+}
+function onClickLogo() {
+  if (_dragData?.moved) return; // 拖拽不关闭
+  showlog.value = false;
+}
+
+// 拖拽缩放
+let _resizeData = null;
+function startResize(e) {
+  _resizeData = { sx: e.clientX, sy: e.clientY, ow: logSize.value.w, oh: logSize.value.h };
+  document.addEventListener("pointermove", onResize);
+  document.addEventListener("pointerup", endResize);
+}
+function onResize(e) {
+  if (!_resizeData) return;
+  logSize.value.w = Math.max(200, _resizeData.ow + (e.clientX - _resizeData.sx));
+  logSize.value.h = Math.min(MAX_H, Math.max(80, _resizeData.oh + (e.clientY - _resizeData.sy)));
+}
+function endResize() {
+  if (_resizeData) {
+    localStorage.setItem("logSize", JSON.stringify(logSize.value));
+  }
+  _resizeData = null;
+  document.removeEventListener("pointermove", onResize);
+  document.removeEventListener("pointerup", endResize);
+}
+// ===== 控制台面板 end =====
 const props = defineProps(["isReadOnly"]);
 const lastSavedContent = ref("");
 const promptInputRef = ref(null);
@@ -207,9 +295,7 @@ async function pasteToPromptInput() {
     if (text) {
       promptState.value.value = text;
     }
-  } catch {
-    // 静默失败
-  }
+  } catch {}
 }
 
 function askConfirm(title) {
@@ -227,9 +313,6 @@ const confirmNo = () => {
   confirmState.value.visible = false;
   resolve?.(false);
 };
-// ===== 自定义弹窗 end =====
-
-// ===== 保存列表 =====
 const SAVES_INDEX_KEY = "codehub_saves_index";
 const createId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -295,8 +378,6 @@ function endSavesResizePointer(e) {
     } catch {}
   }
 }
-// ===== 保存面板拖拽调整高度 end =====
-
 const toggleSaves = async () => {
   showSaves.value = !showSaves.value;
   await idbStorage.setItem("SHOW_SAVES_KEY", showSaves.value);
@@ -1353,12 +1434,161 @@ function getSandboxWorker() {
       _sandboxWorker.pending = null;
     };
     w.onerror = () => {
-      console.log( "Worker 加载失败")
+      console.log("Worker 加载失败");
       _sandboxWorker.pending?.reject(new Error("Worker 加载失败"));
       _sandboxWorker.pending = null;
     };
   }
   return _sandboxWorker;
+}
+
+/** 在主线程中直接执行用户脚本（捕获 console 输出） */
+function executeInMainThread(code, onLog) {
+  return new Promise((resolve) => {
+    const logs = [];
+    const timers = {};
+
+    const emit = (msg) => {
+      logs.push(msg);
+      onLog?.(msg);
+    };
+
+    const formatArg = (function () {
+      var _visited = new WeakSet();
+      return function (arg) {
+        if (arg === null) return "null";
+        if (arg === undefined) return "undefined";
+        if (arg instanceof Error) return arg.stack || arg.name + ": " + arg.message;
+        if (typeof arg === "object") {
+          if (_visited.has(arg)) return "[circular]";
+          _visited.add(arg);
+          try {
+            var s = JSON.stringify(arg, null, 2);
+            _visited.delete(arg);
+            return s;
+          } catch (e) {
+            _visited.delete(arg);
+            return "[recursive/error]";
+          }
+        }
+        return String(arg);
+      };
+    })();
+
+    const mockConsole = {
+      log: (...args) => emit(args.map(formatArg).join(" ")),
+      error: (...args) => emit("[Error] " + args.map(formatArg).join(" ")),
+      warn: (...args) => emit("[Warn] " + args.map(formatArg).join(" ")),
+      info: (...args) => emit("[Info] " + args.map(formatArg).join(" ")),
+      debug: (...args) => emit("[Debug] " + args.map(formatArg).join(" ")),
+      trace: (...args) => emit("[Trace] " + args.map(formatArg).join(" ")),
+      dir: (obj) => emit(formatArg(obj)),
+      table: (data) => {
+        if (Array.isArray(data)) {
+          emit("[Table]\n" + data.map((row, i) => `  ${i}: ${formatArg(row)}`).join("\n"));
+        } else {
+          emit("[Table]\n" + formatArg(data));
+        }
+      },
+      clear: () => {
+        logs.length = 0;
+      },
+      time: (label) => {
+        timers[String(label)] = performance.now();
+      },
+      timeEnd: (label) => {
+        const key = String(label);
+        const elapsed = timers[key] != null ? (performance.now() - timers[key]).toFixed(2) : "?";
+        emit(`${key}: ${elapsed} ms`);
+        delete timers[key];
+      },
+      count: (label) => {
+        const key = String(label ?? "default");
+        timers[key] = (timers[key] ?? 0) + 1;
+        emit(`${key}: ${timers[key]}`);
+      },
+      group: () => {},
+      groupEnd: () => {},
+    };
+
+    var _execError = null;
+    var _execResult = null;
+    var _savedConsole = window.console;
+    window.console = mockConsole;
+    try {
+      _execResult = (0, eval)("(async function(){try{\n" + code + "\n}catch(e){try{console.error('[Uncaught] '+(e&&e.stack?e.stack:(e&&e.message?e.message:e)))}catch(_){}}})()");
+    } catch (e) {
+      _execError = e;
+    }
+    if (_execError) {
+      window.console = _savedConsole;
+      logs.push("[Build Error] " + _formatError(_execError));
+      resolve({ logs });
+      return;
+    }
+
+    if (!_execResult || typeof _execResult.then !== "function") {
+      window.console = _savedConsole;
+      logs.push("[Debug] fn returned non-thenable: " + String(_execResult));
+      resolve({ logs });
+      return;
+    }
+
+    setTimeout(function () {
+      _execResult
+        .then(function () {
+          _finishResolve();
+        })
+        .catch(function (e) {
+          logs.push("[Exception] " + _formatError(e));
+          _finishResolve();
+        });
+    }, 0);
+
+    setTimeout(function () { 
+      _safeResolve();
+    }, 60000);
+
+    function _finishResolve() {
+      try {
+        var _sp = typeof self !== "undefined" ? self.__surge_pending : 0;
+        if (typeof _sp === "number" && _sp > 0) {
+          self.__surge_on_idle = function () {
+            _safeResolve();
+          };
+          setTimeout(function () {
+            if (self.__surge_on_idle) {
+              self.__surge_on_idle = null;
+              _safeResolve();
+            }
+          }, 15000);
+        } else {
+          _safeResolve();
+        }
+      } catch (e2) {
+        logs.push("[Finish Error] " + _formatError(e2));
+        _safeResolve();
+      }
+    }
+
+    function _safeResolve() {
+      window.console = _savedConsole;
+      try {
+        resolve({ logs });
+      } catch (e) {}
+    }
+
+    function _formatError(e) {
+      try {
+        if (!e) return String(e);
+        if (e && e.stack) return String(e.stack).slice(0, 500);
+        if (e && e.message) return String(e.message).slice(0, 500);
+        return String(e).slice(0, 500);
+      } catch (_) {
+        return "unknown";
+      }
+    }
+  });
 }
 
 const goFunction = async () => {
@@ -1368,24 +1598,37 @@ const goFunction = async () => {
     return;
   }
 
-  try {
-    const sw = getSandboxWorker();
-    const p = new Promise((resolve, reject) => {
-      sw.pending = { resolve, reject };
-    });
-    sw.worker.postMessage({ code: envSource + "\n" + code });
-    const { logs } = await p;
+  // 重置实时日志
+  logAllReactive.value = "";
+  logTime.value = new Date().toLocaleString("zh-CN", { hour12: false });
+  showlog.value = true;
 
-    showlog.value = true;
+  try {
+    const { logs } = await executeInMainThread(code, (msg) => {
+      // 实时刷新
+      logAllReactive.value += "· " + msg + "\n";
+      // 自动滚动到底部
+      nextTick(() => {
+        const el = logBodyRef.value;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    });
+
+    // 确保最终完整输出
     if (logs && logs.length) {
-      logAll.value = "· " + logs.join("\n· ");
-    } else {
-      logAll.value = "· (无输出)";
+      const full = "· " + logs.join("\n· ");
+      logAllReactive.value = full + "\n";
+    } else if (!logAllReactive.value) {
+      logAllReactive.value = "· (无输出)\n";
     }
   } catch (error) {
-    showlog.value = true;
-    logAll.value = "· " + (error.message || "Worker 执行失败");
+    logAllReactive.value += "· [Exception] " + (error.message || "执行失败") + "\n";
   }
+
+  // 最终滚动到底部
+  await nextTick();
+  const el = logBodyRef.value;
+  if (el) el.scrollTop = el.scrollHeight;
 };
 
 const copyText = async (i) => {
@@ -1416,7 +1659,7 @@ onBeforeUnmount(() => {
 });
 </script>
 
-<style scoped>
+<style lang="css">
 .saves-panel {
   /* width: 92%; */
   margin: 0 1% 2% 1%;
@@ -1637,6 +1880,9 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
+.log-copy {
+  /* margin-left: -4px; */
+}
 .saves-load-btn:disabled {
   opacity: 0.4;
 }
@@ -1727,5 +1973,128 @@ onBeforeUnmount(() => {
   .modal-box {
     background: #16181c;
   }
+}
+
+/* ===== 可拖拽控制台面板 ===== */
+.log-panel {
+  position: fixed;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #282c34);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #e0e0e0;
+  min-width: 200px;
+  min-height: 80px;
+  touch-action: none;
+}
+.log-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: grab;
+  user-select: none;
+  flex-shrink: 0;
+  touch-action: none;
+  position: relative;
+}
+.log-header:active {
+  cursor: grabbing;
+}
+
+.log-title {
+  font-weight: 600;
+  font-size: 12px;
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+}
+.log-title svg {
+  cursor: grab;
+}
+.log-title svg:active {
+  cursor: grabbing;
+}
+.log-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.6;
+  height: 18px;
+  padding: 0px 6px;
+  border-radius: 4px;
+}
+.log-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+.log-time {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  opacity: 0.5;
+  user-select: none;
+  touch-action: none;
+  white-space: nowrap;
+}
+.log-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.log-run {
+  color: #4caf50;
+  opacity: 1;
+  display: flex;
+  align-items: center;
+}
+.log-close {
+  font-size: 16px;
+}
+.log-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 10px;
+  -webkit-overflow-scrolling: touch;
+}
+.log-pre {
+  padding: 0;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  cursor: pointer;
+  background: transparent;
+}
+.log-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+  opacity: 0.3;
+  user-select: none;
+  touch-action: none;
+}
+.log-resize-handle:hover {
+  opacity: 0.8;
 }
 </style>

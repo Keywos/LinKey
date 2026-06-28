@@ -14,7 +14,8 @@
     <van-dialog />
   </van-config-provider>
   <div v-show="isNeedTabBarRef" style="margin-bottom: 90px">
-    <van-tabbar route :z-index="1024" :border="false" :placeholder="false" :safe-area-inset-bottom="false">
+    <van-tabbar route :z-index="1024" :border="false" :placeholder="false" :safe-area-inset-bottom="false"
+      :class="tabbaring === 'space-evenly' ? 'tb-evenly' : 'tb-center'">
       <van-tabbar-item replace to="/" icon="apps-o"></van-tabbar-item>
       <van-tabbar-item replace to="/search" icon="link-o"></van-tabbar-item>
       <van-tabbar-item replace to="/setting" icon="sign"></van-tabbar-item>
@@ -183,9 +184,8 @@ watchEffect(() => {
   /* margin-bottom: -10px; */
 }
 /* 底部导航栏 */
-.van-tabbar-item {
-  justify-content: v-bind(tabbaring) !important;
-}
+.tb-evenly .van-tabbar-item { justify-content: space-evenly !important; }
+.tb-center .van-tabbar-item { justify-content: center !important; }
 
 .kcard-font_size {
   font-size: 14px;
