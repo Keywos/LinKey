@@ -1545,7 +1545,7 @@ function executeInMainThread(code, onLog) {
         });
     }, 0);
 
-    setTimeout(function () { 
+    setTimeout(function () {
       _safeResolve();
     }, 60000);
 
@@ -1662,7 +1662,7 @@ onBeforeUnmount(() => {
 <style lang="css">
 .saves-panel {
   /* width: 92%; */
-  margin: 0 1% 2% 1%;
+  margin: 0 1% 4% 1%;
   /* margin-bottom: 13px; */
   display: flex;
   flex-direction: column;
@@ -1673,7 +1673,7 @@ onBeforeUnmount(() => {
   line-height: 16px;
   border-radius: 23px;
   /* box-shadow: 0 0 2px #919db687; */
-  box-shadow: 0 2px 4px -2px #919db656;
+  box-shadow: 0px 10px 10px -10px #919db695;
 }
 
 .saves-toolbar {
@@ -1969,22 +1969,16 @@ onBeforeUnmount(() => {
   color: #5c7dbe;
 }
 
-@media (prefers-color-scheme: dark) {
-  .modal-box {
-    background: #16181c;
-  }
-}
-
 /* ===== 可拖拽控制台面板 ===== */
 .log-panel {
   position: fixed;
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  background: var(--bg, #282c34);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  background: #f6f6f6f3;
+  border: 0.1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 8px 26px #919db687;
   overflow: hidden;
   font-size: 13px;
   line-height: 1.5;
@@ -1998,13 +1992,35 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(232, 234, 236, 0.919);
   cursor: grab;
+  color: #0000005c;
   user-select: none;
   flex-shrink: 0;
   touch-action: none;
   position: relative;
 }
+
+@media (prefers-color-scheme: dark) {
+  .modal-box {
+    background: #16181c;
+  }
+  .log-panel {
+    background: #1c1e23f2;
+    border: 0.1px solid #282a31f7;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.486);
+    color: #e0e0e0;
+  }
+
+  .saves-panel {
+    box-shadow: 0px 10px 20px -10px #0000005c;
+  }
+  .log-header {
+    background: rgba(37, 38, 43, 0.733);
+    color: #ceddfb9b;
+  }
+}
+
 .log-header:active {
   cursor: grabbing;
 }
