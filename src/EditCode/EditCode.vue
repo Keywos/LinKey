@@ -37,9 +37,9 @@
           <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" />
 
           <div class="saves-item-info">
-            <div class="saves-item-name">
+            <span class="saves-item-name">
               {{ item.name }}
-            </div>
+            </span>
 
             <div class="saves-item-preview">
               <template v-if="item.url">
@@ -52,11 +52,11 @@
               </template>
             </div>
 
-            <div class="saves-item-meta">
+            <span class="saves-item-meta">
               {{ formatTime(item.updatedAt) }}
               ·
               {{ formatBytes(item.length) }}
-            </div>
+            </span>
           </div>
 
           <button
@@ -1826,9 +1826,12 @@ onBeforeUnmount(() => {
 }
 
 .saves-item-name {
+  margin-top: -2px;
+  padding-bottom: 4px;
   font-size: 14px;
   font-weight: 600;
-  display: flex;
+  /* display: flex; */
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   opacity: 0.8;
@@ -1836,6 +1839,12 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* .saves-item-name-span { */
+/* background: #7088d827;
+  border-radius: 20px;
+  padding: 4px 8px 4px 8px;  */
+/* } */
 
 .saves-item-preview {
   margin-top: 3px;
@@ -1876,7 +1885,7 @@ onBeforeUnmount(() => {
 }
 
 .saves-item-meta {
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 10.5px;
   opacity: 0.5;
 }
