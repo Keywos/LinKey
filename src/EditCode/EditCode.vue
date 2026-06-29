@@ -59,10 +59,13 @@
             </div>
           </div>
 
-          <template v-if="item.url">
-            <button class="saves-refresh-btn" :disabled="loadingItemId === item.id" @click="refreshUrlItem(item)" title="重新请求 URL 更新当前文件">请求</button>
-          </template>
-          <button class="saves-load-btn" :disabled="loadingItemId === item.id" @click="loadItem(item)">加载</button>
+          <button
+            class="saves-load-btn"
+            :disabled="loadingItemId === item.id && (item.url || item.id !== currentItemId)"
+            @click="item.id === currentItemId ? (item.url ? refreshUrlItem(item) : renameItem(item)) : loadItem(item)"
+          >
+            {{ item.id === currentItemId ? (item.url ? "请求URL" : "重命名") : "加载" }}
+          </button>
         </div>
       </div>
     </div>
@@ -715,6 +718,16 @@ async function refreshUrlItem(item) {
     loadingItemId.value = null;
   }
 }
+
+const renameItem = async (item) => {
+  const newName = await askPrompt("重命名", item.name);
+  if (!newName || newName === item.name) return;
+  item.name = newName;
+  cmStore.setCurrentFileName(newName);
+  await saveMeta(item);
+  await persistIndex();
+  showToast("已重命名为 " + newName);
+};
 
 const allChecked = computed(() => savedItems.value.length > 0 && checkedIds.value.length === savedItems.value.length);
 const toggleCheckAll = () => {
@@ -1884,23 +1897,6 @@ onBeforeUnmount(() => {
   /* margin-left: -4px; */
 }
 .saves-load-btn:disabled {
-  opacity: 0.4;
-}
-
-.saves-refresh-btn {
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 14px;
-  border: 0px;
-  background: #8f98c60e;
-  color: var(--text);
-  flex-shrink: 0;
-  cursor: pointer;
-  line-height: 1;
-  /* margin-right: -4px; */
-}
-
-.saves-refresh-btn:disabled {
   opacity: 0.4;
 }
 
