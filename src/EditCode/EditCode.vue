@@ -64,7 +64,7 @@
             :disabled="loadingItemId === item.id && (item.url || item.id !== currentItemId)"
             @click="item.id === currentItemId ? (item.url ? refreshUrlItem(item) : renameItem(item)) : loadItem(item)"
           >
-            {{ item.id === currentItemId ? (item.url ? "请求URL" : "重命名") : "加载" }}
+            {{ item.id === currentItemId ? (item.url ? "重新拉取" : "重命名") : "加载" }}
           </button>
         </div>
       </div>
@@ -1799,7 +1799,7 @@ onBeforeUnmount(() => {
   border: none;
   background: transparent;
   color: var(--text);
-  opacity: 0.35;
+  opacity: 0.1;
   cursor: pointer;
   border-radius: 50%;
   padding: 0;
