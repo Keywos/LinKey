@@ -961,8 +961,8 @@ const onImportFileChange = async (e) => {
   }
 };
 
-const downloadTextFile = (filename, content) => {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+const downloadTextFile = (filename, const downloadTextFile = (filename, content) => {
+  const blob = new Blob([content], { type: "application/octet-stream" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -971,7 +971,7 @@ const downloadTextFile = (filename, content) => {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-};
+};};
 
 const buildExportFilename = (name, fallbackBase = "CH") => {
   return (name || fallbackBase).replace(/[\\/:*?"<>|]/g, "_");
