@@ -971,7 +971,7 @@ const onImportFileChange = async (e) => {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-};};
+};
 
 const buildExportFilename = (name, fallbackBase = "CH") => {
   return (name || fallbackBase).replace(/[\\/:*?"<>|]/g, "_");
