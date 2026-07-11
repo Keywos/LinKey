@@ -29,22 +29,27 @@
         </div>
       </div>
 
-      <van-collapse v-model="activeName" accordion>
-        <van-collapse-item v-for="(i, index) in listpop.filesNames" :title="i" :name="index" :label="`Size: ${listpop.files[i]?.size} ${listpop.files[i]?.type}`">
+      <van-collapse v-model="activeName" accordion class="gist-file-list">
+        <van-collapse-item v-for="(i, index) in listpop.filesNames" :name="index" :label="`Size: ${listpop.files[i]?.size} ${listpop.files[i]?.type}`">
+          <template #title>
+            <div class="gist-file-title">
+              <span>{{ i }}</span>
+              <button type="button" @click.stop="imgedit(i)">编辑</button>
+            </div>
+          </template>
           <div class="gicdeimg">
-            <img :src="yjurl" @click="htmlyl(i)" />
-            <img :src="copyimg" @click="imgcopy(i)" />
-            <img :src="preview" @click="imgpreview(i)" />
-            <img :src="edit" @click="imgedit(i)" />
-            <img :src="del" @click="imgdel(i)" />
+            <button type="button" @click="htmlyl(i)">GitHub</button>
+            <button type="button" @click="imgcopy(i)">复制 URL</button>
+            <!-- <button type="button" @click="imgpreview(i)">预览</button> -->
+            <button type="button" class="gicdeimg-delete" @click="imgdel(i)">删除</button>
           </div>
         </van-collapse-item>
 
         <van-collapse-item v-if="listpop.filesNames.length < 1" :title="listpop.id" label="没有数据">
           <div class="gicdeimg">
-            <img :src="preview" @click="imgpreview(i)" />
-            <img :src="edit" @click="imgedit(i)" />
-            <img :src="del" @click="imgdel(i)" />
+            <!-- <button type="button" @click="imgpreview()">预览</button> -->
+            <button type="button" @click="imgedit()">编辑</button>
+            <button type="button" class="gicdeimg-delete" @click="imgdel()">删除</button>
           </div>
         </van-collapse-item>
       </van-collapse>
@@ -80,7 +85,7 @@
         </div>
       </div>
 
-      <div v-for="(element, index) in gistCard" :key="element.id" class="kcard-one" @click="showCenter(element)">
+      <div v-for="element in gistCard" :key="element.id" class="kcard-one" @click="showCenter(element)">
         <div :key="element.id" class="kcard-font_size kcard-ping_jd">
           <div class="kcard-font_size">
             <img class="kcard-imggit" :src="github" />
@@ -117,19 +122,13 @@
 </template>
 
 <script setup>
-import { ref, watchEffect, onMounted } from "vue";
-import { showToast } from "vant";
+import { computed, onMounted, ref } from "vue";
+import { showConfirmDialog, showToast } from "vant";
 import { sendReq } from "@/http/http.js";
 import github from "@/img/svg/github.svg";
-import copyimg from "@/img/svg/copy.svg";
-import yjurl from "@/img/svg/yjurl.svg";
-import del from "@/img/svg/del.svg";
-import edit from "@/img/svg/edit.svg";
-import preview from "@/img/svg/preview.svg";
 import { useRouter } from "vue-router";
 import { useGistStore } from "@/store/gistStore";
 
-import { showConfirmDialog } from "vant";
 import useV3Clipboard from "vue-clipboard3";
 const { toClipboard } = useV3Clipboard();
 
@@ -137,7 +136,7 @@ const useGS = useGistStore();
 const activeName = ref(0);
 const router = useRouter();
 const showCentertf = ref(false);
-const listpop = ref([]);
+const listpop = ref({ filesNames: [], files: {} });
 
 const isloding = ref(false);
 
@@ -150,12 +149,12 @@ const pushset = () => {
   router.push("/settings");
 };
 const showCenter = (i) => {
-  showCentertf.value = true;
   listpop.value = i;
+  activeName.value = 0;
+  showCentertf.value = true;
 };
 
 const htmlyl = async () => {
-  console.log(activeName.value);
   const url = listpop.value.html_url;
   if (url?.length > 0) {
     window.open(url, "_blank");
@@ -163,40 +162,41 @@ const htmlyl = async () => {
   }
 };
 const imgcopy = async (i) => {
-  console.log(activeName.value);
-  const url = listpop.value.files[i]?.raw_url.replace(/\/raw\/\w+?\//, "/raw/");
-  if (url.length > 0) {
+  const url = listpop.value.files[i]?.raw_url?.replace(/\/raw\/\w+?\//, "/raw/");
+  if (url) {
     await toClipboard(url);
     showToast("复制 URL 成功");
   }
 };
 
-const imgpreview = async (i) => {
-  try {
-    showToast("开始请求");
-    const url = listpop.value.files[i]?.raw_url;
-    const res = await sendReq("GET", url);
-    console.log(res.status);
-    console.log(res);
-    if (res.status == "200") {
-      console.log("11");
-      useGS.setGistResPreview(res.data, "Gist Preview");
-      console.log("22");
-      router.push("/gist/gistEdit");
-    }
-  } catch (e) {
-    showToast("预览失败 " + e.message);
-  }
-};
+// const imgpreview = async (i) => {
+//   try {
+//     showToast("开始请求");
+//     const url = listpop.value.files[i]?.raw_url;
+//     const res = await sendReq("GET", url);
+//     console.log(res.status);
+//     console.log(res);
+//     if (res.status == "200") {
+//       console.log("11");
+//       useGS.setGistResPreview(res.data, "Gist Preview");
+//       console.log("22");
+//       router.push("/gist/gistEdit");
+//     }
+//   } catch (e) {
+//     showToast("预览失败 " + e.message);
+//   }
+// };
 
 const imgedit = async (i) => {
   try {
     showToast("开始请求 Edit");
     const url = listpop.value.files[i]?.raw_url;
+    if (!url) {
+      showToast("未找到文件地址");
+      return;
+    }
     const res = await sendReq("GET", url);
-    console.log(i);
-    if (res.status == "200") {
-      console.log(res.status);
+    if (res.status === 200) {
       useGS.setGistEdit(i, res.data, listpop.value.id, listpop.value.desc, "Gist Edit");
 
       router.push("/gist/gistEdit");
@@ -209,15 +209,14 @@ const imgedit = async (i) => {
 //
 
 let delnamei = "";
-const beforeClose = (action) =>
-  new Promise(async (resolve) => {
-    if (action !== "confirm") {
-      resolve(action !== "confirm");
-    } else {
+const beforeClose = async (action) => {
+  if (action !== "confirm") return true;
+
+  try {
       showToast("开始请求 Del" + delnamei);
       const id = listpop.value.id;
       if (listpop.value.filesNames.length > 1) {
-        let content = {
+        const content = {
           description: listpop.value.desc,
           public: listpop.value.public,
           files: { [delnamei]: { content: "" } },
@@ -248,9 +247,12 @@ const beforeClose = (action) =>
           showCentertf.value = false;
         }
       }
-      resolve(action === "confirm");
-    }
-  });
+    return true;
+  } catch (error) {
+    showToast("删除失败 " + error.message);
+    return false;
+  }
+};
 
 const imgdel = async (i) => {
   try {
@@ -305,16 +307,14 @@ const gistklist = [
     },
   },
 ];
-const gistCard = ref(gistklist);
-let xn = [],
-  xtf = false;
+const gistCard = computed(() => gistklist.concat(useGS.getGistRes));
+const missingSettings = [];
 const username = ref("");
-let GetUserName = localStorage.getItem("GistUserN") || "";
-if (GetUserName == "") {
-  xtf = true;
-  xn.push("未设置用户名");
+const storedUsername = localStorage.getItem("GistUserN") || "";
+if (!storedUsername) {
+  missingSettings.push("未设置用户名");
 } else {
-  username.value = GetUserName;
+  username.value = storedUsername;
 }
 
 const token = ref("");
@@ -325,15 +325,14 @@ try {
 if (LocalGetToken && LocalGetToken?.n !== "" && LocalGetToken?.t != "") {
   token.value = LocalGetToken.t;
 } else {
-  xtf = true;
-  xn.push("未设置 Token");
+  missingSettings.push("未设置 Token");
 }
-xtf && showToast(xn.join(", "));
+missingSettings.length && showToast(missingSettings.join(", "));
 const loading = ref(false);
 
 const retxts = ref("刷新成功");
 const onRefresh = () => {
-  if (username.value != "" && token.value != "") {
+  if (username.value && token.value) {
     loading.value = true;
     rereq("1");
   } else {
@@ -343,21 +342,23 @@ const onRefresh = () => {
   }
 };
 
-const rereq = async (i) => {
-  if (username.value == "" && token.value == "") {
+const rereq = async (isPullRefresh = false) => {
+  if (!username.value || !token.value) {
     showToast("未设置 用户名 , Token");
+    loading.value = false;
     return;
   }
-  if (i != "1") isloding.value = true;
-  let resdata = [];
-  for (let i = 1; i < 10; i++) {
-    console.log(i);
-    const res = await sendReq("GET", `https://api.github.com/users/${username.value}/gists?per_page=60&page=${i}`, {
+  if (!isPullRefresh) isloding.value = true;
+
+  try {
+    const resdata = [];
+    for (let page = 1; page < 10; page++) {
+      const res = await sendReq("GET", `https://api.github.com/users/${username.value}/gists?per_page=60&page=${page}`, {
       Authorization: `token ${token.value}`,
       Accept: "application/vnd.github.v3+json",
     });
-    console.log(res.status);
-    if (res.status == "200" && res.data.length > 0) {
+      if (res.status !== 200 || !Array.isArray(res.data) || res.data.length === 0) break;
+
       const mapdata = res.data.map(({ id, html_url, files, public: publicProp, created_at, updated_at, description, owner }) => ({
         id,
         html_url,
@@ -367,23 +368,24 @@ const rereq = async (i) => {
         created: forTS(new Date(created_at).getTime()),
         updated: forTS(new Date(updated_at).getTime()),
         desc: description,
-        user: owner.login,
+        user: owner?.login || "",
       }));
-      resdata = resdata.concat(mapdata);
+      resdata.push(...mapdata);
       if (res.data.length < 60) break;
-    } else {
-      break;
     }
-  }
 
-  if (resdata.length > 0) {
-    useGS.setGistRes(resdata);
-    if (localStorage.getItem("LocalGistResTure") == 1) {
-      localStorage.setItem("GistRes", JSON.stringify(resdata));
+    if (resdata.length > 0) {
+      useGS.setGistRes(resdata);
+      if (localStorage.getItem("LocalGistResTure") == 1) {
+        localStorage.setItem("GistRes", JSON.stringify(resdata));
+      }
+      if (!isPullRefresh) showToast("刷新成功");
     }
+  } catch (error) {
+    showToast("刷新失败 " + error.message);
+  } finally {
     isloding.value = false;
     loading.value = false;
-    i != "1" && showToast("刷新成功");
   }
 };
 
@@ -404,10 +406,8 @@ onMounted(() => {
       let io = 0;
       if (Array.isArray(gl) && gl.length != 0) {
         gl.forEach((i) => {
-          if (typeof i != "object" && !i.filesNames) {
-            io++;
-            throw new Error("读取到数组元素不是对象");
-          }
+          if (!i || typeof i !== "object" || !Array.isArray(i.filesNames)) throw new Error("读取到无效缓存数据");
+          io++;
         });
         useGS.setGistRes(gl);
       }
@@ -422,11 +422,6 @@ onMounted(() => {
     showToast("正在拉取远程资源");
     rereq();
   }
-});
-watchEffect(() => {
-  const getGistResn = useGS.getGistRes;
-  console.log("变化");
-  gistCard.value = gistklist.concat(getGistResn);
 });
 </script>
 
@@ -568,12 +563,75 @@ watchEffect(() => {
 }
 .gicdeimg {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 8px;
 }
-.gicdeimg > * {
-  height: 16px;
-  width: 16px;
-  padding: 0 16px;
+
+.gist-file-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.van-collapse-item .van-cell__title {
+  position: relative;
+}
+
+.gist-file-list .van-cell__right-icon {
+  display: none;
+}
+
+.gist-file-title span {
+  min-width: 0;
+  flex: 1;
+  padding-right: 58px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gist-file-title button {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  flex: none;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.16);
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gicdeimg button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(128, 128, 128, 0.16);
+  color: inherit;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.gicdeimg button:hover {
+  background: rgba(128, 128, 128, 0.25);
+}
+
+.gicdeimg button:active {
+  transform: scale(0.95);
+}
+
+.gicdeimg .gicdeimg-delete {
+  color: #d65a5a;
 }
 
 [class*="van-hairline"]:after {

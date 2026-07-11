@@ -1,85 +1,130 @@
 <template>
   <div class="cmviewRef">
-    <!-- 折叠态：小圆点 -->
-    <div v-if="collapsed" class="cm-collapsed-dot" :style="toolbarStyle" @pointerdown="startDragPointer">
-      <span class="cm-collapsed-icon">
-        <svg
-          class="icon"
-          style="width: 1.2em; height: 1.2em; vertical-align: middle; fill: currentColor; overflow: hidden"
-          viewBox="0 0 1024 1024"
-          version="1.1"
-          xmlns="http://www.w3.org/2000/svg"
-          p-id="8591"
-        >
-          <path
-            d="M546.112 33.152L512.32 0 512 0.32 511.68 0l-33.792 33.152L192 308.352 269.056 384 512 150.08 754.944 384 832 308.416 546.112 33.152zM546.112 990.848L512.32 1024 512 1023.68 511.68 1024l-33.792-33.152L192 715.648 269.056 640 512 873.92 754.944 640 832 715.584l-285.888 275.264z"
-            fill="currentColor"
-            p-id="8592"
-          ></path>
-        </svg>
-      </span>
-    </div>
-    <!-- 展开态：完整工具栏 -->
-    <div v-else class="cm-toolbar-wrapper" :style="toolbarStyle" @pointerdown="startDragPointer">
-      <div class="cm-img-button">
-        <div>
-          <button class="cm-collapse-btn" :style="collapseBtnOrder" title="折叠">
-            <svg
-              class="icon"
-              style="width: 1.2em; height: 1.2em; vertical-align: middle; fill: currentColor; overflow: hidden; transform: rotate(90deg)"
-              viewBox="0 0 1024 1024"
-              version="1.1"
-              xmlns="http://www.w3.org/2000/svg"
-              p-id="8591"
-            >
-              <path
-                d="M546.112 33.152L512.32 0 512 0.32 511.68 0l-33.792 33.152L192 308.352 269.056 384 512 150.08 754.944 384 832 308.416 546.112 33.152zM546.112 990.848L512.32 1024 512 1023.68 511.68 1024l-33.792-33.152L192 715.648 269.056 640 512 873.92 754.944 640 832 715.584l-285.888 275.264z"
-                fill="currentColor"
-                p-id="8592"
-              ></path>
-            </svg>
-          </button>
-          <div class="language-select-wrap">
-            <select v-model="selectedLanguage" class="language-select" :title="selectedLanguageTitle" aria-label="Editor language" @change="onLanguageChange">
-              <option v-for="option in languageOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
+    <div class="cm-toolbar-row">
+      <!-- 展开态：完整工具栏 -->
+      <div v-if="!collapsed" class="cm-toolbar-wrapper">
+        <div class="cm-img-button">
+          <div>
+            <div class="language-select-wrap">
+              <select v-model="selectedLanguage" class="language-select" :title="selectedLanguageTitle" aria-label="Editor language" @change="onLanguageChange">
+                <option v-for="option in languageOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+            <button @click="undoCode"><img :src="undoimg" /></button>
+            <button @click="redoCode"><img :src="redoimg" /></button>
+            <button @click="formatCode" title="JS 选项"><img :src="format" /></button>
+            <button @click="copyText"><img :src="copyimg" /></button>
+            <button @click="delAllCode"><img :src="del" /></button>
+            <button @click="pasteNav"><img :src="paste" /></button>
           </div>
-          <button @click="undoCode"><img :src="undoimg" /></button>
-          <button @click="redoCode"><img :src="redoimg" /></button>
-          <button @click="formatCode" title="JS 选项"><img :src="format" /></button>
-          <button @click="toggleSearch"><img :src="searchimg" /></button>
-          <button @click="copyText"><img :src="copyimg" /></button>
-          <button @click="delAllCode"><img :src="del" /></button>
-          <button @click="pasteNav"><img :src="paste" /></button>
         </div>
       </div>
-      <div v-show="searchOpen" class="cm-search-box">
-        <input
-          ref="searchInputRef"
-          v-model="searchQuery"
-          type="text"
-          class="cm-search-input"
-          placeholder="查找…"
-          @input="onSearchInput"
-          @keydown.enter.prevent="onSearchEnter"
-          @keydown.escape.prevent="toggleSearch"
-        />
-        <button class="cm-search-btn" @click="findPrev" title="上一个 (Shift+Enter)">&#x25B2;</button>
-        <button class="cm-search-opt" :class="{ active: searchCaseSensitive }" @click="toggleCaseSensitive" title="区分大小写">Aa</button>
-        <button class="cm-search-opt" :class="{ active: searchWholeWord }" @click="toggleWholeWord" title="全词匹配">ab</button>
-        <button class="cm-search-opt" :class="{ active: searchRegexp }" @click="toggleRegexp" title="正则表达式">.*</button>
-
-        <input v-model="replaceQuery" type="text" class="cm-search-input" placeholder="替换…" @keydown.enter.prevent="replaceNext" />
-        <button class="cm-search-btn" @click="findNext" title="下一个 (Enter)">&#x25BC;</button>
-        <button class="cm-replace-btn" @click="replaceNext">替换</button>
-        <button class="cm-replace-btn" style="grid-column: span 2" @click="replaceAll">全替换</button>
-      </div>
+      <button
+        class="cm-collapse-btn"
+        :class="{ 'is-collapsed': collapsed }"
+        type="button"
+        :title="collapsed ? '展开工具栏' : '折叠工具栏'"
+        :aria-label="collapsed ? '展开工具栏' : '折叠工具栏'"
+        @click="toggleCollapsed"
+      >
+        <span class="cm-toolbar-more" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M203.1 599.3c-48.9 0-88.6-39.6-88.6-88.5s39.6-88.5 88.6-88.5c48.9 0 88.6 39.6 88.6 88.5-0.1 48.9-39.7 88.5-88.6 88.5z m309.9 0c-48.9 0-88.6-39.6-88.6-88.5s39.6-88.5 88.6-88.5c48.9 0 88.6 39.6 88.6 88.5s-39.7 88.5-88.6 88.5z m309.9 0c-48.9 0-88.6-39.6-88.6-88.5s39.6-88.5 88.6-88.5c48.9 0 88.6 39.6 88.6 88.5s-39.6 88.5-88.6 88.5z"
+            />
+          </svg>
+        </span>
+      </button>
     </div>
+
+    <Teleport to="body">
+      <button
+        v-if="!searchOpen"
+        class="cm-search-fab"
+        :class="{ dragging: searchFabDragging, 'is-dark': isDarkModeEnabled }"
+        :style="[searchFabStyle, editorOverlayStyle]"
+        type="button"
+        aria-label="打开查找与替换"
+        title="查找与替换（可拖动）"
+        @pointerdown="startSearchFabDrag"
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <circle cx="10.8" cy="10.8" r="6.6" />
+          <path d="m16 16 5 5" />
+        </svg>
+      </button>
+    </Teleport>
+
+    <Teleport to="body">
+      <section
+        v-if="searchOpen"
+        class="cm-search-sheet"
+        :class="{ 'is-dark': isDarkModeEnabled }"
+        role="dialog"
+        aria-label="查找与替换"
+        :style="[searchSheetStyle, editorOverlayStyle]"
+        @keydown.escape.prevent="closeSearch"
+      >
+        <header class="cm-search-header" @pointerdown="startSearchSheetDrag">
+          <div class="cm-search-options" aria-label="搜索选项">
+            <button type="button" :class="{ active: searchCaseSensitive }" :aria-pressed="searchCaseSensitive" title="区分大小写" @click="toggleCaseSensitive">Aa</button>
+            <button type="button" :class="{ active: searchWholeWord }" :aria-pressed="searchWholeWord" title="全词匹配" @click="toggleWholeWord">ab</button>
+            <button type="button" :class="{ active: searchRegexp }" :aria-pressed="searchRegexp" title="正则表达式" @click="toggleRegexp">.*</button>
+          </div>
+          <span v-if="!searchIsValid" class="cm-search-error">正则无效</span>
+          <button class="cm-replace-toggle" type="button" :class="{ active: replaceOpen }" :aria-expanded="replaceOpen" @click="replaceOpen = !replaceOpen">
+            {{ replaceOpen ? "收起" : "替换" }}
+          </button>
+          <button class="cm-search-close" type="button" aria-label="关闭搜索" @click="closeSearch">×</button>
+        </header>
+
+        <div class="cm-search-field-row">
+          <input
+            ref="searchInputRef"
+            v-model="searchQuery"
+            type="search"
+            enterkeyhint="search"
+            class="cm-search-input"
+            :class="{ invalid: !searchIsValid }"
+            placeholder="查找内容"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            @input="onSearchInput"
+            @keydown.enter.prevent="onSearchEnter"
+          />
+          <button class="cm-search-nav" type="button" aria-label="上一个匹配" title="上一个" @click="findPrev">↑</button>
+          <button class="cm-search-nav" type="button" aria-label="下一个匹配" title="下一个" @click="findNext">↓</button>
+        </div>
+
+        <div v-if="replaceOpen" class="cm-replace-area">
+          <div class="cm-replace-row">
+            <input
+              v-model="replaceQuery"
+              type="text"
+              class="cm-search-input"
+              placeholder="替换为（可留空）"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              @input="disarmReplaceAll"
+              @keydown.enter.prevent="findNext"
+            />
+            <div class="cm-replace-actions">
+              <button type="button" :disabled="!canSearch" @click="replaceNext">替换</button>
+              <button type="button" class="cm-replace-all" :class="{ armed: replaceAllArmed }" :disabled="!canSearch" @click="confirmReplaceAll">
+                {{ replaceAllArmed ? "再次点击确认" : "全替" }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </Teleport>
     <div ref="viewRef" style="width: 100%; font-size: 11px" />
     <div style="height: 10px" />
- 
+
     <Teleport to="body">
       <div v-if="compressOpts.visible" class="compress-overlay" @click.self="closeCompressDialog">
         <div class="compress-dialog">
@@ -181,6 +226,20 @@ const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
 const { isDarkModeEnabled } = useTheme();
 
+const EDITOR_DARK_BACKGROUNDS = new Set(["#282c34", "#141414", "#000000"]);
+const editorThemeVersion = ref(0);
+const getEditorDarkBackground = () => {
+  editorThemeVersion.value;
+  const background = localStorage.getItem("EditorDarkBackground");
+  return EDITOR_DARK_BACKGROUNDS.has(background) ? background : "#282c34";
+};
+const getEditorTheme = () => {
+  if (!isDarkModeEnabled.value) return lightCode;
+  getEditorDarkBackground();
+  return darkCode;
+};
+const editorOverlayStyle = computed(() => (isDarkModeEnabled.value ? { "--editor-overlay-background": getEditorDarkBackground() } : {}));
+
 const props = defineProps({
   isReadOnly: {
     type: Boolean,
@@ -222,8 +281,8 @@ const shikiSyntax = new Compartment();
 const editorPlaceholder = new Compartment();
 
 const heavyDecorations = new Compartment();
-const FOLD_GUTTER_THRESHOLD = 1 * 1024 * 1024;     // ★ 1MB+ 关闭折叠槽
-const INDENT_MARKER_THRESHOLD = 500 * 1024;         // ★ 500KB+ 关闭缩进标记
+const FOLD_GUTTER_THRESHOLD = 1 * 1024 * 1024; // ★ 1MB+ 关闭折叠槽
+const INDENT_MARKER_THRESHOLD = 500 * 1024; // ★ 500KB+ 关闭缩进标记
 const createHeavyDecorations = (docLen = 0) => {
   const deco = [];
   if (docLen < FOLD_GUTTER_THRESHOLD) deco.push(foldGutter({ closedText: "▸", openText: "▾" }));
@@ -233,7 +292,7 @@ const createHeavyDecorations = (docLen = 0) => {
 
 // ★ 大文件时可关闭的编辑辅助扩展（自动补全、括号匹配、选区高亮、自动闭合）
 const editAssist = new Compartment();
-const createEditAssist = (enabled) => enabled ? [autocompletion(), bracketMatching(), highlightSelectionMatches(), closeBrackets()] : [];
+const createEditAssist = (enabled) => (enabled ? [autocompletion(), bracketMatching(), highlightSelectionMatches(), closeBrackets()] : []);
 
 // ★ 历史记录深度限制 — 大文件减少撤销步数以节省内存
 const historyCompartment = new Compartment();
@@ -248,21 +307,12 @@ const autoDetectedLanguage = ref(null);
 const isFormatting = ref(false);
 const isCopying = ref(false);
 
-const editorLanguage_short = {
-  javascript: "JS",
-  json: "JSON",
-  json5: "J..5",
-  yaml: "YAML",
-  ini: "INI",
-  plaintext: "TXT",
-};
-
 let languageRequestId = 0;
 const editorLanguage_json = {
   auto: "自动",
-  javascript: "JavaScript",
+  javascript: "JS",
   json: "JSON",
-  json5: "J..5",
+  json5: "JSON5",
   yaml: "YAML",
   ini: "INI",
   plaintext: "纯文本",
@@ -278,10 +328,6 @@ const languageDetectionStatus = ref("idle");
 const getLanguageLabel = (language) => {
   const normalizedLanguage = normalizeEditorLanguage(language, "plaintext");
   return editorLanguage_json[normalizedLanguage] || editorLanguage_json.plaintext;
-};
-const getShortLanguageLabel = (language) => {
-  const normalizedLanguage = normalizeEditorLanguage(language, "plaintext");
-  return editorLanguage_short[normalizedLanguage] || getLanguageLabel(normalizedLanguage);
 };
 
 const selectedLanguageDisplayLabel = computed(() => getLanguageLabel(selectedLanguage.value));
@@ -332,14 +378,7 @@ const onLanguageChange = () => {
 
 const languageOptions = computed(() =>
   EDITOR_LANGUAGE_OPTIONS.map((option) => {
-    let label;
-    if (option.value === "auto") {
-      label = autoDetectedLanguage.value ? `${getShortLanguageLabel(autoDetectedLanguage.value)}` : getLanguageLabel(option.value);
-    } else if (option.value === "javascript" || option.value === "plaintext") {
-      label = getShortLanguageLabel(option.value);
-    } else {
-      label = getLanguageLabel(option.value);
-    }
+    const label = option.value === "auto" && autoDetectedLanguage.value ? getLanguageLabel(autoDetectedLanguage.value) : getLanguageLabel(option.value);
     return { ...option, label };
   }),
 );
@@ -347,7 +386,7 @@ const selectedLanguageTitle = computed(() => {
   if (normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto") {
     return selectedLanguageDisplayLabel.value;
   }
-  return autoDetectedLanguage.value ? `${getShortLanguageLabel(autoDetectedLanguage.value)}` : getLanguageLabel("auto");
+  return autoDetectedLanguage.value ? getLanguageLabel(autoDetectedLanguage.value) : getLanguageLabel("auto");
 });
 
 const createShikiHighlight = (language = activeLanguage.value) =>
@@ -468,10 +507,16 @@ const syncLanguageForDocument = async (docContent) => {
 
 /** 根据文件名扩展名映射语言，无匹配返回 null */
 const EXT_TO_LANG = {
-  js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
-  ts: "javascript", tsx: "javascript",
-  json: "json", json5: "json5",
-  yaml: "yaml", yml: "yaml",
+  js: "javascript",
+  jsx: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  ts: "javascript",
+  tsx: "javascript",
+  json: "json",
+  json5: "json5",
+  yaml: "yaml",
+  yml: "yaml",
   ini: "ini",
 };
 function detectLanguageFromFilename(filename) {
@@ -488,7 +533,7 @@ function detectLanguageFromFilename(filename) {
 function shouldLockLanguageFromFilename(filename) {
   if (!filename) return null;
   const parts = filename.split(".");
-  if (parts.length < 2 || !parts.at(-1)) return null;  // 无扩展名
+  if (parts.length < 2 || !parts.at(-1)) return null; // 无扩展名
   const ext = parts.at(-1).toLowerCase();
   return EXT_TO_LANG[ext] || "plaintext";
 }
@@ -509,10 +554,13 @@ const debouncedSyncLanguage = (docContent) => {
 
   if (isLarge && typeof requestIdleCallback !== "undefined") {
     // ★ 大文件使用 requestIdleCallback，让浏览器在空闲时再做语言检测
-    syncIdleId = requestIdleCallback(() => {
-      syncIdleId = null;
-      syncLanguageForDocument(docContent);
-    }, { timeout: 2000 });
+    syncIdleId = requestIdleCallback(
+      () => {
+        syncIdleId = null;
+        syncLanguageForDocument(docContent);
+      },
+      { timeout: 2000 },
+    );
   } else {
     syncTimer = setTimeout(() => {
       syncLanguageForDocument(docContent);
@@ -582,11 +630,11 @@ const CreateView = () => {
     state: EditorState.create({
       extensions: [
         historyCompartment.of(history()),
-        keymap.of([indentWithTab, ...searchKeymap, ...defaultKeymap, ...historyKeymap]),
+        keymap.of([{ key: "Mod-f", run: () => (openSearch(), true) }, indentWithTab, ...searchKeymap, ...defaultKeymap, ...historyKeymap]),
         langs.of([]),
         shikiSyntax.of([]), // ★ 初始不加载，由 applyLanguage 按需开启
         editorPlaceholder.of(createEditorPlaceholder()),
-        editorTheme.of(isDarkModeEnabled.value ? darkCode : lightCode),
+        editorTheme.of(getEditorTheme()),
         EditorState.readOnly.of(props.isReadOnly ? true : false),
         EditorView.lineWrapping, // 换行
         lineNumbers(),
@@ -664,12 +712,7 @@ const CreateView = () => {
         // Phase 1: 先清空文档、关闭重型装饰，释放旧文档内存
         view.dispatch({
           changes: { from: 0, to: view.state.doc.length, insert: "" },
-          effects: [
-            heavyDecorations.reconfigure([]),
-            editAssist.reconfigure(createEditAssist(false)),
-            historyCompartment.reconfigure(createHistoryExt(true)),
-            hyperLinkCompartment.reconfigure([]),
-          ],
+          effects: [heavyDecorations.reconfigure([]), editAssist.reconfigure(createEditAssist(false)), historyCompartment.reconfigure(createHistoryExt(true)), hyperLinkCompartment.reconfigure([])],
           annotations: Transaction.addToHistory.of(false),
         });
         // 让出主线程，等待 GC 回收旧文档 + 浏览器绘制
@@ -723,8 +766,6 @@ const CreateView = () => {
     }
   };
 
-
-
   watch(
     () => cmStore.CmCode,
     (newValue) => {
@@ -748,7 +789,7 @@ const CreateView = () => {
 
   watch(isDarkModeEnabled, (isDark) => {
     console.log(isDarkModeEnabled);
-    const effects = [editorTheme.reconfigure(isDark ? darkCode : lightCode)];
+    const effects = [editorTheme.reconfigure(getEditorTheme())];
     // 只有当前语言用了 shiki 才更新 shiki 主题
     if (SHIKI_SUPPORTED_LANGUAGES.has(activeLanguage.value)) {
       effects.push(shikiSyntax.reconfigure(createShikiHighlight()));
@@ -787,11 +828,30 @@ watch(
 
 onMounted(() => {
   CreateView();
+  keepSearchFabInViewport();
+  window.addEventListener("resize", keepSearchFabInViewport);
+  window.addEventListener("editor-theme-change", refreshEditorTheme);
 });
+
+const refreshEditorTheme = () => {
+  editorThemeVersion.value++;
+  if (!view) return;
+  view.dispatch({ effects: editorTheme.reconfigure(getEditorTheme()) });
+};
 
 onBeforeUnmount(() => {
   clearLanguageDetectionTimer();
   clearTimeout(syncTimer);
+  clearTimeout(replaceAllArmTimer);
+  window.removeEventListener("resize", keepSearchFabInViewport);
+  window.removeEventListener("editor-theme-change", refreshEditorTheme);
+  document.removeEventListener("pointermove", onSearchFabDrag);
+  document.removeEventListener("pointerup", endSearchFabDrag);
+  document.removeEventListener("pointercancel", endSearchFabDrag);
+  // ★ 清理搜索面板拖拽事件
+  document.removeEventListener("pointermove", onSearchSheetDrag);
+  document.removeEventListener("pointerup", endSearchSheetDrag);
+  document.removeEventListener("pointercancel", endSearchSheetDrag);
   if (syncIdleId != null && typeof cancelIdleCallback !== "undefined") {
     cancelIdleCallback(syncIdleId);
     syncIdleId = null;
@@ -811,14 +871,149 @@ onBeforeUnmount(() => {
 const collapsed = ref(localStorage.getItem("cm_collapsed") === "true");
 watch(collapsed, (v) => localStorage.setItem("cm_collapsed", v));
 const searchOpen = ref(false);
-const collapseBtnOrder = computed(() => ({ order: 999 }));
-const toolbarStyle = computed(() => ({ right: "2%", top: toolbarTopPx.value + "px" }));
+const replaceOpen = ref(false);
 const searchQuery = ref("");
 const replaceQuery = ref("");
 const searchCaseSensitive = ref(false);
 const searchWholeWord = ref(false);
 const searchRegexp = ref(false);
 const searchInputRef = ref(null);
+const replaceAllArmed = ref(false);
+let replaceAllArmTimer = null;
+
+const SEARCH_FAB_SIZE = 48;
+const SEARCH_FAB_MARGIN = 10;
+const savedSearchFabPos = localStorage.getItem("cm_search_fab_pos");
+let initialSearchFabPos = null;
+try {
+  initialSearchFabPos = savedSearchFabPos ? JSON.parse(savedSearchFabPos) : null;
+} catch {}
+const searchFabPos = ref(
+  initialSearchFabPos && Number.isFinite(initialSearchFabPos.x) && Number.isFinite(initialSearchFabPos.y)
+    ? initialSearchFabPos
+    : { x: window.innerWidth - SEARCH_FAB_SIZE - 16, y: Math.round(window.innerHeight * 0.66 - SEARCH_FAB_SIZE / 2) },
+);
+const searchFabDragging = ref(false);
+const searchFabStyle = computed(() => ({ left: `${searchFabPos.value.x}px`, top: `${searchFabPos.value.y}px` }));
+let searchFabDragState = null;
+
+// ★ 搜索面板拖拽
+const savedSheetPos = localStorage.getItem("cm_search_sheet_pos");
+const searchSheetPos = ref(
+  savedSheetPos
+    ? (() => {
+        try {
+          return JSON.parse(savedSheetPos);
+        } catch {}
+      })()
+    : null,
+);
+const searchSheetStyle = computed(() => {
+  if (!searchSheetPos.value) return {};
+  return { left: `${searchSheetPos.value.x}px`, top: `${searchSheetPos.value.y}px`, transform: "none" };
+});
+let searchSheetDragState = null;
+
+const clampSearchSheetPosition = (x, y) => {
+  const minX = 10;
+  const minY = 10;
+  // 用面板实际宽度计算右侧边界，避免拖到屏幕右边以外
+  const panelWidth = document.querySelector(".cm-search-sheet")?.offsetWidth ?? Math.min(560, window.innerWidth - 20) + 24;
+  const maxX = window.innerWidth - panelWidth - 10;
+  const maxY = window.innerHeight - 150;
+  return {
+    x: Math.max(minX, Math.min(maxX, x)),
+    y: Math.max(minY, Math.min(maxY, y)),
+  };
+};
+
+const initSearchSheetPos = () => {
+  if (!searchSheetPos.value) {
+    searchSheetPos.value = {
+      x: Math.max(10, Math.round((window.innerWidth - 560) / 2)),
+      y: Math.max(10, Math.round(window.innerHeight * 0.08)),
+    };
+  }
+};
+
+const onSearchSheetDrag = (e) => {
+  if (!searchSheetDragState) return;
+  const dx = e.clientX - searchSheetDragState.startX;
+  const dy = e.clientY - searchSheetDragState.startY;
+  searchSheetPos.value = clampSearchSheetPosition(searchSheetDragState.originX + dx, searchSheetDragState.originY + dy);
+};
+
+const endSearchSheetDrag = () => {
+  document.removeEventListener("pointermove", onSearchSheetDrag);
+  document.removeEventListener("pointerup", endSearchSheetDrag);
+  document.removeEventListener("pointercancel", endSearchSheetDrag);
+  if (searchSheetDragState) {
+    localStorage.setItem("cm_search_sheet_pos", JSON.stringify(searchSheetPos.value));
+  }
+  searchSheetDragState = null;
+};
+
+const startSearchSheetDrag = (e) => {
+  if (e.button !== undefined && e.button !== 0) return;
+  e.preventDefault();
+  initSearchSheetPos();
+  searchSheetDragState = {
+    startX: e.clientX,
+    startY: e.clientY,
+    originX: searchSheetPos.value.x,
+    originY: searchSheetPos.value.y,
+  };
+  document.addEventListener("pointermove", onSearchSheetDrag, { passive: false });
+  document.addEventListener("pointerup", endSearchSheetDrag);
+  document.addEventListener("pointercancel", endSearchSheetDrag);
+};
+
+const clampSearchFabPosition = (x, y) => ({
+  x: Math.max(SEARCH_FAB_MARGIN, Math.min(window.innerWidth - SEARCH_FAB_SIZE - SEARCH_FAB_MARGIN, x)),
+  y: Math.max(SEARCH_FAB_MARGIN, Math.min(window.innerHeight - SEARCH_FAB_SIZE - SEARCH_FAB_MARGIN, y)),
+});
+
+// 与折叠圆点一样始终固定在可视区域内；避免其它页面或旋转屏幕后恢复了屏幕外的旧坐标。
+const keepSearchFabInViewport = () => {
+  searchFabPos.value = clampSearchFabPosition(searchFabPos.value.x, searchFabPos.value.y);
+};
+
+const onSearchFabDrag = (e) => {
+  if (!searchFabDragState) return;
+  const dx = e.clientX - searchFabDragState.startX;
+  const dy = e.clientY - searchFabDragState.startY;
+  if (!searchFabDragging.value && Math.hypot(dx, dy) < 6) return;
+  searchFabDragging.value = true;
+  searchFabPos.value = clampSearchFabPosition(searchFabDragState.originX + dx, searchFabDragState.originY + dy);
+};
+
+const endSearchFabDrag = () => {
+  document.removeEventListener("pointermove", onSearchFabDrag);
+  document.removeEventListener("pointerup", endSearchFabDrag);
+  document.removeEventListener("pointercancel", endSearchFabDrag);
+  if (searchFabDragging.value) {
+    localStorage.setItem("cm_search_fab_pos", JSON.stringify(searchFabPos.value));
+  } else {
+    openSearch();
+  }
+  searchFabDragState = null;
+  requestAnimationFrame(() => (searchFabDragging.value = false));
+};
+
+const startSearchFabDrag = (e) => {
+  if (e.button !== undefined && e.button !== 0) return;
+  e.preventDefault();
+  searchFabDragState = {
+    startX: e.clientX,
+    startY: e.clientY,
+    originX: searchFabPos.value.x,
+    originY: searchFabPos.value.y,
+  };
+  searchFabDragging.value = false;
+  document.addEventListener("pointermove", onSearchFabDrag);
+  document.addEventListener("pointerup", endSearchFabDrag);
+  document.addEventListener("pointercancel", endSearchFabDrag);
+};
 
 const buildSearchQuery = () =>
   new SearchQuery({
@@ -829,6 +1024,15 @@ const buildSearchQuery = () =>
     regexp: searchRegexp.value,
   });
 
+const searchIsValid = computed(() => !searchQuery.value || buildSearchQuery().valid);
+const canSearch = computed(() => Boolean(searchQuery.value && searchIsValid.value));
+
+const disarmReplaceAll = () => {
+  replaceAllArmed.value = false;
+  clearTimeout(replaceAllArmTimer);
+  replaceAllArmTimer = null;
+};
+
 const dispatchSearch = () => {
   if (!view) return;
   view.dispatch({ effects: setSearchQuery.of(buildSearchQuery()) });
@@ -836,35 +1040,54 @@ const dispatchSearch = () => {
 
 const toggleCaseSensitive = () => {
   searchCaseSensitive.value = !searchCaseSensitive.value;
+  disarmReplaceAll();
   dispatchSearch();
 };
 const toggleWholeWord = () => {
   searchWholeWord.value = !searchWholeWord.value;
+  disarmReplaceAll();
   dispatchSearch();
 };
 const toggleRegexp = () => {
   searchRegexp.value = !searchRegexp.value;
+  disarmReplaceAll();
   dispatchSearch();
 };
 
-const toggleSearch = () => {
-  searchOpen.value = !searchOpen.value;
-  if (searchOpen.value) {
-    nextTick(() => {
-      searchInputRef.value?.focus();
-      searchInputRef.value?.select();
-    });
-  } else {
-    searchQuery.value = "";
-    replaceQuery.value = "";
-    searchCaseSensitive.value = false;
-    searchWholeWord.value = false;
-    searchRegexp.value = false;
-    dispatchSearch();
+const openSearch = () => {
+  if (!view) return;
+  searchOpen.value = true;
+
+  const selection = view.state.selection.main;
+  if (selection.from !== selection.to) {
+    const selectedText = view.state.sliceDoc(selection.from, selection.to);
+    if (selectedText.length <= 200 && !selectedText.includes("\n")) {
+      searchQuery.value = selectedText;
+    }
   }
+
+  dispatchSearch();
+  nextTick(() => {
+    searchInputRef.value?.focus({ preventScroll: true });
+    searchInputRef.value?.select();
+  });
+};
+
+const closeSearch = () => {
+  searchOpen.value = false;
+  disarmReplaceAll();
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+  if (view) {
+    view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: "" })) });
+  }
+  // ★ 关闭时清除拖拽状态
+  searchSheetDragState = null;
 };
 
 const onSearchInput = () => {
+  disarmReplaceAll();
   dispatchSearch();
 };
 
@@ -878,31 +1101,44 @@ const onSearchEnter = (e) => {
 };
 
 const findNext = () => {
-  if (searchQuery.value && view) {
+  if (canSearch.value && view) {
     dispatchSearch();
     cmFindNext(view);
   }
 };
 
 const findPrev = () => {
-  if (searchQuery.value && view) {
+  if (canSearch.value && view) {
     dispatchSearch();
     cmFindPrev(view);
   }
 };
 
 const replaceNext = () => {
-  if (searchQuery.value && view) {
+  if (canSearch.value && view) {
+    disarmReplaceAll();
     dispatchSearch();
     cmReplaceNext(view);
   }
 };
 
 const replaceAll = () => {
-  if (searchQuery.value && view) {
+  if (canSearch.value && view) {
     dispatchSearch();
     cmReplaceAll(view);
+    disarmReplaceAll();
   }
+};
+
+const confirmReplaceAll = () => {
+  if (!canSearch.value) return;
+  if (replaceAllArmed.value) {
+    replaceAll();
+    return;
+  }
+  replaceAllArmed.value = true;
+  clearTimeout(replaceAllArmTimer);
+  replaceAllArmTimer = setTimeout(disarmReplaceAll, 2500);
 };
 
 const undoCode = () => undo(view);
@@ -1097,96 +1333,12 @@ const pasteNav = async () => {
   }
 };
 
-// ===== 工具栏垂直拖拽 =====
-let dragStartY = 0;
-let dragStartTop = 0;
-const DRAG_THRESHOLD = 6;
-let isDragging = false;
-
-const savedTopPx = localStorage.getItem("cm_toolbar_top_px");
-const toolbarTopPx = ref(savedTopPx !== null ? parseFloat(savedTopPx) : Math.round(window.innerHeight * 0.66));
-
 const onCollapseClick = () => {
   collapsed.value = true;
 };
 const toggleCollapsed = () => {
   collapsed.value = !collapsed.value;
 };
-
-function blockClickAfterDrag(e) {
-  if (e.target.closest(".cm-toolbar-wrapper, .cm-collapsed-dot")) {
-    e.stopPropagation();
-  }
-}
-
-function startDragPointer(e) {
-  // ★ 跳过功能性按钮/输入框，但允许拖拽手柄（折叠按钮）正常拖拽
-  if (e.target.closest("input, select, textarea, option, button:not(.cm-collapse-btn)")) return;
-  // ★ pageY 是文档坐标，不受 iOS 键盘弹出/收起导致的视觉视口变化影响
-  dragStartY = e.pageY;
-  dragStartTop = toolbarTopPx.value;
-  isDragging = false;
-  e.preventDefault();
-  try {
-    e.currentTarget.setPointerCapture(e.pointerId);
-  } catch (_) {}
-  document.addEventListener("pointermove", onDragPointer);
-  document.addEventListener("pointerup", endDragPointer);
-}
-
-function onDragPointer(ev) {
-  // ★ pageY 是文档坐标，不受 iOS 键盘弹出/收起导致的视觉视口变化影响
-  const dy = ev.pageY - dragStartY;
-  if (!isDragging && Math.abs(dy) < DRAG_THRESHOLD) return;
-  isDragging = true;
-  // ★ document.documentElement.clientHeight 是布局视口高度，iOS 键盘不影响它
-  const layoutHeight = document.documentElement.clientHeight;
-  toolbarTopPx.value = Math.max(0, Math.min(layoutHeight - 48, dragStartTop + dy));
-  document.addEventListener("click", blockClickAfterDrag, { capture: true, once: true });
-}
-
-function endDragPointer(ev) {
-  document.removeEventListener("pointermove", onDragPointer);
-  document.removeEventListener("pointerup", endDragPointer);
-  // ★ 无论拖拽还是点击，都阻止后续自然 click 事件，避免双击/误触
-  if (isDragging) {
-    localStorage.setItem("cm_toolbar_top_px", toolbarTopPx.value.toString());
-  }
-  document.addEventListener("click", swallowToolbarClick, { capture: true, once: true });
-  if (!isDragging && ev) {
-    const el = document.elementFromPoint(ev.clientX, ev.clientY);
-    if (!el) return;
-    const dot = el.closest(".cm-collapsed-dot");
-    if (dot) {
-      toggleCollapsed();
-      return;
-    }
-    const collapseBtn = el.closest(".cm-collapse-btn");
-    if (collapseBtn) {
-      onCollapseClick();
-      return;
-    }
-    const btn = el.closest("button");
-    if (btn) {
-      btn.click();
-      return;
-    }
-    const wrap = el.closest(".language-select-wrap");
-    if (wrap) {
-      const sel = wrap.querySelector("select");
-      if (sel) sel.focus();
-    }
-  }
-}
-
-/** 在 capture 阶段吞掉拖拽结束后工具栏区域的 click 事件（但放过 select 下拉框） */
-function swallowToolbarClick(e) {
-  if (e.target.closest("select, .language-select-wrap")) return;
-  if (e.target.closest(".cm-toolbar-wrapper, .cm-collapsed-dot")) {
-    e.stopPropagation();
-  }
-}
-// ===== 工具栏垂直拖拽 end =====
 </script>
 
 <style lang="scss" scoped>
@@ -1195,7 +1347,7 @@ function swallowToolbarClick(e) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
+  width: 38px;
   height: 34px;
   padding: 0;
   margin-right: 0px;
@@ -1238,9 +1390,8 @@ function swallowToolbarClick(e) {
   color: var(--text);
   font-size: 11px;
   line-height: 34px;
-  width: 34px;
   min-width: 34px;
-  max-width: 34px;
+  max-width: 38px;
   height: 34px;
   min-height: 34px;
   max-height: 34px;
@@ -1281,215 +1432,384 @@ function swallowToolbarClick(e) {
 }
 
 .cm-toolbar-wrapper {
-  position: fixed;
-  right: 4%;
-  top: 0;
-  z-index: 1001;
+  position: relative;
+  z-index: 2;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0;
-  width: fit-content;
-  max-width: 96vw;
-  background: #eee;
+  flex: 1;
+  height: 40px;
+  min-width: 0;
+  margin: 0;
+  box-sizing: border-box;
   color: #222;
-  opacity: 1;
-  border-radius: 23px;
-  border: 1px solid rgba(128, 128, 128, 0.3);
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  will-change: top;
-}
-
-.cm-toolbar-wrapper:active {
-  cursor: grabbing;
-}
-
-.cm-collapsed-dot {
-  position: fixed;
-  right: 3%;
-  top: 0;
-  z-index: 1001;
-  width: 42px;
-  height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--cm-bg, rgba(255, 255, 255, 0.96));
-  border-radius: 23px;
-  border: 1px solid rgba(128, 128, 128, 0.3);
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.08);
-  touch-action: none;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  will-change: top;
-  opacity: 1;
-  transition:
-    width 0.2s,
-    height 0.2s,
-    border-radius 0.2s;
-}
-
-.cm-collapsed-dot:active {
-  cursor: grabbing;
-}
-
-.cm-collapsed-icon {
-  font-size: 16px;
-  font-weight: 700;
-  color: #222;
-  pointer-events: none;
 }
 
 .cm-collapse-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  margin-right: 10px;
+  margin-left: auto;
+  width: 31px;
+  height: 34px;
   padding: 0;
   border: none;
   background: transparent;
   color: #222;
-  font-size: 20px;
   cursor: pointer;
   border-radius: 50%;
-  opacity: 1;
-  filter: none;
-  touch-action: none;
   transition:
-    opacity 0.15s,
-    background 0.15s;
+    background 0.15s,
+    transform 0.15s;
 }
 
-.cm-collapse-btn:hover {
-  opacity: 1;
+.cm-collapse-btn:active {
+  transform: scale(0.94);
+}
+
+.cm-toolbar-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 40px;
+  margin: 0 0 8px;
+}
+
+.cm-toolbar-more {
+  display: block;
+  color: currentColor;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.cm-toolbar-more svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
 
 .cm-img-button {
-  flex-shrink: 1;
+  width: 100%;
+  height: 40px;
   min-width: 0;
   overflow-x: auto;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
-  padding: 6px 14px 6px 0;
-  width: auto;
+  padding: 5px 7px;
+  box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+.cm-img-button::-webkit-scrollbar {
+  display: none;
 }
 
 .cm-img-button > div:first-child {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 3px;
+  min-width: 100%;
 }
 
-@media (hover: none) and (pointer: coarse) {
+.cm-img-button button {
+  border-radius: 10px;
+}
+
+.cm-img-button button:hover {
+  background: rgba(128, 128, 128, 0.1);
+}
+
+@media (max-width: 480px) {
   .cm-toolbar-wrapper {
-    top: calc(env(safe-area-inset-top, 0px) + 50px);
+    margin-bottom: 6px;
+    border-radius: 12px;
+  }
+
+  .cm-img-button {
+    padding: 4px 5px;
   }
 }
 
-.cm-search-box {
+.cm-search-fab {
+  position: fixed;
+  z-index: 1090;
   display: grid;
-  grid-template-columns: 1fr repeat(4, auto);
-  gap: 5px;
-  row-gap: 5px;
-  width: 100%;
-  padding: 8px 10px 8px;
-  background: transparent;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
-  overflow: hidden;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.96);
+  color: #313842;
+  box-shadow: 0 5px 18px rgba(29, 38, 52, 0.16);
+  touch-action: none;
+  // border: 1px solid rgba(128, 128, 128, 0.1);
+  -webkit-tap-highlight-color: transparent;
+  cursor: grab;
+  opacity: 0.6;
+}
+
+.cm-search-fab svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.cm-search-fab:active:not(.dragging) {
+  transform: scale(0.94);
+}
+
+.cm-search-fab.dragging {
+  cursor: grabbing;
+  box-shadow: 0 6px 8px rgba(29, 38, 52, 0.24);
+}
+
+.cm-search-sheet {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  z-index: 99990;
+  width: min(560px, calc(100vw - 20px));
+  padding: 12px;
   box-sizing: border-box;
+  // border: 1px solid rgba(128, 128, 128, 0.12);
+  border-radius: 20px;
+  background: rgba(250, 250, 252, 0.96);
+  color: #25262a;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  transform: translateX(-50%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.cm-search-sheet[dragging="true"],
+.cm-search-header {
+  cursor: grab;
+  touch-action: none;
+}
+.cm-search-header:active {
+  cursor: grabbing;
+}
+.cm-search-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+  opacity: 0.4;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  flex-shrink: 0;
+}
+.cm-search-grip:active {
+  cursor: grabbing;
+}
+
+.cm-search-header,
+.cm-search-field-row,
+.cm-replace-row,
+.cm-replace-actions {
+  display: flex;
+  align-items: center;
+}
+
+.cm-search-header {
+  // min-height: 12px;
+  gap: 5px;
+  padding: 0 0 7px;
+}
+
+.cm-search-error {
+  margin-left: auto;
+  color: #d84c4c;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.cm-search-close,
+.cm-search-nav {
+  display: grid;
+  place-items: center;
+  // flex: 0 0 42px;
+  width: 50px;
+  height: 33px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(128, 128, 128, 0.09);
+  color: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  opacity: 0.7;
+  line-height: 1;
+  touch-action: manipulation;
+}
+
+.cm-search-close {
+  // flex-basis: 36px;
+  width: 50px;
+  height: 33px;
+  padding-bottom: 3px;
+  font-size: 24px;
+  font-weight: 400;
+}
+
+.cm-search-field-row {
+  gap: 7px;
 }
 
 .cm-search-input {
   flex: 1;
   min-width: 0;
-  height: 26px;
-  padding: 0 8px;
-  border: 1px solid rgba(128, 128, 128, 0.25);
-  border-radius: 16px;
-  background: rgba(128, 128, 128, 0.06);
+  width: 100%;
+  height: 33px;
+  padding: 0 13px;
+  box-sizing: border-box;
+  border: 0px;
+  border-radius: 12px;
+  background: rgba(128, 128, 128, 0.07);
   color: inherit;
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
-  transition: border-color 0.15s;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .cm-search-input:focus {
-  border-color: #8fb4e8;
-  background: rgba(143, 180, 232, 0.06);
+  border-color: #6d9edc;
+  box-shadow: 0 0 0 3px rgba(109, 158, 220, 0.14);
 }
 
-.cm-search-btn,
-.cm-replace-btn {
+.cm-search-input.invalid {
+  border-color: #d84c4c;
+}
+
+.cm-search-options {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 26px;
-  min-width: 52px;
-  padding: 0 7px;
-  margin: 0 2px 0 4px;
-  border: 1px solid rgba(128, 128, 128, 0.25);
-  border-radius: 16px;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: rgba(128, 128, 128, 0.09);
+}
+
+.cm-search-options button {
+  min-width: 34px;
+  height: 30px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 10px;
   background: transparent;
   color: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s;
+  font-size: 13px;
+  font-weight: 650;
+  opacity: 0.58;
+  touch-action: manipulation;
 }
 
-.cm-search-btn:hover,
-.cm-replace-btn:hover {
-  background: rgba(128, 128, 128, 0.1);
-}
-
-.cm-search-opt {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 26px;
-  min-width: 26px;
-  padding: 0 4px;
-  border: 1px solid transparent;
-  border-radius: 16px;
-  background: transparent;
-  color: inherit;
-  font-size: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  opacity: 0.45;
-  transition:
-    opacity 0.15s,
-    background 0.15s,
-    border-color 0.15s;
-  letter-spacing: 0;
-  font-family: inherit;
-}
-
-.cm-search-opt:hover {
-  opacity: 0.7;
-  background: rgba(128, 128, 128, 0.08);
-}
-
-.cm-search-opt.active {
+.cm-search-options button.active {
+  background: #fff;
+  color: #377fd1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.11);
   opacity: 1;
-  border-color: #8fb4e8;
-  background: rgba(143, 180, 232, 0.15);
-  color: #4a8ad6;
 }
 
-.cm-replace-btn:active,
-.cm-search-btn:active {
-  background: rgba(128, 128, 128, 0.18);
+.cm-replace-toggle {
+  width: 52px;
+  height: 33px;
+  margin-left: auto;
+  padding: 0 8px;
+  opacity: 0.7;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(128, 128, 128, 0.09);
+  color: inherit;
+  font-size: 13px;
+  touch-action: manipulation;
+}
+
+.cm-replace-toggle.active {
+  color: #377fd1;
+  background: rgba(55, 127, 209, 0.12);
+}
+
+.cm-replace-area {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+.cm-replace-row {
+  gap: 7px;
+}
+
+.cm-replace-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.cm-replace-actions button {
+  min-width: 50px;
+  height: 33px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 13px;
+  background: rgba(128, 128, 128, 0.1);
+  color: inherit;
+  font-size: 13px; 
+  touch-action: manipulation;
+}
+
+.cm-replace-actions button:disabled {
+  opacity: 0.6;
+}
+
+.cm-replace-actions .cm-replace-all {
+  color: #c44343;
+}
+
+.cm-replace-actions .cm-replace-all.armed {
+  background: #d84c4c;
+  color: #fff;
+  font-weight: 600;
+}
+
+@media (max-width: 390px) {
+  .cm-search-sheet {
+    width: calc(100vw - 12px);
+    padding: 10px;
+    border-radius: 17px;
+  }
+
+  .cm-search-error {
+    display: none;
+  }
+
+  .cm-replace-row {
+    gap: 5px;
+  }
+
+  .cm-replace-actions {
+    gap: 5px;
+  }
+
+  .cm-replace-actions button {
+    min-width: 68px;
+    padding: 0 6px;
+    font-size: 12px;
+  }
 }
 
 :deep(.cm-editor .cm-search) {
@@ -1592,28 +1912,36 @@ function swallowToolbarClick(e) {
   color: #4a90d9;
   font-weight: 600;
 }
+ 
+
+.cm-search-sheet.is-dark {
+  background: color-mix(in srgb, var(--editor-overlay-background, #282c34) 96%, transparent);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #eceff4;
+}
 
 @media (prefers-color-scheme: dark) {
-  .cm-toolbar-wrapper,
-  .cm-collapsed-dot {
-    background: #282c34;
-    border-color: rgba(255, 255, 255, 0.15);
-    color: var(--text, inherit);
-  }
   .cm-collapse-btn,
-  .cm-collapsed-icon {
+  .cm-toolbar-more {
     color: var(--text, inherit);
   }
-  .cm-search-input {
-    background: rgba(255, 255, 255, 0.06);
+  .cm-search-fab {
+    background: var(--editor-overlay-background, #282c34);
+    // border-color: rgba(255, 255, 255, 0.15);
+    color: var(--text, inherit);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.463);
   }
-  .cm-search-input:focus {
+
+  .cm-search-sheet .cm-search-input {
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .cm-search-sheet .cm-search-input:focus {
     background: rgba(143, 180, 232, 0.08);
   }
-  .cm-search-opt.active {
-    border-color: #6a9ed8;
-    background: rgba(106, 158, 216, 0.2);
-    color: #7ab0f0;
+  .cm-search-options button.active {
+    background: rgba(106, 158, 216, 0.22);
+    color: #88bcf5;
+    box-shadow: none;
   }
 
   .compress-overlay {
@@ -1652,6 +1980,10 @@ function swallowToolbarClick(e) {
   .compress-radio input[type="radio"],
   .compress-radio input[type="checkbox"] {
     accent-color: #6a9ed8;
+  }
+
+  .cm-search-sheet {
+    box-shadow: 0 6px 26px rgba(0, 0, 0, 0.7);
   }
 }
 </style>

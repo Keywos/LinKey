@@ -195,6 +195,7 @@ const routes = [
       needTabBar: false,
       isNavBack: true,
       isNavTop: true,
+      keepAlive: true,
     },
   },
   {
@@ -206,6 +207,7 @@ const routes = [
       needTabBar: false,
       isNavBack: true,
       isNavTop: true,
+      backTo: "/gist",
     },
   },
   {

@@ -1,5 +1,5 @@
 <template>
-  <h2 style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%; margin-top: -10px">
+  <h2 class="edit-code-editor" style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%; margin-top: -10px">
     <span style="opacity: 0.6" @click="goFunction()">Code Hub</span>
     <div style="display: flex; align-items: center; gap: 10px; color: var(--text)">
       <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: 0.4">{{ showSaves ? "▴" : "▾" }}</span>
@@ -74,8 +74,6 @@
       <div class="saves-resize-bar"></div>
     </div>
   </div>
-
-  <!-- ★ 修复：加上 ref="cmViewRef" 供 loadItem 调用 skipNextLanguageSync -->
   <cmView ref="cmViewRef" id="main" :isReadOnly="false" />
 
   <!-- ★ 可拖拽控制台面板 -->
@@ -961,7 +959,7 @@ const onImportFileChange = async (e) => {
   }
 };
 
- const downloadTextFile = (filename, content) => {
+const downloadTextFile = (filename, content) => {
   const blob = new Blob([content], { type: "application/octet-stream" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -1274,6 +1272,7 @@ async function loadUrlContent(inputUrl) {
 }
 
 onMounted(async () => {
+  window.addEventListener("editor-theme-change", updateEditorPageBackground);
   const blurNavdiv = document.querySelector(".blurNavdiv");
   blurNavdiv?.classList.add("blurNavdiv_code");
   let currentURL = Object.keys(route.query)[0] || "";
@@ -1651,10 +1650,17 @@ const copyText = async (i) => {
   }
 };
 
-watchEffect(() => {
+const updateEditorPageBackground = () => {
   if (isDarkModeEnabled.value) {
-    document.body.style.backgroundColor = "#282c34";
-  } else document.body.style.backgroundColor = "#f3f3f3";
+    const background = localStorage.getItem("EditorDarkBackground");
+    document.body.style.backgroundColor = ["#282c34", "#141414", "#000000"].includes(background) ? background : "#282c34";
+  } else {
+    document.body.style.backgroundColor = "#f3f3f3";
+  }
+};
+
+watchEffect(() => {
+  updateEditorPageBackground();
 });
 
 onBeforeUnmount(() => {
@@ -1662,6 +1668,7 @@ onBeforeUnmount(() => {
   flushCurrentSave();
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   window.removeEventListener("beforeunload", handleBeforeUnload);
+  window.removeEventListener("editor-theme-change", updateEditorPageBackground);
   document.body.style.backgroundColor = "";
   const blurNavdiv = document.querySelector(".blurNavdiv");
   blurNavdiv?.classList.remove("blurNavdiv_code");
@@ -1673,6 +1680,10 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="css">
+.edit-code-editor {
+  padding-top: 30px;
+}
+
 .saves-panel {
   /* width: 92%; */
   margin: 0 1% 4% 1%;
@@ -1902,9 +1913,6 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.log-copy {
-  /* margin-left: -4px; */
-}
 .saves-load-btn:disabled {
   opacity: 0.4;
 }

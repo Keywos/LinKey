@@ -7,11 +7,11 @@ const config = {
     dark: true,
     background: '#00000000', // 282c34
     foreground: '#abb2bf',
-    selection: '#3E4451',
+    selection: '#6699ff6d',
     cursor: '#528bff',
     dropdownBackground: '#21252b',
     dropdownBorder: '#457dff',
-    activeLine: '#6699ff0b',
+    activeLine: '#6699ff43',
     matchingBracket: '#bad0f847',
     keyword: '#c678dd',
     // storage: '#d73a49',

@@ -1,7 +1,7 @@
 {
   "name": "linkey",
   "private": true,
-  "version": "5.20.103",
+  "version": "5.20.200",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -26,7 +26,6 @@
     "@vant/touch-emulator": "^1.4.0",
     "@vant/use": "^1.6.0",
     "@vueuse/core": "^10.7.2",
-    "axios": "^1.6.7",
     "codemirror": "^6.0.1",
     "crelt": "^1.0.6",
     "idb": "^8.0.3",

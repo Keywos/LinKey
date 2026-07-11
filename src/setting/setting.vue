@@ -15,26 +15,38 @@
       </van-popup>
     </van-cell-group>
 
+    <van-cell-group inset title="编辑器主题">
+      <van-field class="editor-theme-field" label="背景颜色">
+        <template #input>
+          <van-radio-group v-model="editorDarkBackground" class="editor-theme-options" @change="setEditorDarkBackground">
+            <van-radio name="#282c34">深蓝</van-radio>
+            <van-radio name="#141414">深灰</van-radio>
+            <van-radio name="#000000">纯黑</van-radio>
+          </van-radio-group>
+        </template>
+      </van-field>
+    </van-cell-group>
+
     <van-cell-group inset title="Gist 相关设置" id="Gistsetting">
       <van-field v-model="username" type="textarea" rows="1" label="" :readonly="isreadonlysName" :autosize="{ maxHeight: 50, minHeight: 10 }" placeholder="请输入 Name" id="keyfroms">
         <template #button>
-          <van-button v-if="!iseditsname" size="small" type="primary" @click="editisn(username)">编辑</van-button>
+          <van-button v-if="!iseditsname" size="small" type="primary" @click="editisn">编辑</van-button>
 
           <div v-else>
             &nbsp;
-            <van-button size="small" type="primary" @click="saveisn(username)">保存</van-button>
+            <van-button size="small" type="primary" @click="saveisn">保存</van-button>
           </div>
         </template>
       </van-field>
 
       <van-field v-model="gistid" type="textarea" rows="1" label="" :readonly="isreadonlys" :autosize="{ maxHeight: 50, minHeight: 10 }" placeholder="请输入 Token" id="keyfroms">
         <template #button>
-          <van-button v-if="!isedits" size="small" type="primary" @click="editis(gistid)">编辑</van-button>
+          <van-button v-if="!isedits" size="small" type="primary" @click="editis">编辑</van-button>
           <div v-else>
             <van-button v-if="isclearbutton" size="small" type="primary" @click="cleartks()">清空</van-button>
             &nbsp;
 
-            <van-button size="small" type="primary" @click="saveis(gistid)">保存</van-button>
+            <van-button size="small" type="primary" @click="saveis">保存</van-button>
           </div>
         </template>
       </van-field>
@@ -42,25 +54,25 @@
       <van-cell title="清除 Gist 本地缓存" @click="cleargist()" is-link />
       <van-cell class="van-cell-sw" center title="拉取时缓存到本地" inset>
         <template #right-icon>
-          <van-switch v-model="autoGistlocala" @change="setGistautolocala(autoGistlocala)" />
+          <van-switch v-model="autoGistlocala" @change="setGistautolocala" />
         </template>
       </van-cell>
 
       <van-cell class="van-cell-sw" center title="进入页面后获取本地缓存" inset>
         <template #right-icon>
-          <van-switch v-model="autoGistlocal" @change="setGistautolocal(autoGistlocal)" />
+          <van-switch v-model="autoGistlocal" @change="setGistautolocal" />
         </template>
       </van-cell>
 
       <van-cell class="van-cell-sw" center title="进入页面后获取远程资源" inset>
         <template #right-icon>
-          <van-switch v-model="autoGist" @change="setGistauto(autoGist)" />
+          <van-switch v-model="autoGist" @change="setGistauto" />
         </template>
       </van-cell>
 
       <van-cell class="van-cell-sw" center title="深色模式背景" inset>
         <template #right-icon>
-          <van-switch v-model="autoISBGC" @change="setBGC(autoISBGC)" />
+          <van-switch v-model="autoISBGC" @change="setBGC" />
         </template>
       </van-cell>
     </van-cell-group>
@@ -91,7 +103,7 @@
 </template>
 
 <script setup>
-import { ref, watchEffect, onMounted } from "vue";
+import { computed, ref } from "vue";
 import { sendReq } from "@/http/http.js";
 import { showToast } from "vant";
 import { useGistStore } from "@/store/gistStore";
@@ -101,7 +113,28 @@ const beforeClose = () => {
   // showToast("");
 };
 
-// const as = ref(false);
+const getStoredBoolean = (key, defaultValue = false) => {
+  const value = localStorage.getItem(key);
+  return value === null ? defaultValue : value === "1";
+};
+const setStoredBoolean = (key, value) => {
+  if (value) localStorage.setItem(key, "1");
+  else localStorage.removeItem(key);
+};
+const EDITOR_DARK_BACKGROUNDS = ["#282c34", "#141414", "#000000"];
+const storedEditorBackground = localStorage.getItem("EditorDarkBackground");
+const editorDarkBackground = ref(EDITOR_DARK_BACKGROUNDS.includes(storedEditorBackground) ? storedEditorBackground : "#282c34");
+const setEditorDarkBackground = (value) => {
+  localStorage.setItem("EditorDarkBackground", value);
+  window.dispatchEvent(new Event("editor-theme-change"));
+};
+const getStoredToken = () => {
+  try {
+    return JSON.parse(localStorage.getItem("GistUserT") || "null");
+  } catch {
+    return null;
+  }
+};
 
 const isedits = ref(false);
 const iseditsname = ref(false);
@@ -109,31 +142,27 @@ const gistid = ref("");
 const username = ref("");
 const isreadonlys = ref(false);
 const isreadonlysName = ref(false);
-let LocalGetToken;
-try {
-  LocalGetToken = JSON.parse(localStorage.getItem("GistUserT"));
-} catch (error) {}
-const GetUserName = localStorage.getItem("GistUserN");
-console.log(LocalGetToken);
-if (LocalGetToken && LocalGetToken?.n != "" && LocalGetToken?.t != "") {
+let LocalGetToken = getStoredToken();
+const storedUserName = localStorage.getItem("GistUserN");
+if (LocalGetToken?.n && LocalGetToken?.t) {
   isreadonlys.value = true;
   gistid.value = LocalGetToken.n;
 } else {
   isedits.value = true;
 }
-if (GetUserName) {
+if (storedUserName) {
   isreadonlysName.value = true;
-  username.value = GetUserName;
+  username.value = storedUserName;
 } else {
   iseditsname.value = true;
 }
 
-const editisn = (n) => {
+const editisn = () => {
   iseditsname.value = true;
   isreadonlysName.value = false;
 };
-const saveisn = (n) => {
-  localStorage.setItem("GistUserN", n);
+const saveisn = () => {
+  localStorage.setItem("GistUserN", username.value);
   iseditsname.value = false;
   isreadonlysName.value = true;
 };
@@ -143,9 +172,10 @@ const editis = () => {
   isedits.value = true;
   isreadonlys.value = false;
 };
-const saveis = async (tk) => {
+const saveis = async () => {
+  const tk = gistid.value;
   try {
-    if (username.value == "") {
+    if (!username.value) {
       throw new Error("未填写/保存 用户名");
     }
     if (tk.length > 30) {
@@ -158,7 +188,7 @@ const saveis = async (tk) => {
         Authorization: `token ${tk}`,
         Accept: "application/vnd.github.v3+json",
       });
-      if (res.status == "200") {
+      if (res.status === "200") {
         LocalGetToken = tkobj;
         localStorage.setItem("GistUserT", JSON.stringify(tkobj));
         isedits.value = false;
@@ -186,42 +216,18 @@ const cleartks = () => {
   };
   gistid.value = "";
 };
-const autoGist = ref(false);
+const autoGist = ref(getStoredBoolean("AutoGistRe"));
 
-const setGistauto = (i) => {
-  if (i) {
-    localStorage.setItem("AutoGistRe", 1);
-  } else {
-    localStorage.removeItem("AutoGistRe");
-  }
-};
+const setGistauto = (value) => setStoredBoolean("AutoGistRe", value);
 
-const setBGC = (i) => {
-  if (i) {
-    localStorage.setItem("ISBGC", 1);
-  } else {
-    localStorage.removeItem("ISBGC");
-  }
-};
+const setBGC = (value) => setStoredBoolean("ISBGC", value);
 
-const autoGistlocal = ref(false);
-const setGistautolocal = (i) => {
-  if (i) {
-    localStorage.setItem("LocalGistRe", 1);
-  } else {
-    localStorage.removeItem("LocalGistRe");
-  }
-};
+const autoGistlocal = ref(getStoredBoolean("LocalGistRe", true));
+const setGistautolocal = (value) => setStoredBoolean("LocalGistRe", value);
 
-const autoISBGC = ref(localStorage.getItem("ISBGC") == "1" || false);
-const autoGistlocala = ref(false);
-const setGistautolocala = (i) => {
-  if (i) {
-    localStorage.setItem("LocalGistResTure", 1);
-  } else {
-    localStorage.removeItem("LocalGistResTure");
-  }
-};
+const autoISBGC = ref(getStoredBoolean("ISBGC"));
+const autoGistlocala = ref(getStoredBoolean("LocalGistResTure", true));
+const setGistautolocala = (value) => setStoredBoolean("LocalGistResTure", value);
 
 const clearh = () => {
   localStorage.removeItem("HomePageSort");
@@ -236,27 +242,26 @@ const clearhs = () => {
 
 
 const rePwa = async () => {
-  showToast("正在重置 PWA缓存...");
-
-  if ("serviceWorker" in navigator) {
-    const regs = await navigator.serviceWorker.getRegistrations();
-    for (const r of regs) {
-      await r.unregister();
+  showToast("正在重置 PWA 缓存...");
+  try {
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
     }
-  }
 
-  if ("caches" in window) {
-    const keys = await caches.keys();
-    await Promise.all(keys.map(k => caches.delete(k)));
-  }
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
 
-  // 强制阻止旧 SW 复活
-  if (navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({ type: "SKIP_WAITING" });
-  }
+    navigator.serviceWorker.controller?.postMessage({ type: "SKIP_WAITING" });
 
-  showToast("重置完成");
-  setTimeout(() => location.href = location.href + "?t=" + Date.now(), 300);
+    showToast("重置完成");
+    setTimeout(() => location.reload(), 300);
+  } catch (error) {
+    console.error("PWA 缓存重置失败", error);
+    showToast("重置失败，请重试");
+  }
 };
 
 
@@ -289,36 +294,14 @@ const fieldValue = ref(reh);
 const showPicker = ref(false);
 
 const onConfirm = ({ selectedOptions }) => {
-  if (selectedOptions[0].value) {
-    localStorage.setItem("DefaultHome", selectedOptions[0].value);
+  const selectedOption = selectedOptions[0];
+  if (selectedOption?.value) {
+    localStorage.setItem("DefaultHome", selectedOption.value);
+    fieldValue.value = selectedOption.text;
   }
-
-  console.log(selectedOptions[0].value);
   showPicker.value = false;
-  fieldValue.value = selectedOptions[0].text;
 };
-onMounted(() => {
-  if (localStorage.getItem("AutoGistRe") == 1) {
-    autoGist.value = true;
-  }
-  if (localStorage.getItem("LocalGistRe") == 1) {
-    autoGistlocal.value = true;
-  }
-  if (localStorage.getItem("LocalGistResTure") == 1) {
-    autoGistlocala.value = true;
-  }
-  if (localStorage.getItem("ISBGC") == 1) {
-    autoISBGC.value = true;
-  }
-});
-const isclearbutton = ref(false);
-watchEffect(() => {
-  if (gistid.value.length > 0) {
-    isclearbutton.value = true;
-  } else {
-    isclearbutton.value = false;
-  }
-});
+const isclearbutton = computed(() => gistid.value.length > 0);
 </script>
 
 <style>
@@ -337,5 +320,37 @@ watchEffect(() => {
 
 #Gistsetting .van-contact-list {
   padding: 16px 8px 20px;
+}
+
+.editor-theme-field .van-field__label {
+  align-self: flex-start;
+  padding-top: 8px;
+}
+
+.editor-theme-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.editor-theme-options .van-radio {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+  margin: 0;
+  padding: 7px 4px;
+  border-radius: 10px;
+  background: rgba(128, 128, 128, 0.08);
+  font-size: 12px;
+}
+
+.editor-theme-options .van-radio__icon {
+  margin-right: 4px;
+}
+
+.editor-theme-options .van-radio__label {
+  margin-left: 0;
+  white-space: nowrap;
 }
 </style>

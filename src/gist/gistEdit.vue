@@ -23,7 +23,7 @@
         </div>
       </van-form>
       <van-cell-group inset title="创建">
-        <EditCode :isReadOnly="false" />
+        <EditCode id="gist-editor" :isReadOnly="false" />
       </van-cell-group>
     </div>
 
@@ -48,7 +48,7 @@
 
   <div v-if="num === 2" id="keyfroms">
     <van-cell-group inset title="预览">
-      <EditCode :isReadOnly="true" />
+      <EditCode id="gist-editor" :isReadOnly="true" />
     </van-cell-group>
   </div>
 
@@ -66,7 +66,7 @@
         </div>
       </van-form>
       <van-cell-group inset title="编辑">
-        <EditCode :isReadOnly="false" />
+        <EditCode id="gist-editor" :isReadOnly="false" />
       </van-cell-group>
     </div>
 
@@ -92,7 +92,7 @@
 
 <script setup>
 import { useGistStore } from "@/store/gistStore.js";
-import { ref, watchEffect, onMounted, defineAsyncComponent, watch, onBeforeUnmount } from "vue";
+import { defineAsyncComponent, onBeforeUnmount, ref } from "vue";
 import { showToast } from "vant";
 import { sendReq } from "@/http/http.js";
 import useV3Clipboard from "vue-clipboard3";
@@ -115,20 +115,16 @@ function getRName() {
 const filename = ref("");
 
 const token = ref("");
+try {
+  const storedToken = JSON.parse(localStorage.getItem("GistUserT"));
+  if (storedToken?.n && storedToken?.t) token.value = storedToken.t;
+  else showToast("未设置 Token");
+} catch {
+  showToast("未设置 Token");
+}
 
 onBeforeUnmount(() => {
   cmStore.setCmCode("");
-});
-onMounted(() => {
-  let LocalGetToken;
-  try {
-    LocalGetToken = JSON.parse(localStorage.getItem("GistUserT"));
-  } catch (error) {}
-  if (LocalGetToken && LocalGetToken?.n !== "" && LocalGetToken?.t != "") {
-    token.value = LocalGetToken.t;
-  } else {
-    showToast("未设置 Token");
-  }
 });
 
 const Desc = ref("");
@@ -136,90 +132,70 @@ const useGStore = useGistStore();
 const isnew = ref(false);
 
 const tname = useGStore.tname || "无参数, 请返回";
-if (tname == "Gist Create") {
+if (tname === "Gist Create") {
   num.value = 1;
-} else if (tname == "Gist Preview") {
-  num.value = 2;
-  const pres = useGStore.getGistResPreview;
-  if (typeof pres === "object") {
-    inp.value = JSON.stringify(pres, null, 3);
-    console.log("1");
-  } else {
-    inp.value = pres;
-    console.log("2");
-  }
-} else if (tname == "Gist Edit") {
+}
+//  else if (tname === "Gist Preview") {
+//   num.value = 2;
+//   const pres = useGStore.getGistResPreview;
+//   if (typeof pres === "object" && pres !== null) {
+//     inp.value = JSON.stringify(pres, null, 3);
+//   } else {
+//     inp.value = pres || "";
+//   }
+// }
+else if (tname === "Gist Edit") {
   num.value = 3;
   let GistEditfile = useGStore.GistEdit;
-  if (typeof GistEditfile === "object") {
-    console.log("🍉");
+  if (typeof GistEditfile === "object" && GistEditfile !== null) {
     GistEditfile = JSON.stringify(useGStore.GistEdit, null, 3);
   }
   filename.value = useGStore.GistFN;
   inp.value = GistEditfile;
   edid.value = useGStore.geid;
   Desc.value = useGStore.gidesc;
-  console.log(filename.value);
-} else if (tname == "Create New") {
-  //patch
+} else if (tname === "Create New") {
   num.value = 1;
   edid.value = useGStore.geid;
   Desc.value = useGStore.gidesc;
   isnew.value = true;
 }
 
-let content = {};
+cmStore.setCmCode(inp.value);
 
 const onSubmit = async (values) => {
   isloding.value = true;
-  if (values.filename == "") {
-    filename.value = getRName();
-  }
-  if (values.Desc == "") {
-    Desc.value = "Descs";
-  }
-  content.description = Desc.value;
-  content.public = PublicM.value != "1";
+  try {
+    if (!token.value) {
+      showToast("未设置 Token");
+      return;
+    }
+    filename.value ||= getRName();
+    Desc.value ||= "Descs";
 
-  const _filename = filename.value;
-  const _id = edid.value;
-  content.files = {
-    [_filename]: {
-      content: cmStore.CmCode.toString(),
-    },
-  };
-  let post = "POST",
-    url = "https://api.github.com/gists";
-  const isEdit_Patch_new = num.value == 3 || isnew.value;
-  if (isEdit_Patch_new) {
-    //num.value == 3 //edit
-    //isnew patch
-    post = "PATCH";
-    url = `https://api.github.com/gists/${_id}`;
-  }
-  const res = await sendReq(
-    post,
-    url,
-    {
-      Authorization: `token ${token.value}`,
-      Accept: "application/vnd.github.v3+json",
-    },
-    JSON.stringify(content)
-  );
-  console.log(res.status);
-  console.log(res);
-  if (res.status == "201" || res.status == "200") {
+    const isEditPatchNew = num.value === 3 || isnew.value;
+    const method = isEditPatchNew ? "PATCH" : "POST";
+    const url = isEditPatchNew ? `https://api.github.com/gists/${edid.value}` : "https://api.github.com/gists";
+    const content = {
+      description: Desc.value,
+      public: PublicM.value !== "1",
+      files: {
+        [filename.value]: { content: cmStore.CmCode.toString() },
+      },
+    };
+    const res = await sendReq(method, url, { Authorization: `token ${token.value}`, Accept: "application/vnd.github.v3+json" }, JSON.stringify(content));
+    if (res.status !== 201 && res.status !== 200) {
+      showToast(`请求失败 ${res.status || ""}`);
+      return;
+    }
+
     showToast("请求成功" + res.status);
-    isloding.value = false;
-    if (res.data?.files[_filename]?.raw_url) {
-      const rawurl = res.data.files[_filename].raw_url;
-      rawurlForever.value = rawurl.replace(/\/raw\/\w+?\//, "/raw/");
-      rawURL.value = res.data.files[_filename].raw_url;
-      if (isEdit_Patch_new) {
-        console.log(_id);
-        console.log(_filename);
-        console.log(res.data.files[_filename]);
-        useGStore.addGistRespatch(_id, _filename, res.data.files[_filename]); //id new res
+    const file = res.data?.files?.[filename.value];
+    if (file?.raw_url) {
+      rawURL.value = file.raw_url;
+      rawurlForever.value = file.raw_url.replace(/\/raw\/\w+?\//, "/raw/");
+      if (isEditPatchNew) {
+        useGStore.addGistRespatch(edid.value, filename.value, file);
       } else {
         const { id, html_url, files, public: publicProp, created_at, updated_at, description, owner } = res.data;
         const newRes = {
@@ -231,17 +207,21 @@ const onSubmit = async (values) => {
           created: forTS(new Date(created_at).getTime()),
           updated: forTS(new Date(updated_at).getTime()),
           desc: description,
-          user: owner.login,
+          user: owner?.login || "",
         };
 
         useGStore.addGistResposh(newRes);
       }
     }
+  } catch (error) {
+    showToast("请求失败 " + error.message);
+  } finally {
+    isloding.value = false;
   }
 };
 
 const copyText = async (t) => {
-  if (t.length > 0) {
+  if (t?.length > 0) {
     await toClipboard(t);
     showToast("已复制字符串数: " + t.length);
   }
@@ -258,9 +238,6 @@ function forTS(timestampInSeconds) {
 
   return `${String(year).slice(2)}/${month}/${day} ${hours}:${minutes}`;
 }
-watchEffect(() => {
-  cmStore.setCmCode(inp.value);
-});
 </script>
 
 <style lang="css">

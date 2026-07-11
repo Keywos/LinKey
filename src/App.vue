@@ -9,7 +9,12 @@
     </div>
 
     <main class="page-body" @scroll="handleScroll">
-      <router-view />
+      <router-view v-slot="{ Component, route: currentRoute }">
+        <keep-alive>
+          <component :is="Component" v-if="currentRoute.meta.keepAlive" />
+        </keep-alive>
+        <component :is="Component" v-if="!currentRoute.meta.keepAlive" />
+      </router-view>
     </main>
     <van-dialog />
   </van-config-provider>
@@ -102,10 +107,10 @@ onMounted(() => {
 
 const router = useRouter();
 const onClickLeft = () => {
-  const r = router.currentRoute.value.path
-  if (r === "/s") {
-    router.replace("/");
-  } else if (r !== "/") {
+  const { path, meta } = router.currentRoute.value;
+  if (meta.backTo) {
+    router.replace(meta.backTo);
+  } else if (path !== "/") {
     router.replace("/");
   } else {
     history.back();
