@@ -11,7 +11,7 @@ const config = {
   cursor: "#044289",
   dropdownBackground: "#fff",
   dropdownBorder: "#e1e4e8",
-  activeLine: "#6699ff43",
+  activeLine: "#6699ff2d",
   matchingBracket: "#34d05840",
 
   keyword: "#db2072",
