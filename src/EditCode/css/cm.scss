@@ -112,15 +112,15 @@
   padding: 0.2em 0.5em;
 }
 
-.cm-panel.cm-search input[type="checkbox"] {
-  position: absolute;
-  width: 12px !important;
-  height: 14px !important;
-  margin-top: 5px !important;
-  background-color: #00000000 !important;
-  -webkit-appearance: none;
-  appearance: none;
-}
+// .cm-panel.cm-search input[type="checkbox"] {
+//   position: absolute;
+//   width: 12px !important;
+//   height: 14px !important;
+//   margin-top: 5px !important;
+//   background-color: #00000000 !important;
+//   -webkit-appearance: none;
+//   appearance: none;
+// }
 
 input[type="checkbox"]:checked {
   border: 6px solid #8b8b9256 !important;
@@ -133,10 +133,10 @@ input[type="checkbox"]:checked {
   margin-right: 13px !important;
 }
 
-.cm-panel.cm-search label {
-  margin: 0.2em 0.5em 0.5em 1.2em !important;
-}
+// .cm-panel.cm-search label {
+//   margin: 0.2em 0.5em 0.5em 1.2em !important;
+// }
 
-.cm-panel.cm-search label {
-  font-size: 90% !important;
-}
+// .cm-panel.cm-search label {
+//   font-size: 90% !important;
+// }

@@ -39,8 +39,8 @@ const lightCodeTheme = EditorView.theme(
     ".cm-content": { caretColor: config.cursor },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: config.cursor },
     "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": { backgroundColor: config.selection },
-    ".cm-panels": { backgroundColor: config.dropdownBackground, color: config.foreground },
-    ".cm-panels.cm-panels-top": { borderBottom: "2px solid black" },
+    // ".cm-panels": { backgroundColor: config.dropdownBackground, color: config.foreground },
+    // ".cm-panels.cm-panels-top": { borderBottom: "2px solid black" },
     // ".cm-panels.cm-panels-bottom": { borderTop: "2px solid black" },
     ".cm-searchMatch": {
       backgroundColor: config.dropdownBackground,

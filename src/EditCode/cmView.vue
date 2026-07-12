@@ -205,11 +205,9 @@ import { shikiHighlight, SHIKI_SUPPORTED_LANGUAGES } from "@/EditCode/shikiHighl
 import { computed, nextTick, ref, reactive, onBeforeUnmount, onMounted, watch, watchEffect } from "vue";
 import {
   highlightSelectionMatches,
-  searchKeymap,
-  gotoLine,
+  search as cmSearch,
   setSearchQuery,
   SearchQuery,
-  getSearchQuery,
   findNext as cmFindNext,
   findPrevious as cmFindPrev,
   replaceNext as cmReplaceNext,
@@ -652,7 +650,16 @@ const CreateView = () => {
     state: EditorState.create({
       extensions: [
         historyCompartment.of(history()),
-        keymap.of([{ key: "Mod-f", run: () => (openSearch(), true) }, indentWithTab, ...searchKeymap, ...defaultKeymap, ...historyKeymap]),
+        cmSearch(),
+        keymap.of([
+          { key: "Mod-f", run: () => (openSearch(), true), preventDefault: true },
+          { key: "F3", run: () => (findNext(), true), shift: () => (findPrev(), true), preventDefault: true },
+          { key: "Mod-g", run: () => (findNext(), true), shift: () => (findPrev(), true), preventDefault: true },
+          { key: "Escape", run: () => (searchOpen.value ? (closeSearch(), true) : false), preventDefault: true },
+          indentWithTab,
+          ...defaultKeymap,
+          ...historyKeymap,
+        ]),
         langs.of([]),
         shikiSyntax.of([]), // ★ 初始不加载，由 applyLanguage 按需开启
         editorPlaceholder.of(createEditorPlaceholder()),
@@ -1145,6 +1152,7 @@ const onSearchInput = () => {
 };
 
 const onSearchEnter = (e) => {
+  if (!canSearch.value || !view) return;
   dispatchSearch();
   if (e.shiftKey) {
     cmFindPrev(view);
@@ -1749,7 +1757,7 @@ const toggleCollapsed = () => {
   }
 
   .cm-search-input-wrap {
-    --cm-search-options-width: 145px;
+    // --cm-search-options-width: 145px;
     position: relative;
     flex: 1;
     min-width: 0;
@@ -1875,7 +1883,8 @@ const toggleCollapsed = () => {
     }
 
     .cm-search-input {
-      padding-right: calc(var(--cm-search-options-width) + 13px);
+ 
+      // padding-right: calc(var(--cm-search-options-width) + 13px);
     }
 
     .cm-search-nav,
@@ -2159,7 +2168,7 @@ const toggleCollapsed = () => {
 }
 
 .cm-search-input-wrap {
-  --cm-search-options-width: 145px;
+  --cm-search-options-width: 112px;
   position: relative;
   flex: 1;
   min-width: 0;
@@ -2169,7 +2178,7 @@ const toggleCollapsed = () => {
   min-width: 0;
   width: 100%;
   height: 33px;
-  padding: 0 calc(var(--cm-search-options-width) + 13px) 0 13px;
+  padding: 0 calc(var(--cm-search-options-width) + 8px) 0 13px;
   box-sizing: border-box;
   border: 0;
   border-radius: 12px;
@@ -2181,8 +2190,13 @@ const toggleCollapsed = () => {
   -webkit-user-select: text;
 }
 
+.cm-search-input::-webkit-search-cancel-button {
+  margin-right: 0px;
+  opacity: 0.5;
+}
+
 .cm-search-options {
-  --cm-search-options-width: 110px;
+  /* --cm-search-options-width: 110px; */
   position: absolute;
   top: 50%;
   right: 0;

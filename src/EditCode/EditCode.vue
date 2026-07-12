@@ -247,7 +247,7 @@
 
   <!-- 自定义确认弹窗 -->
   <div v-if="confirmState.visible" class="modal-mask" @click.self="confirmNo">
-    <div class="modal-box">
+    <div ref="confirmDialogRef" class="modal-box" tabindex="-1" @keydown.enter.prevent="confirmYes" @keydown.esc.prevent="confirmNo">
       <div class="modal-title">{{ confirmState.title }}</div>
       <div class="modal-actions">
         <button class="modal-btn" @click="confirmNo">取消</button>
@@ -349,6 +349,7 @@ function endResize() {
 const props = defineProps(["isReadOnly"]);
 const lastSavedContent = ref("");
 const promptInputRef = ref(null);
+const confirmDialogRef = ref(null);
 
 // ★ 修复：cmView 实例 ref，用于加载大文件前调用 skipNextLanguageSync
 const cmViewRef = ref(null);
@@ -363,6 +364,17 @@ watch(
     if (visible) {
       nextTick(() => {
         promptInputRef.value?.focus();
+      });
+    }
+  },
+);
+
+watch(
+  () => confirmState.value.visible,
+  (visible) => {
+    if (visible) {
+      nextTick(() => {
+        confirmDialogRef.value?.focus();
       });
     }
   },
