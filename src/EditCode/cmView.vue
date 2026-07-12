@@ -5,9 +5,16 @@
       <div v-if="!collapsed" class="cm-toolbar-wrapper">
         <div class="cm-img-button">
           <div>
-            <div class="language-select-wrap">
-              <select v-model="selectedLanguage" class="language-select" :title="selectedLanguageTitle" aria-label="Editor language" @change="onLanguageChange">
+            <div class="editor-background-select-wrap">
+              <select v-model="selectedLanguage" class="editor-background-select" :title="selectedLanguageTitle" aria-label="Editor language" @change="onLanguageChange">
                 <option v-for="option in languageOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+            <div class="editor-background-select-wrap">
+              <select v-model="editorDarkBackground" class="editor-background-select" title="编辑器背景颜色" aria-label="编辑器背景颜色" @change="setEditorDarkBackground">
+                <option v-for="option in editorDarkBackgroundOptions" :key="option.value" :value="option.value">
                   {{ option.label }}
                 </option>
               </select>
@@ -41,13 +48,12 @@
 
     <Teleport to="body">
       <button
-        v-if="!searchOpen"
         class="cm-search-fab"
         :class="{ dragging: searchFabDragging, 'is-dark': isDarkModeEnabled }"
         :style="[searchFabStyle, editorOverlayStyle]"
         type="button"
-        aria-label="打开查找与替换"
-        title="查找与替换（可拖动）"
+        :aria-label="searchOpen ? '关闭查找与替换' : '打开查找与替换'"
+        :title="searchOpen ? '关闭查找与替换（可拖动）' : '查找与替换（可拖动）'"
         @pointerdown="startSearchFabDrag"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -65,36 +71,43 @@
         role="dialog"
         aria-label="查找与替换"
         :style="[searchSheetStyle, editorOverlayStyle]"
+        @pointerdown="startSearchSheetDrag"
         @keydown.escape.prevent="closeSearch"
       >
-        <header class="cm-search-header" @pointerdown="startSearchSheetDrag">
-          <div class="cm-search-options" aria-label="搜索选项">
-            <button type="button" :class="{ active: searchCaseSensitive }" :aria-pressed="searchCaseSensitive" title="区分大小写" @click="toggleCaseSensitive">Aa</button>
-            <button type="button" :class="{ active: searchWholeWord }" :aria-pressed="searchWholeWord" title="全词匹配" @click="toggleWholeWord">ab</button>
-            <button type="button" :class="{ active: searchRegexp }" :aria-pressed="searchRegexp" title="正则表达式" @click="toggleRegexp">.*</button>
-          </div>
-          <span v-if="!searchIsValid" class="cm-search-error">正则无效</span>
-          <button class="cm-replace-toggle" type="button" :class="{ active: replaceOpen }" :aria-expanded="replaceOpen" @click="replaceOpen = !replaceOpen">
-            {{ replaceOpen ? "收起" : "替换" }}
-          </button>
-          <button class="cm-search-close" type="button" aria-label="关闭搜索" @click="closeSearch">×</button>
-        </header>
-
         <div class="cm-search-field-row">
-          <input
-            ref="searchInputRef"
-            v-model="searchQuery"
-            type="search"
-            enterkeyhint="search"
-            class="cm-search-input"
-            :class="{ invalid: !searchIsValid }"
-            placeholder="查找内容"
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck="false"
-            @input="onSearchInput"
-            @keydown.enter.prevent="onSearchEnter"
-          />
+          <div class="cm-search-input-wrap">
+            <input
+              ref="searchInputRef"
+              v-model="searchQuery"
+              type="search"
+              enterkeyhint="search"
+              class="cm-search-input"
+              :class="{ invalid: !searchIsValid }"
+              placeholder="查找内容"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              @input="onSearchInput"
+              @keydown.enter.prevent="onSearchEnter"
+            />
+            <div class="cm-search-options" aria-label="搜索选项">
+              <button
+                class="cm-replace-toggle"
+                type="button"
+                :class="{ active: replaceOpen }"
+                :aria-expanded="replaceOpen"
+                :aria-label="replaceOpen ? '收起替换' : '展开替换'"
+                :title="replaceOpen ? '收起替换' : '展开替换'"
+                @pointerdown.stop
+                @click.stop="toggleReplace"
+              >
+                {{ replaceOpen ? "▴" : "▾" }}
+              </button>
+              <button type="button" :class="{ active: searchCaseSensitive }" :aria-pressed="searchCaseSensitive" title="区分大小写" @click="toggleCaseSensitive">Aa</button>
+              <button type="button" :class="{ active: searchWholeWord }" :aria-pressed="searchWholeWord" title="全词匹配" @click="toggleWholeWord">ab</button>
+              <button type="button" :class="{ active: searchRegexp }" :aria-pressed="searchRegexp" title="正则表达式" @click="toggleRegexp">.*</button>
+            </div>
+          </div>
           <button class="cm-search-nav" type="button" aria-label="上一个匹配" title="上一个" @click="findPrev">↑</button>
           <button class="cm-search-nav" type="button" aria-label="下一个匹配" title="下一个" @click="findNext">↓</button>
         </div>
@@ -102,6 +115,7 @@
         <div v-if="replaceOpen" class="cm-replace-area">
           <div class="cm-replace-row">
             <input
+              style="padding-left: 13px"
               v-model="replaceQuery"
               type="text"
               class="cm-search-input"
@@ -113,8 +127,8 @@
               @keydown.enter.prevent="findNext"
             />
             <div class="cm-replace-actions">
-              <button type="button" :disabled="!canSearch" @click="replaceNext">替换</button>
-              <button type="button" class="cm-replace-all" :class="{ armed: replaceAllArmed }" :disabled="!canSearch" @click="confirmReplaceAll">
+              <button type="button" :disabled="!canSearch" @pointerdown.stop @click.stop="replaceNext">替换</button>
+              <button type="button" class="cm-replace-all" :class="{ armed: replaceAllArmed }" :disabled="!canSearch" @pointerdown.stop @click.stop="confirmReplaceAll">
                 {{ replaceAllArmed ? "再次点击确认" : "全替" }}
               </button>
             </div>
@@ -127,7 +141,7 @@
 
     <Teleport to="body">
       <div v-if="compressOpts.visible" class="compress-overlay" @click.self="closeCompressDialog">
-        <div class="compress-dialog">
+        <div class="compress-dialog" :style="editorOverlayStyle">
           <div class="compress-title">压缩选项</div>
           <div class="compress-body">
             <div class="compress-group">
@@ -202,7 +216,6 @@ import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import { hyperLink } from "@/EditCode/link";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { showToast } from "vant";
-import useV3Clipboard from "vue-clipboard3";
 import copyimg from "@/img/svg/copy.svg";
 import del from "@/img/svg/del.svg";
 import paste from "@/img/svg/zt.svg";
@@ -222,7 +235,6 @@ const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platfo
 const CHUNKED_LOAD_THRESHOLD = IS_IOS ? 300 * 1024 : 3 * 1024 * 1024; // iOS 300KB / 其他 3MB
 const CHUNK_SIZE = IS_IOS ? 200 * 1024 : 512 * 1024;
 
-const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
 const { isDarkModeEnabled } = useTheme();
 
@@ -233,12 +245,29 @@ const getEditorDarkBackground = () => {
   const background = localStorage.getItem("EditorDarkBackground");
   return EDITOR_DARK_BACKGROUNDS.has(background) ? background : "#282c34";
 };
+const editorDarkBackgroundOptions = [
+  { label: "BLUE", value: "#282c34" },
+  { label: "GREY", value: "#141414" },
+  { label: "DARK", value: "#000000" },
+];
+const editorDarkBackground = ref(getEditorDarkBackground());
+const setEditorDarkBackground = () => {
+  localStorage.setItem("EditorDarkBackground", editorDarkBackground.value);
+  window.dispatchEvent(new Event("editor-theme-change"));
+};
 const getEditorTheme = () => {
   if (!isDarkModeEnabled.value) return lightCode;
   getEditorDarkBackground();
   return darkCode;
 };
-const editorOverlayStyle = computed(() => (isDarkModeEnabled.value ? { "--editor-overlay-background": getEditorDarkBackground() } : {}));
+const editorOverlayStyle = computed(() => {
+  if (!isDarkModeEnabled.value) return {};
+  const background = getEditorDarkBackground();
+  return {
+    "--editor-overlay-background": background,
+    "--editor-overlay-sheet-background": background === "#000000" ? "#14141469" : `${background}69`,
+  };
+});
 
 const props = defineProps({
   isReadOnly: {
@@ -835,6 +864,7 @@ onMounted(() => {
 
 const refreshEditorTheme = () => {
   editorThemeVersion.value++;
+  editorDarkBackground.value = getEditorDarkBackground();
   if (!view) return;
   view.dispatch({ effects: editorTheme.reconfigure(getEditorTheme()) });
 };
@@ -920,7 +950,7 @@ const clampSearchSheetPosition = (x, y) => {
   // 用面板实际宽度计算右侧边界，避免拖到屏幕右边以外
   const panelWidth = document.querySelector(".cm-search-sheet")?.offsetWidth ?? Math.min(560, window.innerWidth - 20) + 24;
   const maxX = window.innerWidth - panelWidth - 10;
-  const maxY = window.innerHeight - 150;
+  const maxY = window.innerHeight - 66;
   return {
     x: Math.max(minX, Math.min(maxX, x)),
     y: Math.max(minY, Math.min(maxY, y)),
@@ -940,6 +970,9 @@ const onSearchSheetDrag = (e) => {
   if (!searchSheetDragState) return;
   const dx = e.clientX - searchSheetDragState.startX;
   const dy = e.clientY - searchSheetDragState.startY;
+  if (!searchSheetDragState.dragging && Math.hypot(dx, dy) < 6) return;
+  searchSheetDragState.dragging = true;
+  e.preventDefault();
   searchSheetPos.value = clampSearchSheetPosition(searchSheetDragState.originX + dx, searchSheetDragState.originY + dy);
 };
 
@@ -955,13 +988,13 @@ const endSearchSheetDrag = () => {
 
 const startSearchSheetDrag = (e) => {
   if (e.button !== undefined && e.button !== 0) return;
-  e.preventDefault();
   initSearchSheetPos();
   searchSheetDragState = {
     startX: e.clientX,
     startY: e.clientY,
     originX: searchSheetPos.value.x,
     originY: searchSheetPos.value.y,
+    dragging: false,
   };
   document.addEventListener("pointermove", onSearchSheetDrag, { passive: false });
   document.addEventListener("pointerup", endSearchSheetDrag);
@@ -994,7 +1027,7 @@ const endSearchFabDrag = () => {
   if (searchFabDragging.value) {
     localStorage.setItem("cm_search_fab_pos", JSON.stringify(searchFabPos.value));
   } else {
-    openSearch();
+    toggleSearch();
   }
   searchFabDragState = null;
   requestAnimationFrame(() => (searchFabDragging.value = false));
@@ -1054,7 +1087,12 @@ const toggleRegexp = () => {
   dispatchSearch();
 };
 
+const toggleReplace = () => {
+  replaceOpen.value = !replaceOpen.value;
+};
+
 const openSearch = () => {
+  if (searchOpen.value) return;
   if (!view) return;
   searchOpen.value = true;
 
@@ -1071,6 +1109,14 @@ const openSearch = () => {
     searchInputRef.value?.focus({ preventScroll: true });
     searchInputRef.value?.select();
   });
+};
+
+const toggleSearch = () => {
+  if (searchOpen.value) {
+    closeSearch();
+  } else {
+    openSearch();
+  }
 };
 
 const closeSearch = () => {
@@ -1301,14 +1347,14 @@ const copyText = async () => {
   isCopying.value = true;
   const code = cmStore.CmCode || "";
   const code_length = code.length;
-  const isLarge = code_length > 819200; // > 800KB
+  const isLarge = code_length > 819200;
   if (isLarge) showToast("正在复制…");
   try {
-    const x = await toClipboard(code);
-    if (isLarge) showToast("已复制 (" + code_length + " 字符)");
-    else if (x) showToast("已复制 (" + (x?.text?.length || code_length) + " 字符)");
+    if (!navigator.clipboard?.writeText) throw new Error("不支持原生剪贴板");
+    await navigator.clipboard.writeText(code);
+    showToast("已复制 (" + code_length + " 字符)");
   } catch (e) {
-    showToast("复制失败: " + (e.message || "未知错误"));
+    showToast("复制失败，请使用 HTTPS 或授予剪贴板权限");
   } finally {
     isCopying.value = false;
   }
@@ -1333,75 +1379,45 @@ const pasteNav = async () => {
   }
 };
 
-const onCollapseClick = () => {
-  collapsed.value = true;
-};
+// const onCollapseClick = () => {
+//   collapsed.value = true;
+// };
 const toggleCollapsed = () => {
   collapsed.value = !collapsed.value;
 };
 </script>
 
 <style lang="scss" scoped>
-.language-select-wrap {
-  position: relative;
+
+.editor-background-select-wrap {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 34px;
-  padding: 0;
-  margin-right: 0px;
-  margin-left: 12px;
-  color: var(--second-text-color);
   flex-shrink: 0;
-  border: 0px solid #8b8b8b66;
-  border-radius: 16px;
+  // width: 40px;
+  height: 34px;
 }
 
-.language-select-display {
-  position: absolute;
-  inset: 0 20px 0 8px;
-  z-index: 1001;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-  color: currentColor;
-  font-size: 11px;
-  line-height: 14px;
-  pointer-events: none;
-  word-break: break-word;
-}
-
-.language-select:focus {
-  border-color: #8fb4e8;
-}
-
-.language-select option {
-  color: #222;
-  background-color: #fff;
-  -webkit-text-fill-color: #222;
-}
-
-.language-select {
+.editor-background-select {
+  width: 42px;
+  height: 30px;
+  border: 0;
+  border-radius: 10px;
+  outline: none;
   background: transparent;
-  border: 0px solid rgba(128, 128, 128, 0.5);
-  text-align: center;
-  text-align-last: center;
   color: var(--text);
   font-size: 11px;
-  line-height: 34px;
-  min-width: 34px;
-  max-width: 38px;
-  height: 34px;
-  min-height: 34px;
-  max-height: 34px;
-  outline: none;
+  text-align: right;
+  text-align-last: right;
+  padding-right: 2px;
   appearance: none;
   -webkit-appearance: none;
-  padding: 0;
-  margin: 0;
-  box-sizing: border-box;
-  overflow: hidden;
+  opacity: 0.7;
+  padding-right:6px;
+}
+
+.editor-background-select option {
+  color: #222;
+  // background-color: #fff;
 }
 
 .cm-img-button button {
@@ -1422,568 +1438,580 @@ const toggleCollapsed = () => {
     margin-right: 3px;
   }
 
-  .language-select-display {
-    inset: 0 18px 0 7px;
-  }
-
-  .language-select-wrap::after {
-    right: 7px;
-  }
-}
-
-.cm-toolbar-wrapper {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex: 1;
-  height: 40px;
-  min-width: 0;
-  margin: 0;
-  box-sizing: border-box;
-  color: #222;
-}
-
-.cm-collapse-btn {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  align-self: stretch;
-  margin-right: 10px;
-  margin-left: auto;
-  width: 31px;
-  height: 34px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: #222;
-  cursor: pointer;
-  border-radius: 50%;
-  transition:
-    background 0.15s,
-    transform 0.15s;
-}
-
-.cm-collapse-btn:active {
-  transform: scale(0.94);
-}
-
-.cm-toolbar-row {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 40px;
-  margin: 0 0 8px;
-}
-
-.cm-toolbar-more {
-  display: block;
-  color: currentColor;
-  line-height: 1;
-  pointer-events: none;
-}
-
-.cm-toolbar-more svg {
-  display: block;
-  width: 18px;
-  height: 18px;
-  fill: currentColor;
-}
-
-.cm-img-button {
-  width: 100%;
-  height: 40px;
-  min-width: 0;
-  overflow-x: auto;
-  display: flex;
-  align-items: center;
-  padding: 5px 7px;
-  box-sizing: border-box;
-  scrollbar-width: none;
-}
-
-.cm-img-button::-webkit-scrollbar {
-  display: none;
-}
-
-.cm-img-button > div:first-child {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 3px;
-  min-width: 100%;
-}
-
-.cm-img-button button {
-  border-radius: 10px;
-}
-
-.cm-img-button button:hover {
-  background: rgba(128, 128, 128, 0.1);
-}
-
-@media (max-width: 480px) {
   .cm-toolbar-wrapper {
-    margin-bottom: 6px;
-    border-radius: 12px;
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex: 1;
+    height: 40px;
+    min-width: 0;
+    margin: 0;
+    box-sizing: border-box;
+    color: #222;
+  }
+
+  .cm-collapse-btn {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    align-self: stretch;
+    margin-right: 10px;
+    margin-left: auto;
+    width: 31px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #222;
+    cursor: pointer;
+    border-radius: 50%;
+    opacity: 0.7;
+    transition:
+      background 0.2s,
+      transform 0.2s;
+  }
+
+  .cm-collapse-btn:active {
+    transform: scale(0.8);
+  }
+
+  .cm-toolbar-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 40px;
+    margin: 0 0 8px;
+  }
+
+  .cm-toolbar-more {
+    display: block;
+    color: currentColor;
+    line-height: 1;
+    pointer-events: none;
+    transition:
+      background 0.2s,
+      transform 0.2s;
+  }
+  .cm-toolbar-more:active {
+    transform: scale(0.8);
+  }
+  .cm-toolbar-more svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
   }
 
   .cm-img-button {
-    padding: 4px 5px;
-  }
-}
-
-.cm-search-fab {
-  position: fixed;
-  z-index: 1090;
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  padding: 0;
-  border: 0px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.96);
-  color: #313842;
-  box-shadow: 0 5px 18px rgba(29, 38, 52, 0.16);
-  touch-action: none;
-  // border: 1px solid rgba(128, 128, 128, 0.1);
-  -webkit-tap-highlight-color: transparent;
-  cursor: grab;
-  opacity: 0.6;
-}
-
-.cm-search-fab svg {
-  width: 22px;
-  height: 22px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-
-.cm-search-fab:active:not(.dragging) {
-  transform: scale(0.94);
-}
-
-.cm-search-fab.dragging {
-  cursor: grabbing;
-  box-shadow: 0 6px 8px rgba(29, 38, 52, 0.24);
-}
-
-.cm-search-sheet {
-  position: fixed;
-  top: calc(10px + env(safe-area-inset-top, 0px));
-  left: 50%;
-  z-index: 99990;
-  width: min(560px, calc(100vw - 20px));
-  padding: 12px;
-  box-sizing: border-box;
-  // border: 1px solid rgba(128, 128, 128, 0.12);
-  border-radius: 20px;
-  background: rgba(250, 250, 252, 0.96);
-  color: #25262a;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-  transform: translateX(-50%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.cm-search-sheet[dragging="true"],
-.cm-search-header {
-  cursor: grab;
-  touch-action: none;
-}
-.cm-search-header:active {
-  cursor: grabbing;
-}
-.cm-search-grip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  font-size: 14px;
-  opacity: 0.4;
-  cursor: grab;
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: none;
-  flex-shrink: 0;
-}
-.cm-search-grip:active {
-  cursor: grabbing;
-}
-
-.cm-search-header,
-.cm-search-field-row,
-.cm-replace-row,
-.cm-replace-actions {
-  display: flex;
-  align-items: center;
-}
-
-.cm-search-header {
-  // min-height: 12px;
-  gap: 5px;
-  padding: 0 0 7px;
-}
-
-.cm-search-error {
-  margin-left: auto;
-  color: #d84c4c;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.cm-search-close,
-.cm-search-nav {
-  display: grid;
-  place-items: center;
-  // flex: 0 0 42px;
-  width: 50px;
-  height: 33px;
-  padding: 0;
-  border: 0;
-  border-radius: 12px;
-  background: rgba(128, 128, 128, 0.09);
-  color: inherit;
-  font-size: 14px;
-  font-weight: 900;
-  opacity: 0.7;
-  line-height: 1;
-  touch-action: manipulation;
-}
-
-.cm-search-close {
-  // flex-basis: 36px;
-  width: 50px;
-  height: 33px;
-  padding-bottom: 3px;
-  font-size: 24px;
-  font-weight: 400;
-}
-
-.cm-search-field-row {
-  gap: 7px;
-}
-
-.cm-search-input {
-  flex: 1;
-  min-width: 0;
-  width: 100%;
-  height: 33px;
-  padding: 0 13px;
-  box-sizing: border-box;
-  border: 0px;
-  border-radius: 12px;
-  background: rgba(128, 128, 128, 0.07);
-  color: inherit;
-  font-size: 13px;
-  outline: none;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.cm-search-input:focus {
-  border-color: #6d9edc;
-  box-shadow: 0 0 0 3px rgba(109, 158, 220, 0.14);
-}
-
-.cm-search-input.invalid {
-  border-color: #d84c4c;
-}
-
-.cm-search-options {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 10px;
-  background: rgba(128, 128, 128, 0.09);
-}
-
-.cm-search-options button {
-  min-width: 34px;
-  height: 30px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: inherit;
-  font-size: 13px;
-  font-weight: 650;
-  opacity: 0.58;
-  touch-action: manipulation;
-}
-
-.cm-search-options button.active {
-  background: #fff;
-  color: #377fd1;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.11);
-  opacity: 1;
-}
-
-.cm-replace-toggle {
-  width: 52px;
-  height: 33px;
-  margin-left: auto;
-  padding: 0 8px;
-  opacity: 0.7;
-  border: 0;
-  border-radius: 12px;
-  background: rgba(128, 128, 128, 0.09);
-  color: inherit;
-  font-size: 13px;
-  touch-action: manipulation;
-}
-
-.cm-replace-toggle.active {
-  color: #377fd1;
-  background: rgba(55, 127, 209, 0.12);
-}
-
-.cm-replace-area {
-  margin-top: 9px;
-  padding-top: 9px;
-  border-top: 1px solid rgba(128, 128, 128, 0.15);
-}
-
-.cm-replace-row {
-  gap: 7px;
-}
-
-.cm-replace-actions {
-  justify-content: flex-end;
-  gap: 8px;
-  flex: 0 0 auto;
-}
-
-.cm-replace-actions button {
-  min-width: 50px;
-  height: 33px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: 13px;
-  background: rgba(128, 128, 128, 0.1);
-  color: inherit;
-  font-size: 13px; 
-  touch-action: manipulation;
-}
-
-.cm-replace-actions button:disabled {
-  opacity: 0.6;
-}
-
-.cm-replace-actions .cm-replace-all {
-  color: #c44343;
-}
-
-.cm-replace-actions .cm-replace-all.armed {
-  background: #d84c4c;
-  color: #fff;
-  font-weight: 600;
-}
-
-@media (max-width: 390px) {
-  .cm-search-sheet {
-    width: calc(100vw - 12px);
-    padding: 10px;
-    border-radius: 17px;
+    width: 100%;
+    height: 40px;
+    min-width: 0;
+    overflow-x: auto;
+    display: flex;
+    align-items: center;
+    padding: 5px 7px;
+    box-sizing: border-box;
+    scrollbar-width: none;
   }
 
-  .cm-search-error {
+  .cm-img-button::-webkit-scrollbar {
     display: none;
   }
 
-  .cm-replace-row {
-    gap: 5px;
+  .cm-img-button > div:first-child {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+    min-width: 100%;
   }
 
-  .cm-replace-actions {
-    gap: 5px;
+  .cm-img-button button {
+    border-radius: 10px;
   }
 
-  .cm-replace-actions button {
-    min-width: 68px;
-    padding: 0 6px;
-    font-size: 12px;
+  .cm-img-button button:hover {
+    background: rgba(128, 128, 128, 0.1);
   }
-}
 
-:deep(.cm-editor .cm-search) {
-  display: none !important;
-}
+  @media (max-width: 480px) {
+    .cm-toolbar-wrapper {
+      margin-bottom: 6px;
+      border-radius: 12px;
+    }
 
-/* ★ 压缩选项弹窗 */
-.compress-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-}
-
-.compress-dialog {
-  width: 85%;
-  max-width: 340px;
-  background: #ffffffec;
-  border-radius: 16px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
-  overflow: hidden;
-}
-
-.compress-title {
-  padding: 18px 20px 10px;
-  font-size: 17px;
-  font-weight: 600;
-  color: #222;
-}
-
-.compress-body {
-  padding: 4px 20px 14px;
-}
-
-.compress-group {
-  margin-bottom: 12px;
-}
-
-.compress-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #66666680;
-  margin-bottom: 6px;
-}
-
-.compress-radio {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 0;
-  font-size: 14px;
-  color: #3333337a;
-  cursor: pointer;
-}
-
-.compress-radio input[type="radio"],
-.compress-radio input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: #4a90d9;
-  cursor: pointer;
-}
-
-.compress-radio span {
-  user-select: none;
-}
-
-.compress-buttons {
-  display: flex;
-  border-top: 1px solid #eee;
-}
-
-.compress-btn {
-  flex: 1;
-  height: 44px;
-  border: none;
-  background: transparent;
-  font-size: 15px;
-  color: #33333362;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.compress-btn:hover {
-  background: #f5f5f5;
-}
-
-.compress-btn:active {
-  background: #eee;
-}
-
-.compress-btn.cancel {
-  color: #999;
-}
-
-.compress-btn.primary {
-  color: #4a90d9;
-  font-weight: 600;
-}
- 
-
-.cm-search-sheet.is-dark {
-  background: color-mix(in srgb, var(--editor-overlay-background, #282c34) 96%, transparent);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: #eceff4;
-}
-
-@media (prefers-color-scheme: dark) {
-  .cm-collapse-btn,
-  .cm-toolbar-more {
-    color: var(--text, inherit);
+    .cm-img-button {
+      padding: 4px 5px;
+    }
   }
+
   .cm-search-fab {
-    background: var(--editor-overlay-background, #282c34);
-    // border-color: rgba(255, 255, 255, 0.15);
-    color: var(--text, inherit);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.463);
+    position: fixed;
+    z-index: 1090;
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border: 0px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.96);
+    color: #313842;
+    box-shadow: 0 5px 18px rgba(29, 38, 52, 0.16);
+    touch-action: none;
+    // border: 1px solid rgba(128, 128, 128, 0.1);
+    -webkit-tap-highlight-color: transparent;
+    cursor: grab;
+    isolation: isolate;
+    backdrop-filter: blur(6px) saturate(60%);
+    -webkit-backdrop-filter: blur(6px) saturate(60%);
   }
 
-  .cm-search-sheet .cm-search-input {
-    background: rgba(255, 255, 255, 0.03);
-  }
-  .cm-search-sheet .cm-search-input:focus {
-    background: rgba(143, 180, 232, 0.08);
-  }
-  .cm-search-options button.active {
-    background: rgba(106, 158, 216, 0.22);
-    color: #88bcf5;
-    box-shadow: none;
+  .cm-search-fab svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    opacity: 0.6;
   }
 
-  .compress-overlay {
-    background: rgba(0, 0, 0, 0.6);
+  .cm-search-fab:active:not(.dragging) {
+    transform: scale(0.94);
   }
-  .compress-dialog {
-    background: #282c34ec;
-  }
-  .compress-title {
-    color: #e0e0e0;
-  }
-  .compress-label {
-    color: #999;
-  }
-  .compress-radio {
-    color: #ccc;
-  }
-  .compress-buttons {
-    border-top-color: #3a3a3a;
-  }
-  .compress-btn {
-    color: #ccc;
-  }
-  .compress-btn:hover {
-    background: #3a3a3a5f;
-  }
-  .compress-btn:active {
-    background: #444;
-  }
-  .compress-btn.cancel {
-    color: #888888d7;
-  }
-  .compress-btn.primary {
-    color: #6a9ed8;
-  }
-  .compress-radio input[type="radio"],
-  .compress-radio input[type="checkbox"] {
-    accent-color: #6a9ed8;
+
+  .cm-search-fab.dragging {
+    cursor: grabbing;
+    box-shadow: 0 6px 8px rgba(29, 38, 52, 0.24);
   }
 
   .cm-search-sheet {
-    box-shadow: 0 6px 26px rgba(0, 0, 0, 0.7);
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: 50%;
+    z-index: 99990;
+    width: min(560px, calc(100vw - 20px));
+    padding: 12px;
+    box-sizing: border-box;
+    border-radius: 20px;
+    background: rgba(250, 250, 252, 0.96);
+    color: #25262a;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+    transform: translateX(-50%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    cursor: grab;
+  }
+
+  .cm-search-sheet:active {
+    cursor: grabbing;
+  }
+
+  .cm-search-field-row,
+  .cm-search-input-wrap,
+  .cm-replace-row,
+  .cm-replace-actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .cm-search-nav {
+    display: grid;
+    place-items: center;
+    flex: 0 0 33px;
+    width: 33px;
+    height: 33px;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    background: rgba(128, 128, 128, 0.09);
+    color: inherit;
+    font-size: 14px;
+    font-weight: 900;
+    opacity: 0.7;
+    line-height: 1;
+    touch-action: manipulation;
+  }
+
+  .cm-search-nav:active,
+  .cm-replace-toggle:active {
+    background: rgba(55, 127, 209, 0.18);
+    opacity: 1;
+    transform: scale(0.96);
+  }
+
+  .cm-search-field-row {
+    gap: 6px;
+  }
+
+  .cm-search-input {
+    min-width: 0;
+    width: 100%;
+    height: 33px;
+    padding: 0 calc(var(--cm-search-options-width) + 13px) 0 13px;
+    box-sizing: border-box;
+    border: 0px;
+    border-radius: 12px;
+    background: rgba(128, 128, 128, 0.07);
+    color: inherit;
+    font-size: 13px;
+    outline: none;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .cm-search-input:focus {
+    border-color: #6d9edc;
+    box-shadow: 0 0 0 3px rgba(109, 158, 220, 0.14);
+  }
+
+  .cm-search-input.invalid {
+    border-color: #d84c4c;
+  }
+
+  .cm-search-options {
+    --cm-search-options-width: 110px;
+    position: absolute;
+    top: 50%;
+    right: 0px;
+    display: flex;
+    width: var(--cm-search-options-width);
+    gap: 2px;
+    // padding: 2px;
+    box-sizing: border-box;
+    // border-radius: 10px;
+    // background: rgba(128, 128, 128, 0.09);
+    transform: translateY(-50%);
+  }
+
+  .cm-search-input-wrap {
+    --cm-search-options-width: 145px;
+    position: relative;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cm-search-options button {
+    box-sizing: border-box;
+    // flex: 0 0 auto;
+    width: 25px;
+    height: 30px;
+    // padding: 0 5px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    font-size: 10px;
+    font-weight: 650;
+    opacity: 0.58;
+    touch-action: manipulation;
+  }
+
+  .cm-search-options button.active {
+    background: #fff;
+    color: #377fd1;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.11);
+    opacity: 1;
+  }
+
+  .cm-replace-toggle {
+    width: 30px;
+    height: 30px;
+    padding: 0 5px;
+    opacity: 0.7;
+    border: 0;
+    border-radius: 12px;
+    background: rgba(128, 128, 128, 0.09);
+    color: inherit;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1;
+    touch-action: manipulation;
+    transition:
+      background 0.12s ease,
+      color 0.12s ease,
+      transform 0.12s ease;
+  }
+
+  .cm-replace-toggle.active {
+    color: #377fd1;
+    background: rgba(55, 127, 209, 0.12);
+  }
+
+  .cm-replace-area {
+    margin-top: 9px;
+    padding-top: 9px;
+    border-top: 1px solid rgba(128, 128, 128, 0.05);
+  }
+
+  .cm-replace-row {
+    gap: 7px;
+  }
+
+  .cm-replace-actions {
+    justify-content: flex-end;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .cm-replace-actions button {
+    min-width: 50px;
+    height: 33px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 13px;
+    background: rgba(128, 128, 128, 0.1);
+    color: inherit;
+    font-size: 13px;
+    touch-action: manipulation;
+  }
+
+  .cm-replace-actions button:disabled {
+    opacity: 0.6;
+  }
+
+  .cm-replace-actions button:not(:disabled):active {
+    background: rgba(55, 127, 209, 0.18);
+    transform: scale(0.96);
+  }
+
+  .cm-replace-actions .cm-replace-all {
+    color: #c44343;
+  }
+
+  .cm-replace-actions .cm-replace-all.armed {
+    background: #d84c4c;
+    color: #fff;
+    font-weight: 600;
+  }
+
+  @media (max-width: 390px) {
+    .cm-search-sheet {
+      width: calc(100vw - 12px);
+      padding: 10px;
+      border-radius: 17px;
+    }
+
+    .cm-search-field-row {
+      gap: 4px;
+    }
+
+    .cm-search-options {
+      --cm-search-options-width: 123px;
+      right: 1px;
+      width: var(--cm-search-options-width);
+      gap: 0;
+      padding: 1px;
+    }
+
+    .cm-search-options button {
+      min-width: 26px;
+      padding: 0 3px;
+      font-size: 12px;
+    }
+
+    .cm-search-input {
+      padding-right: calc(var(--cm-search-options-width) + 13px);
+    }
+
+    .cm-search-nav,
+    .cm-replace-toggle {
+      flex-basis: 29px;
+      width: 29px;
+    }
+
+    .cm-replace-row {
+      gap: 5px;
+    }
+
+    .cm-replace-actions {
+      gap: 5px;
+    }
+
+    .cm-replace-actions button {
+      min-width: 68px;
+      padding: 0 6px;
+      font-size: 12px;
+    }
+  }
+
+  :deep(.cm-editor .cm-search) {
+    display: none !important;
+  }
+
+  /* ★ 压缩选项弹窗 */
+  .compress-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  .compress-dialog {
+    width: 85%;
+    max-width: 340px;
+    background: var(--editor-overlay-background, #ffffffec);
+    border-radius: 16px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+  }
+
+  .compress-title {
+    padding: 18px 20px 10px;
+    font-size: 17px;
+    font-weight: 600;
+    color: #222;
+  }
+
+  .compress-body {
+    padding: 4px 20px 14px;
+  }
+
+  .compress-group {
+    margin-bottom: 12px;
+  }
+
+  .compress-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #66666680;
+    margin-bottom: 6px;
+  }
+
+  .compress-radio {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0;
+    font-size: 14px;
+    color: #3333337a;
+    cursor: pointer;
+  }
+
+  .compress-radio input[type="radio"],
+  .compress-radio input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #4a90d9;
+    cursor: pointer;
+  }
+
+  .compress-radio span {
+    user-select: none;
+  }
+
+  .compress-buttons {
+    display: flex;
+    border-top: 0.1px solid rgba(128, 128, 128, 0.05);
+  }
+
+  .compress-btn {
+    flex: 1;
+    height: 44px;
+    border: none;
+    background: transparent;
+    font-size: 15px;
+    color: #33333362;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+
+  .compress-btn:hover {
+    background: #f5f5f5;
+  }
+
+  .compress-btn:active {
+    background: #eee;
+  }
+
+  .compress-btn.cancel {
+    color: #999;
+  }
+
+  .compress-btn.primary {
+    color: #4a90d9;
+    font-weight: 600;
+  }
+
+  .cm-search-sheet.is-dark {
+    background: color-mix(in srgb, var(--editor-overlay-sheet-background, #282c34) 96%, transparent);
+    border-color: rgba(255, 255, 255, 0.14);
+    color: #eceff4;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .cm-collapse-btn,
+    .cm-toolbar-more {
+      color: var(--text, inherit);
+    }
+    .cm-search-fab {
+      background: var(--editor-overlay-sheet-background, #282c3420);
+      // border-color: rgba(255, 255, 255, 0.15);
+      color: var(--text, inherit);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.463);
+    }
+
+    .cm-search-sheet .cm-search-input {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .cm-search-sheet .cm-search-input:focus {
+      background: rgba(143, 180, 232, 0.08);
+    }
+    .cm-search-options button.active {
+      background: rgba(106, 158, 216, 0.22);
+      color: #88bcf5;
+      box-shadow: none;
+    }
+
+    .compress-overlay {
+      background: rgba(0, 0, 0, 0.6);
+    }
+    .compress-dialog {
+      background: var(--editor-overlay-background, #282c34ec);
+    }
+    .compress-title {
+      color: #e0e0e0;
+    }
+    .compress-label {
+      color: #999;
+    }
+    .compress-radio {
+      color: #ccc;
+    }
+    .compress-buttons {
+      border-top-color: rgba(255, 255, 255, 0.05);
+    }
+    .compress-btn {
+      color: #ccc;
+    }
+    .compress-btn:hover {
+      background: #3a3a3a5f;
+    }
+    .compress-btn:active {
+      background: #444;
+    }
+    .compress-btn.cancel {
+      color: #888888d7;
+    }
+    .compress-btn.primary {
+      color: #6a9ed8;
+    }
+    .compress-radio input[type="radio"],
+    .compress-radio input[type="checkbox"] {
+      accent-color: #6a9ed8;
+    }
+
+    .cm-search-sheet {
+      box-shadow: 0 6px 26px rgba(0, 0, 0, 0.7);
+    }
   }
 }
 </style>
