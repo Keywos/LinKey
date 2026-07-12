@@ -95,13 +95,11 @@ import { useGistStore } from "@/store/gistStore.js";
 import { defineAsyncComponent, onBeforeUnmount, ref } from "vue";
 import { showToast } from "vant";
 import { sendReq } from "@/http/http.js";
-import useV3Clipboard from "vue-clipboard3";
 import { useCmStore } from "@/store/cmCodeStore.js";
 const cmStore = useCmStore();
 
 const EditCode = defineAsyncComponent(() => import("@/EditCode/cmView.vue"));
 
-const { toClipboard } = useV3Clipboard();
 const isloding = ref(false);
 const PublicM = ref("1");
 const rawURL = ref("");
@@ -222,7 +220,13 @@ const onSubmit = async (values) => {
 
 const copyText = async (t) => {
   if (t?.length > 0) {
-    await toClipboard(t);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("不支持原生剪贴板");
+      await navigator.clipboard.writeText(t);
+    } catch {
+      showToast("复制失败，请使用 HTTPS 或授予剪贴板权限");
+      return;
+    }
     showToast("已复制字符串数: " + t.length);
   }
 };

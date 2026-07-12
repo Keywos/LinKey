@@ -219,7 +219,7 @@ import { showToast } from "vant";
 import copyimg from "@/img/svg/copy.svg";
 import del from "@/img/svg/del.svg";
 import paste from "@/img/svg/zt.svg";
-import searchimg from "@/img/svg/search.svg";
+// import searchimg from "@/img/svg/search.svg";
 import format from "@/img/svg/format.svg";
 import redoimg from "@/img/svg/redo.svg";
 import undoimg from "@/img/svg/undo.svg";
@@ -265,7 +265,7 @@ const editorOverlayStyle = computed(() => {
   const background = getEditorDarkBackground();
   return {
     "--editor-overlay-background": background,
-    "--editor-overlay-sheet-background": background === "#000000" ? "#14141469" : `${background}69`,
+    "--editor-overlay-sheet-background": background === "#000000" ? "#14141469" : `${background}23`,
   };
 });
 
@@ -859,8 +859,18 @@ onMounted(() => {
   CreateView();
   keepSearchFabInViewport();
   window.addEventListener("resize", keepSearchFabInViewport);
+  window.addEventListener("orientationchange", handleViewportChange);
   window.addEventListener("editor-theme-change", refreshEditorTheme);
 });
+
+const handleViewportChange = () => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      keepSearchFabInViewport();
+      view?.requestMeasure?.();
+    });
+  });
+};
 
 const refreshEditorTheme = () => {
   editorThemeVersion.value++;
@@ -874,6 +884,7 @@ onBeforeUnmount(() => {
   clearTimeout(syncTimer);
   clearTimeout(replaceAllArmTimer);
   window.removeEventListener("resize", keepSearchFabInViewport);
+  window.removeEventListener("orientationchange", handleViewportChange);
   window.removeEventListener("editor-theme-change", refreshEditorTheme);
   document.removeEventListener("pointermove", onSearchFabDrag);
   document.removeEventListener("pointerup", endSearchFabDrag);
@@ -948,9 +959,9 @@ const clampSearchSheetPosition = (x, y) => {
   const minX = 10;
   const minY = 10;
   // 用面板实际宽度计算右侧边界，避免拖到屏幕右边以外
-  const panelWidth = document.querySelector(".cm-search-sheet")?.offsetWidth ?? Math.min(560, window.innerWidth - 20) + 24;
+  const panelWidth = document.querySelector(".cm-search-sheet")?.offsetWidth ?? Math.min(560, window.innerWidth - 20) + 20;
   const maxX = window.innerWidth - panelWidth - 10;
-  const maxY = window.innerHeight - 66;
+  const maxY = window.innerHeight - 60;
   return {
     x: Math.max(minX, Math.min(maxX, x)),
     y: Math.max(minY, Math.min(maxY, y)),
@@ -1346,13 +1357,10 @@ const copyText = async () => {
   if (isCopying.value) return;
   isCopying.value = true;
   const code = cmStore.CmCode || "";
-  const code_length = code.length;
-  const isLarge = code_length > 819200;
-  if (isLarge) showToast("正在复制…");
   try {
     if (!navigator.clipboard?.writeText) throw new Error("不支持原生剪贴板");
     await navigator.clipboard.writeText(code);
-    showToast("已复制 (" + code_length + " 字符)");
+    showToast("已复制 (" + code.length + " 字符)");
   } catch (e) {
     showToast("复制失败，请使用 HTTPS 或授予剪贴板权限");
   } finally {
@@ -1430,7 +1438,7 @@ const toggleCollapsed = () => {
   align-items: center;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 480px), (orientation: landscape) and (max-height: 600px) {
   .cm-img-button .language-detect-button {
     flex-basis: 22px;
     width: 22px;
@@ -1852,16 +1860,19 @@ const toggleCollapsed = () => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(0, 0, 0, 0.32);
   }
 
   .compress-dialog {
     width: 85%;
     max-width: 340px;
-    background: var(--editor-overlay-background, #ffffffec);
+    background: var(--editor-overlay-sheet-background, rgba(250, 250, 252, 0.88));
+    border: 0.1px solid rgba(22, 22, 22, 0.007);
     border-radius: 16px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 10px 32px rgba(29, 38, 52, 0.24);
     overflow: hidden;
+    backdrop-filter: blur(20px) saturate(120%);
+    -webkit-backdrop-filter: blur(20px) saturate(120%);
   }
 
   .compress-title {
@@ -1972,10 +1983,12 @@ const toggleCollapsed = () => {
     }
 
     .compress-overlay {
-      background: rgba(0, 0, 0, 0.6);
+      background: rgba(0, 0, 0, 0.46);
     }
     .compress-dialog {
-      background: var(--editor-overlay-background, #282c34ec);
+      background: var(--editor-overlay-sheet-background, rgba(40, 44, 52, 0.7));
+      border-color: rgba(255, 255, 255, 0.14);
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.46);
     }
     .compress-title {
       color: #e0e0e0;

@@ -1644,8 +1644,14 @@ const goFunction = async () => {
 };
 
 const copyText = async (i) => {
-  if (i.length > 0) {
-    await toClipboard(i);
+  if (i?.length > 0) {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("不支持原生剪贴板");
+      await navigator.clipboard.writeText(i);
+    } catch {
+      showToast("复制失败，请使用 HTTPS 或授予剪贴板权限");
+      return;
+    }
     showToast("已复制字符串数: " + i.length);
   }
 };
@@ -1988,7 +1994,7 @@ onBeforeUnmount(() => {
   z-index: 9999;
   display: flex;
   flex-direction: column;
-  background: #f6f6f6f3;
+  background: #f6f6f632;
   border: 0.1px solid rgba(255, 255, 255, 0.12);
   border-radius: 16px;
   box-shadow: 0 8px 26px #919db687;
@@ -1999,19 +2005,23 @@ onBeforeUnmount(() => {
   min-width: 200px;
   min-height: 80px;
   touch-action: none;
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
 }
 .log-header {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: rgba(232, 234, 236, 0.919);
+  background: rgba(232, 234, 236, 0.51);
   cursor: grab;
   color: #0000005c;
   user-select: none;
   flex-shrink: 0;
   touch-action: none;
   position: relative;
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -2019,9 +2029,9 @@ onBeforeUnmount(() => {
     background: #16181c;
   }
   .log-panel {
-    background: #1c1e23f2;
+    background: #1c1e234c;
     border: 0.1px solid #282a31f7;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.486);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     color: #e0e0e0;
   }
 
@@ -2029,7 +2039,7 @@ onBeforeUnmount(() => {
     box-shadow: 0px 10px 20px -10px #0000005c;
   }
   .log-header {
-    background: rgba(37, 38, 43, 0.733);
+    background: rgba(37, 38, 43, 0.053);
     color: #ceddfb9b;
   }
 }
