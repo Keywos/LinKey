@@ -1605,7 +1605,7 @@ const toggleCollapsed = () => {
     }
   }
 
-  .cm-search-fab {
+  :global(.cm-search-fab) {
     position: fixed;
     z-index: 1090;
     display: grid;
@@ -1627,7 +1627,7 @@ const toggleCollapsed = () => {
     -webkit-backdrop-filter: blur(6px) saturate(60%);
   }
 
-  .cm-search-fab svg {
+  :global(.cm-search-fab svg) {
     width: 22px;
     height: 22px;
     fill: none;
@@ -1637,11 +1637,11 @@ const toggleCollapsed = () => {
     opacity: 0.6;
   }
 
-  .cm-search-fab:active:not(.dragging) {
+  :global(.cm-search-fab:active:not(.dragging)) {
     transform: scale(0.94);
   }
 
-  .cm-search-fab.dragging {
+  :global(.cm-search-fab.dragging) {
     cursor: grabbing;
     box-shadow: 0 6px 8px rgba(29, 38, 52, 0.24);
   }
@@ -2014,7 +2014,7 @@ const toggleCollapsed = () => {
     .cm-toolbar-more {
       color: var(--text, inherit);
     }
-    .cm-search-fab {
+    :global(.cm-search-fab) {
       background: var(--editor-overlay-sheet-background, #282c3420);
       // border-color: rgba(255, 255, 255, 0.15);
       color: var(--text, inherit);
@@ -2076,6 +2076,233 @@ const toggleCollapsed = () => {
     .cm-search-sheet {
       box-shadow: 0 6px 26px rgba(0, 0, 0, 0.7);
     }
+  }
+}
+</style>
+
+<style>
+.cm-search-fab {
+  position: fixed;
+  z-index: 1090;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.96);
+  color: #313842;
+  box-shadow: 0 5px 18px rgba(29, 38, 52, 0.16);
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: grab;
+  isolation: isolate;
+  backdrop-filter: blur(6px) saturate(60%);
+  -webkit-backdrop-filter: blur(6px) saturate(60%);
+}
+
+.cm-search-fab svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.6;
+}
+
+.cm-search-fab:active:not(.dragging) {
+  transform: scale(0.94);
+}
+
+.cm-search-fab.dragging {
+  cursor: grabbing;
+  box-shadow: 0 6px 8px rgba(29, 38, 52, 0.24);
+}
+
+.cm-search-sheet {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  z-index: 99990;
+  width: min(560px, calc(100vw - 20px));
+  padding: 12px;
+  box-sizing: border-box;
+  border-radius: 20px;
+  background: rgba(250, 250, 252, 0.96);
+  color: #25262a;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  transform: translateX(-50%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  cursor: grab;
+}
+
+.cm-search-sheet:active {
+  cursor: grabbing;
+}
+
+.cm-search-field-row,
+.cm-search-input-wrap,
+.cm-replace-row,
+.cm-replace-actions {
+  display: flex;
+  align-items: center;
+}
+
+.cm-search-field-row {
+  gap: 6px;
+}
+
+.cm-search-input-wrap {
+  --cm-search-options-width: 145px;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.cm-search-input {
+  min-width: 0;
+  width: 100%;
+  height: 33px;
+  padding: 0 calc(var(--cm-search-options-width) + 13px) 0 13px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(128, 128, 128, 0.07);
+  color: inherit;
+  font-size: 13px;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.cm-search-options {
+  --cm-search-options-width: 110px;
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: flex;
+  width: var(--cm-search-options-width);
+  gap: 2px;
+  box-sizing: border-box;
+  transform: translateY(-50%);
+}
+
+.cm-search-options button,
+.cm-search-nav,
+.cm-replace-toggle,
+.cm-replace-actions button {
+  border: 0;
+  color: inherit;
+  touch-action: manipulation;
+}
+
+.cm-search-options button {
+  width: 25px;
+  height: 30px;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 650;
+  opacity: 0.58;
+}
+
+.cm-search-options button.active {
+  background: #fff;
+  color: #377fd1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.11);
+  opacity: 1;
+}
+
+.cm-search-nav {
+  display: grid;
+  place-items: center;
+  flex: 0 0 33px;
+  width: 33px;
+  height: 33px;
+  padding: 0;
+  border-radius: 12px;
+  background: rgba(128, 128, 128, 0.09);
+  font-size: 14px;
+  font-weight: 900;
+  opacity: 0.7;
+  line-height: 1;
+}
+
+.cm-replace-toggle {
+  width: 30px;
+  height: 30px;
+  padding: 0 5px;
+  border-radius: 12px;
+  background: rgba(128, 128, 128, 0.09);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.cm-replace-toggle.active {
+  color: #377fd1;
+  background: rgba(55, 127, 209, 0.12);
+}
+
+.cm-replace-area {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(128, 128, 128, 0.05);
+}
+
+.cm-replace-row {
+  gap: 7px;
+}
+
+.cm-replace-actions {
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.cm-replace-actions button {
+  min-width: 50px;
+  height: 33px;
+  padding: 0 9px;
+  border-radius: 13px;
+  background: rgba(128, 128, 128, 0.1);
+  font-size: 13px;
+}
+
+.cm-replace-actions .cm-replace-all {
+  color: #c44343;
+}
+
+.cm-search-sheet.is-dark {
+  background: color-mix(in srgb, var(--editor-overlay-sheet-background, #282c34) 96%, transparent);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #eceff4;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cm-search-sheet .cm-search-input {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .cm-search-options button.active {
+    background: rgba(106, 158, 216, 0.22);
+    color: #88bcf5;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .cm-search-fab {
+    background: var(--editor-overlay-sheet-background, #282c3420);
+    color: var(--text, inherit);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.463);
   }
 }
 </style>

@@ -300,6 +300,7 @@ const logSize = ref(
 const MAX_H = Math.round(window.innerHeight * 0.6);
 
 // 拖拽移动
+let _dragData = null;
 function startDrag(e) {
   _dragData = { sx: e.clientX, sy: e.clientY, ox: logPos.value.x, oy: logPos.value.y, moved: false };
   document.addEventListener("pointermove", onDrag);
