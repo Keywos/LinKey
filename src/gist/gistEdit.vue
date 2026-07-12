@@ -56,7 +56,7 @@
     <div id="keyfroms">
       <van-form @submit="onSubmit">
         <van-cell-group inset title="输入数据">
-          <van-field v-model="filename" name="filename" label="文件名" readonly placeholder="FileName" />
+          <van-field v-model="filename" name="filename" label="文件名" placeholder="FileName" />
 
           <van-field v-model="Desc" type="Desc" name="Desc" label="Desc" placeholder="Desc" />
         </van-cell-group>
@@ -107,6 +107,7 @@ const rawurlForever = ref("");
 const num = ref(0);
 const edid = ref("");
 const inp = ref("");
+const originalFilename = ref("");
 function getRName() {
   return "Gist_" + Math.floor(100 + Math.random() * 900);
 }
@@ -149,6 +150,7 @@ else if (tname === "Gist Edit") {
     GistEditfile = JSON.stringify(useGStore.GistEdit, null, 3);
   }
   filename.value = useGStore.GistFN;
+  originalFilename.value = useGStore.GistFN;
   inp.value = GistEditfile;
   edid.value = useGStore.geid;
   Desc.value = useGStore.gidesc;
@@ -174,11 +176,12 @@ const onSubmit = async (values) => {
     const isEditPatchNew = num.value === 3 || isnew.value;
     const method = isEditPatchNew ? "PATCH" : "POST";
     const url = isEditPatchNew ? `https://api.github.com/gists/${edid.value}` : "https://api.github.com/gists";
+    const renamed = num.value === 3 && originalFilename.value && filename.value !== originalFilename.value;
     const content = {
       description: Desc.value,
       public: PublicM.value !== "1",
       files: {
-        [filename.value]: { content: cmStore.CmCode.toString() },
+        [renamed ? originalFilename.value : filename.value]: renamed ? { filename: filename.value, content: cmStore.CmCode.toString() } : { content: cmStore.CmCode.toString() },
       },
     };
     const res = await sendReq(method, url, { Authorization: `token ${token.value}`, Accept: "application/vnd.github.v3+json" }, JSON.stringify(content));
@@ -193,7 +196,8 @@ const onSubmit = async (values) => {
       rawURL.value = file.raw_url;
       rawurlForever.value = file.raw_url.replace(/\/raw\/\w+?\//, "/raw/");
       if (isEditPatchNew) {
-        useGStore.addGistRespatch(edid.value, filename.value, file);
+        useGStore.renameGistFile(edid.value, originalFilename.value || filename.value, filename.value, file);
+        originalFilename.value = filename.value;
       } else {
         const { id, html_url, files, public: publicProp, created_at, updated_at, description, owner } = res.data;
         const newRes = {

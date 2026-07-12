@@ -188,7 +188,7 @@ const saveis = async () => {
         Authorization: `token ${tk}`,
         Accept: "application/vnd.github.v3+json",
       });
-      if (res.status === "200") {
+      if (res.status === 200) {
         LocalGetToken = tkobj;
         localStorage.setItem("GistUserT", JSON.stringify(tkobj));
         isedits.value = false;

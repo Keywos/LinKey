@@ -38,10 +38,22 @@ export const useGistStore = defineStore("GistStore", {
       this.getGistRes.forEach((i) => {
         if (i.id == id) {
           i.files[name] = newobj;
-          i.filesNames.unshift(name);
+          if (!i.filesNames.includes(name)) i.filesNames.unshift(name);
           console.log("添加资源 PATCH", name, newobj);
         }
       });
+    },
+    renameGistFile(id, oldName, newName, newobj) {
+      this.getGistRes.forEach((i) => {
+        if (i.id != id) return;
+        if (oldName !== newName) {
+          delete i.files[oldName];
+          i.filesNames = i.filesNames.map((name) => (name === oldName ? newName : name));
+        }
+        i.files[newName] = newobj;
+        if (!i.filesNames.includes(newName)) i.filesNames.unshift(newName);
+      });
+      if (this.geid == id && this.GistFN === oldName) this.GistFN = newName;
     },
     addGistResposh(newRes) {
       console.log("添加资源 POSH");
