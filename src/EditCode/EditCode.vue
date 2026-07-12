@@ -68,7 +68,6 @@
                   上传
                 </button>
                 <button class="saves-sync-btn" @click.stop="deleteSingleItem(item)">删除</button>
-                <button v-if="item.gist?.id" class="saves-sync-btn" :disabled="syncingItemId === item.id" @click.stop="editGistDescription(item)">编辑 Desc</button>
               </div>
               <div class="saves-item-action-group saves-item-action-group-right">
                 <button v-if="item.url" class="saves-sync-btn" @click.stop="copyUrl(item, 'raw')">
@@ -142,7 +141,6 @@
                   >
                     上传
                   </button>
-                  <button v-if="child.gist?.id" class="saves-sync-btn" :disabled="syncingItemId === child.id" @click.stop="editGistDescription(child)">编辑 Desc</button>
                   <button class="saves-sync-btn" @click.stop="deleteSingleItem(child)">删除</button>
                 </div>
                 <div class="saves-item-action-group saves-item-action-group-right">
@@ -249,6 +247,16 @@
   <div v-if="confirmState.visible" class="modal-mask" @click.self="confirmNo">
     <div ref="confirmDialogRef" class="modal-box" tabindex="-1" @keydown.enter.prevent="confirmYes" @keydown.esc.prevent="confirmNo">
       <div class="modal-title">{{ confirmState.title }}</div>
+      <input
+        v-if="confirmState.hasInput"
+        ref="confirmInputRef"
+        v-model="confirmState.value"
+        class="modal-input"
+        type="text"
+        autocomplete="off"
+        @keyup.enter.prevent="confirmYes"
+        @keyup.esc.prevent="confirmNo"
+      />
       <div class="modal-actions">
         <button class="modal-btn" @click="confirmNo">取消</button>
         <button class="modal-btn modal-btn-primary" @click="confirmYes">确定</button>
@@ -350,13 +358,14 @@ const props = defineProps(["isReadOnly"]);
 const lastSavedContent = ref("");
 const promptInputRef = ref(null);
 const confirmDialogRef = ref(null);
+const confirmInputRef = ref(null);
 
 // ★ 修复：cmView 实例 ref，用于加载大文件前调用 skipNextLanguageSync
 const cmViewRef = ref(null);
 
 // ===== 自定义弹窗 =====
 const promptState = ref({ visible: false, title: "", value: "", resolve: null });
-const confirmState = ref({ visible: false, title: "", resolve: null });
+const confirmState = ref({ visible: false, title: "", value: "", hasInput: false, resolve: null });
 
 watch(
   () => promptState.value.visible,
@@ -374,7 +383,7 @@ watch(
   (visible) => {
     if (visible) {
       nextTick(() => {
-        confirmDialogRef.value?.focus();
+        (confirmState.value.hasInput ? confirmInputRef.value : confirmDialogRef.value)?.focus();
       });
     }
   },
@@ -412,20 +421,20 @@ async function pasteToPromptInput() {
   } catch {}
 }
 
-function askConfirm(title) {
+function askConfirm(title, inputValue) {
   return new Promise((resolve) => {
-    confirmState.value = { visible: true, title, resolve };
+    confirmState.value = { visible: true, title, value: inputValue || "", hasInput: inputValue !== undefined, resolve };
   });
 }
 const confirmYes = () => {
-  const { resolve } = confirmState.value;
+  const { resolve, value, hasInput } = confirmState.value;
   confirmState.value.visible = false;
-  resolve?.(true);
+  resolve?.(hasInput ? value : true);
 };
 const confirmNo = () => {
-  const { resolve } = confirmState.value;
+  const { resolve, hasInput } = confirmState.value;
   confirmState.value.visible = false;
-  resolve?.(false);
+  resolve?.(hasInput ? null : false);
 };
 const createId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -734,9 +743,9 @@ const getGistCredentials = () => {
 const toGistFileName = (name) => (name || "CodeHub.txt").replace(/[\\/:*?"<>|]/g, "_");
 
 const confirmUploadToGist = async (item) => {
-  if (await askConfirm("上传到 Gist 会覆盖远端 Gist")) {
-    await uploadItemToGist(item);
-  }
+  const description = await askConfirm("上传到 Gist 会覆盖远端 Gist", item.gist?.description || "");
+  if (description === null) return;
+  await uploadItemToGist(item, description.trim());
 };
 
 const confirmDownloadFromGist = async (item) => {
@@ -763,36 +772,7 @@ const updateGistDescriptionLocally = async (gistId, description) => {
   await persistIndex();
 };
 
-const editGistDescription = async (item) => {
-  const { token } = getGistCredentials();
-  if (!token) {
-    showToast("请先在设置中配置 Gist Token");
-    return;
-  }
-  const description = await askPrompt("编辑 Gist desc", item.gist?.description || "");
-  if (description === null) return;
-  syncingItemId.value = item.id;
-  syncingAction.value = "desc";
-  try {
-    const response = await sendReq(
-      "PATCH",
-      `https://api.github.com/gists/${item.gist.id}`,
-      { Authorization: `token ${token}`, Accept: "application/vnd.github.v3+json" },
-      JSON.stringify({ description: description.trim() }),
-    );
-    if (response.status !== 200) throw new Error(response.status || "请求失败");
-    await updateGistDescriptionLocally(item.gist.id, response.data?.description || description.trim());
-    showToast("已更新 Gist desc");
-  } catch (error) {
-    console.error("更新 Gist desc 失败", error);
-    showToast("更新 Gist desc 失败");
-  } finally {
-    syncingItemId.value = null;
-    syncingAction.value = "";
-  }
-};
-
-const uploadItemToGist = async (item) => {
+const uploadItemToGist = async (item, description) => {
   const { token } = getGistCredentials();
   if (!token) {
     showToast("请先在设置中配置 Gist Token");
@@ -806,18 +786,11 @@ const uploadItemToGist = async (item) => {
       showToast("上传文件内容为空");
       return;
     }
-    if (!item.gist?.description?.trim()) {
-      const description = await askPrompt("输入 Gist desc");
-      if (!description?.trim()) {
-        showToast("请填写 Gist desc");
-        return;
-      }
-      if (item.gist?.id) {
-        await updateGistDescriptionLocally(item.gist.id, description.trim());
-      } else {
-        item.gist = { ...(item.gist || {}), description: description.trim() };
-      }
+    if (!description) {
+      showToast("请填写 Gist desc");
+      return;
     }
+    item.gist = { ...(item.gist || {}), description };
     const filename = toGistFileName(item.name);
     const gistId = item.gist?.id;
     const previousFilename = item.gist?.filename;
@@ -845,6 +818,7 @@ const uploadItemToGist = async (item) => {
       downloaded: true,
     };
     item.name = filename;
+    await updateGistDescriptionLocally(item.gist.id, item.gist.description);
     await saveMeta(item);
     await persistIndex();
     showToast(gistId ? (previousFilename && previousFilename !== filename ? "已重命名并更新 Gist" : "已更新到 Gist") : "已上传到 Gist");
@@ -2479,7 +2453,7 @@ onBeforeUnmount(() => {
   font-size: 17px;
   line-height: 1.4;
   text-align: center;
-  margin: 14px 10px 18px 11px;
+  margin: 34px 10px 18px 11px;
 }
 
 .modal-input {
