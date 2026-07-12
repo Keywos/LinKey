@@ -54,7 +54,7 @@ const fetchData = async () => {
     console.error("Error fetching data:", error);
   }
 };
-const topHeights = () => (notSmall.value ? 20 : 59);
+const topHeights = () => (notSmall.value ? 10 : 59);
 
 const tabHeight = computed(() => {
   if (isPWA.value && !isLandscape.value) {

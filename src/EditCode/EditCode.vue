@@ -32,41 +32,163 @@
       </div>
       <div ref="savesListRef" class="saves-list">
         <div v-if="savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
-        <div v-for="item in savedItems" :key="item.id" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
-          <button class="saves-item-del" @click.stop="deleteSingleItem(item)" title="删除">×</button>
-          <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" />
+        <template v-for="item in sortedSavedItems" :key="item.id">
+          <div v-if="shouldShowSavedItem(item)" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
+            <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" />
 
-          <div class="saves-item-info">
-            <span class="saves-item-name">
-              {{ item.name }}
-            </span>
+            <div class="saves-item-info">
+              <span class="saves-item-name">
+                {{ item.name }}
+                <span v-if="item.gist" class="saves-item-source" :title="gistPath(item)">{{ gistPath(item) }}</span>
+              </span>
 
-            <div class="saves-item-preview">
-              <template v-if="item.url">
-                <div v-if="item.blobUrl" class="saves-url-line" title="点击复制 blob URL" @click.stop="copyUrl(item, 'blob')">{{ truncateUrl(item.blobUrl) }}</div>
-                <div class="saves-url-line" title="点击复制 raw URL" @click.stop="copyUrl(item, 'raw')">{{ truncateUrl(item.url) }}</div>
-                <div class="saves-item-content-preview">{{ item.preview || "" }}</div>
-              </template>
-              <template v-else>
+              <div class="saves-item-preview">
                 <span class="saves-item-content-preview">{{ item.preview || "" }}</span>
-              </template>
+              </div>
+
+              <span class="saves-item-meta">
+                {{ formatTime(itemUpdatedAt(item)) }}
+                ·
+                {{ formatBytes(item.length) }}
+              </span>
             </div>
 
-            <span class="saves-item-meta">
-              {{ formatTime(item.updatedAt) }}
-              ·
-              {{ formatBytes(item.length) }}
-            </span>
+            <div class="saves-item-sync-actions">
+              <div class="saves-item-action-group">
+                <button class="saves-sync-btn" @click.stop="toggleItemExpansion(item)">
+                  {{ isItemExpanded(item) ? "收起" : "展开" }}
+                </button>
+                <button
+                  class="saves-sync-btn"
+                  :class="{ 'is-syncing': syncingItemId === item.id && syncingAction === 'upload' }"
+                  :disabled="syncingItemId === item.id && syncingAction === 'upload'"
+                  title="上传到 Gist"
+                  @click.stop="confirmUploadToGist(item)"
+                >
+                  上传
+                </button>
+                <button class="saves-sync-btn" @click.stop="deleteSingleItem(item)">删除</button>
+                <button v-if="item.gist?.id" class="saves-sync-btn" :disabled="syncingItemId === item.id" @click.stop="editGistDescription(item)">编辑 Desc</button>
+              </div>
+              <div class="saves-item-action-group saves-item-action-group-right">
+                <button v-if="item.url" class="saves-sync-btn" @click.stop="copyUrl(item, 'raw')">
+                  {{ item.blobUrl ? "Raw" : "Url" }}
+                </button>
+                <button v-if="item.blobUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'blob')">Blob</button>
+                <button v-if="item.gist?.rawUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'gist')">Gist</button>
+                <button v-if="item.gist?.htmlUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'html')">Html</button>
+                <button
+                  v-if="item.url"
+                  class="saves-sync-btn"
+                  :class="{ 'is-syncing': refreshingUrlItemId === item.id }"
+                  :disabled="refreshingUrlItemId === item.id"
+                  title="从原始 URL 重新拉取"
+                  @click.stop="confirmRefreshFromUrl(item)"
+                >
+                  拉取 URL
+                </button>
+                <button
+                  v-if="item.gist?.rawUrl"
+                  class="saves-sync-btn"
+                  :class="{ 'is-syncing': syncingItemId === item.id && syncingAction === 'gist' }"
+                  :disabled="syncingItemId === item.id && syncingAction === 'gist'"
+                  title="从 Gist 拉取最新内容"
+                  @click.stop="confirmDownloadFromGist(item)"
+                >
+                  拉取 Gist
+                </button>
+                <button class="saves-sync-btn" :disabled="syncingItemId === item.id" @click.stop="renameItem(item)">重命名</button>
+                <button
+                  class="saves-sync-btn"
+                  :class="{ 'is-current': item.id === currentItemId }"
+                  :disabled="loadingItemId === item.id || syncingItemId === item.id"
+                  @click.stop="loadItemForList(item)"
+                >
+                  加载
+                </button>
+              </div>
+            </div>
           </div>
+          <div v-if="shouldShowSavedItem(item) && isItemExpanded(item)" class="saves-gist-children">
+            <div v-for="child in gistChildItems(item)" :key="child.id" class="saves-item saves-gist-child" :class="{ 'saves-item-current': child.id === currentItemId }">
+              <input v-if="selectMode" type="checkbox" :value="child.id" v-model="checkedIds" />
 
-          <button
-            class="saves-load-btn"
-            :disabled="loadingItemId === item.id && (item.url || item.id !== currentItemId)"
-            @click="item.id === currentItemId ? (item.url ? refreshUrlItem(item) : renameItem(item)) : loadItem(item)"
-          >
-            {{ item.id === currentItemId ? (item.url ? "重新拉取" : "重命名") : "加载" }}
-          </button>
-        </div>
+              <div class="saves-item-info">
+                <span class="saves-item-name">
+                  {{ child.name }}
+                  <span v-if="child.gist" class="saves-item-source" :title="gistPath(child)">{{ gistPath(child) }}</span>
+                </span>
+                <div class="saves-item-preview">
+                  <span class="saves-item-content-preview">{{ child.preview || "" }}</span>
+                </div>
+                <span class="saves-item-meta">
+                  {{ formatTime(itemUpdatedAt(child)) }}
+                  ·
+                  {{ formatBytes(child.length) }}
+                </span>
+              </div>
+
+              <div class="saves-item-sync-actions">
+                <div class="saves-item-action-group">
+                  <button class="saves-sync-btn" @click.stop="toggleItemExpansion(child)">
+                    {{ isItemExpanded(child) ? "收起" : "展开" }}
+                  </button>
+                  <button
+                    class="saves-sync-btn"
+                    :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'upload' }"
+                    :disabled="syncingItemId === child.id && syncingAction === 'upload'"
+                    title="上传到 Gist"
+                    @click.stop="confirmUploadToGist(child)"
+                  >
+                    上传
+                  </button>
+                  <button v-if="child.gist?.id" class="saves-sync-btn" :disabled="syncingItemId === child.id" @click.stop="editGistDescription(child)">编辑 Desc</button>
+                  <button class="saves-sync-btn" @click.stop="deleteSingleItem(child)">删除</button>
+                </div>
+                <div class="saves-item-action-group saves-item-action-group-right">
+                  <button v-if="child.url" class="saves-sync-btn" @click.stop="copyUrl(child, 'Raw')">
+                    {{ child.blobUrl ? "Raw" : "Url" }}
+                  </button>
+                  <button v-if="child.blobUrl" title="复制 Blob URL" class="saves-sync-btn" @click.stop="copyUrl(child, 'Blob')">Blob</button>
+                  <button v-if="child.gist?.rawUrl" class="saves-sync-btn" title="复制 Gist URL" @click.stop="copyUrl(child, 'Gist')">Gist</button>
+                  <button v-if="child.gist?.htmlUrl" class="saves-sync-btn" title="复制 Html URL" @click.stop="copyUrl(child, 'Html')">Html</button>
+                  <button
+                    v-if="child.url"
+                    class="saves-sync-btn"
+                    :class="{ 'is-syncing': refreshingUrlItemId === child.id }"
+                    :disabled="refreshingUrlItemId === child.id"
+                    title="从原始 URL 重新拉取"
+                    @click.stop="confirmRefreshFromUrl(child)"
+                  >
+                    从 URL 拉取
+                  </button>
+                  <button
+                    v-if="child.gist?.rawUrl"
+                    class="saves-sync-btn"
+                    :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'gist' }"
+                    :disabled="syncingItemId === child.id && syncingAction === 'gist'"
+                    title="从 Gist 拉取最新内容"
+                    @click.stop="confirmDownloadFromGist(child)"
+                  >
+                    从 Gist 拉取
+                  </button>
+                  <button class="saves-sync-btn" :disabled="syncingItemId === child.id" @click.stop="renameItem(child)">重命名</button>
+                  <button
+                    class="saves-sync-btn"
+                    :class="{ 'is-current': child.id === currentItemId }"
+                    :disabled="loadingItemId === child.id || syncingItemId === child.id"
+                    @click.stop="loadItemForList(child)"
+                  >
+                    加载
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button class="saves-gist-child saves-gist-child-new" @click.stop="createExpandedFile(item)">
+              {{ item.gist?.id ? "+ 新建 Gist 文件" : "+ 新建" }}
+            </button>
+          </div>
+        </template>
       </div>
     </div>
     <!-- 拖拽调整高度手柄 -->
@@ -137,35 +259,14 @@
 
 <script setup>
 import cmView from "./cmView.vue";
-import { ref, computed, nextTick, watch, watchEffect, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, nextTick, watch, watchEffect, onMounted, onBeforeUnmount, toRaw } from "vue";
 import { showToast } from "vant";
 import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
 import useV3Clipboard from "vue-clipboard3";
 import { useRoute } from "vue-router";
 import { sendReq } from "@/http/http.js";
-import { openDB } from "idb";
-
-const dbPromise = openDB("codehub", 1, {
-  upgrade(db) {
-    db.createObjectStore("store");
-  },
-});
-
-const idbStorage = {
-  async getItem(key) {
-    return (await dbPromise).get("store", key);
-  },
-  async setItem(key, value) {
-    return (await dbPromise).put("store", value, key);
-  },
-  async removeItem(key) {
-    return (await dbPromise).delete("store", key);
-  },
-  async getAllKeys() {
-    return (await dbPromise).getAllKeys("store");
-  },
-};
+import { codehubStorage as idbStorage, contentKey, metaKey, SAVES_INDEX_KEY } from "@/storage/codehubStorage.js";
 
 import JSZip from "jszip";
 import "./env.js";
@@ -199,7 +300,6 @@ const logSize = ref(
 const MAX_H = Math.round(window.innerHeight * 0.6);
 
 // 拖拽移动
-let _dragData = null;
 function startDrag(e) {
   _dragData = { sx: e.clientX, sy: e.clientY, ox: logPos.value.x, oy: logPos.value.y, moved: false };
   document.addEventListener("pointermove", onDrag);
@@ -314,11 +414,9 @@ const confirmNo = () => {
   confirmState.value.visible = false;
   resolve?.(false);
 };
-const SAVES_INDEX_KEY = "codehub_saves_index";
 const createId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-const contentKey = (id) => `codehub_save_content:${id}`;
-const metaKey = (id) => `codehub_save_meta:${id}`;
+const toStoredValue = (value) => (value == null ? null : JSON.parse(JSON.stringify(toRaw(value))));
 
 const saveMeta = async (item) => {
   try {
@@ -331,6 +429,8 @@ const saveMeta = async (item) => {
       manualLanguage: item.manualLanguage || "",
       url: item.url || "",
       blobUrl: item.blobUrl || "",
+      gist: toStoredValue(item.gist),
+      localGroupId: item.localGroupId || "",
     });
   } catch (error) {
     console.error("保存元数据失败", error);
@@ -338,10 +438,16 @@ const saveMeta = async (item) => {
 };
 
 const savedItems = ref([]);
+const sortedSavedItems = computed(() => [...savedItems.value].sort((a, b) => itemUpdatedAt(b) - itemUpdatedAt(a)));
 const checkedIds = ref([]);
 const showSaves = ref(false);
 const loadingItemId = ref(null);
+const refreshingUrlItemId = ref(null);
 const selectMode = ref(false);
+const syncingItemId = ref(null);
+const syncingAction = ref("");
+const expandedGistIds = ref([]);
+const expandedItemIds = ref([]);
 const savesListWidth = ref(0);
 const savesListRef = ref(null);
 let savesListObserver = null;
@@ -495,6 +601,301 @@ const buildMeta = (content) => ({
   manualLanguage: cmStore.manualLanguage || "",
 });
 
+const itemUpdatedAt = (item) => Number(item.gist?.updatedAt || item.updatedAt || 0);
+const gistPath = (item) => {
+  const folderName = item.gist?.description || item.gist?.folderName || item.gist?.filename || item.name;
+  const fileName = item.gist?.filename || item.name;
+  return folderName === fileName ? fileName : `${folderName}/${fileName}`;
+};
+const hasLocalContent = (item) => item.gist?.downloaded === true;
+const hasUrlAndGist = (item) => Boolean(item.url && item.gist?.rawUrl);
+const gistItems = (gistId) => savedItems.value.filter((item) => item.gist?.id === gistId);
+const groupItems = (item) => (item.gist?.id ? gistItems(item.gist.id) : item.localGroupId ? savedItems.value.filter((child) => child.localGroupId === item.localGroupId) : [item]);
+const isGistPrimary = (item) => groupItems(item)[0]?.id === item.id;
+const gistChildItems = (item) => groupItems(item).filter((child) => child.id !== item.id);
+const shouldShowSavedItem = (item) => isGistPrimary(item);
+const localExpansionId = (item) => item.localGroupId || item.id;
+const isItemExpanded = (item) => (item.gist?.id ? expandedGistIds.value.includes(item.gist.id) : expandedItemIds.value.includes(localExpansionId(item)));
+
+const toggleGistFiles = (gistId) => {
+  expandedGistIds.value = expandedGistIds.value.includes(gistId) ? expandedGistIds.value.filter((id) => id !== gistId) : [...expandedGistIds.value, gistId];
+};
+
+const toggleItemExpansion = (item) => {
+  if (item.gist?.id) {
+    toggleGistFiles(item.gist.id);
+    return;
+  }
+  const groupId = localExpansionId(item);
+  expandedItemIds.value = expandedItemIds.value.includes(groupId) ? expandedItemIds.value.filter((id) => id !== groupId) : [...expandedItemIds.value, groupId];
+};
+
+const createExpandedFile = async (item) => {
+  if (item.gist?.id) {
+    const groupItem = gistItems(item.gist.id)[0] || item;
+    await createGistFile(groupItem);
+    return;
+  }
+  await createLocalGroupFile(item);
+};
+
+const createLocalGroupFile = async (item) => {
+  const name = await askPrompt("新建关联文件名");
+  if (!name?.trim()) return;
+  const localGroupId = item.localGroupId || `local:${item.id}`;
+  const filename = toGistFileName(name.trim());
+  if (groupItems({ localGroupId }).some((child) => child.name === filename)) {
+    showToast("该关联文件已存在");
+    return;
+  }
+  try {
+    if (!item.localGroupId) {
+      item.localGroupId = localGroupId;
+      await saveMeta(item);
+    }
+    const child = {
+      id: createId(),
+      name: filename,
+      ...buildMeta(""),
+      localGroupId,
+      language: "plaintext",
+    };
+    await idbStorage.setItem(contentKey(child.id), "");
+    savedItems.value.push(child);
+    await saveMeta(child);
+    await persistIndex();
+    await loadItem(child);
+    showToast("已新建本地关联文件");
+  } catch (error) {
+    console.error("新建本地关联文件失败", error);
+    showToast("新建本地关联文件失败");
+  }
+};
+
+const createGistFile = async (item) => {
+  const name = await askPrompt("新建 Gist 文件名");
+  if (!name?.trim()) return;
+  const filename = toGistFileName(name.trim());
+  const id = `gist:${item.gist.id}:${encodeURIComponent(filename)}`;
+  if (savedItems.value.some((savedItem) => savedItem.id === id)) {
+    showToast("该 Gist 文件已存在");
+    return;
+  }
+  try {
+    const child = {
+      id,
+      name: filename,
+      ...buildMeta(""),
+      gist: {
+        id: item.gist.id,
+        folderName: item.gist.folderName,
+        filename,
+        rawUrl: "",
+        description: item.gist.description || "",
+        updatedAt: Date.now(),
+        downloaded: true,
+      },
+    };
+    await idbStorage.setItem(contentKey(child.id), "");
+    savedItems.value.push(child);
+    await saveMeta(child);
+    await persistIndex();
+    await loadItem(child);
+    showToast("已新建本地 Gist 文件");
+  } catch (error) {
+    console.error("新建 Gist 文件失败", error);
+    showToast("新建 Gist 文件失败");
+  }
+};
+
+const getGistCredentials = () => {
+  try {
+    const token = JSON.parse(localStorage.getItem("GistUserT") || "null")?.t;
+    const username = localStorage.getItem("GistUserN") || "";
+    return { token, username };
+  } catch {
+    return { token: "", username: "" };
+  }
+};
+
+const toGistFileName = (name) => (name || "CodeHub.txt").replace(/[\\/:*?"<>|]/g, "_");
+
+const confirmUploadToGist = async (item) => {
+  if (await askConfirm("上传到 Gist 会覆盖远端 Gist")) {
+    await uploadItemToGist(item);
+  }
+};
+
+const confirmDownloadFromGist = async (item) => {
+  if (await askConfirm("从 Gist 拉取会覆盖本地内容")) {
+    await downloadGistItem(item, true);
+  }
+};
+
+const confirmRefreshFromUrl = async (item) => {
+  if (await askConfirm("从 URL 拉取会覆盖本地内容")) {
+    await refreshUrlItem(item);
+  }
+};
+
+const updateGistDescriptionLocally = async (gistId, description) => {
+  const items = gistItems(gistId);
+  await Promise.all(
+    items.map(async (gistItem) => {
+      gistItem.gist.description = description;
+      gistItem.gist.folderName = description || gistItem.gist.folderName;
+      await saveMeta(gistItem);
+    }),
+  );
+  await persistIndex();
+};
+
+const editGistDescription = async (item) => {
+  const { token } = getGistCredentials();
+  if (!token) {
+    showToast("请先在设置中配置 Gist Token");
+    return;
+  }
+  const description = await askPrompt("编辑 Gist desc", item.gist?.description || "");
+  if (description === null) return;
+  syncingItemId.value = item.id;
+  syncingAction.value = "desc";
+  try {
+    const response = await sendReq(
+      "PATCH",
+      `https://api.github.com/gists/${item.gist.id}`,
+      { Authorization: `token ${token}`, Accept: "application/vnd.github.v3+json" },
+      JSON.stringify({ description: description.trim() }),
+    );
+    if (response.status !== 200) throw new Error(response.status || "请求失败");
+    await updateGistDescriptionLocally(item.gist.id, response.data?.description || description.trim());
+    showToast("已更新 Gist desc");
+  } catch (error) {
+    console.error("更新 Gist desc 失败", error);
+    showToast("更新 Gist desc 失败");
+  } finally {
+    syncingItemId.value = null;
+    syncingAction.value = "";
+  }
+};
+
+const uploadItemToGist = async (item) => {
+  const { token } = getGistCredentials();
+  if (!token) {
+    showToast("请先在设置中配置 Gist Token");
+    return;
+  }
+  syncingItemId.value = item.id;
+  syncingAction.value = "upload";
+  try {
+    const content = (await idbStorage.getItem(contentKey(item.id))) || "";
+    if (!content.trim()) {
+      showToast("上传文件内容为空");
+      return;
+    }
+    if (!item.gist?.description?.trim()) {
+      const description = await askPrompt("输入 Gist desc");
+      if (!description?.trim()) {
+        showToast("请填写 Gist desc");
+        return;
+      }
+      if (item.gist?.id) {
+        await updateGistDescriptionLocally(item.gist.id, description.trim());
+      } else {
+        item.gist = { ...(item.gist || {}), description: description.trim() };
+      }
+    }
+    const filename = toGistFileName(item.name);
+    const gistId = item.gist?.id;
+    const previousFilename = item.gist?.filename;
+    const files = { [filename]: { content } };
+    if (gistId && previousFilename && previousFilename !== filename) {
+      files[previousFilename] = null;
+    }
+    const response = await sendReq(
+      gistId ? "PATCH" : "POST",
+      gistId ? `https://api.github.com/gists/${gistId}` : "https://api.github.com/gists",
+      { Authorization: `token ${token}`, Accept: "application/vnd.github.v3+json" },
+      JSON.stringify({ description: item.gist?.description || `Code Hub`, public: false, files }),
+    );
+    if (response.status !== 200 && response.status !== 201) throw new Error(response.status || "请求失败");
+
+    const remoteFile = response.data?.files?.[filename];
+    item.gist = {
+      id: response.data?.id || gistId,
+      folderName: response.data?.description || Object.keys(response.data?.files || {})[0] || filename,
+      filename,
+      rawUrl: remoteFile?.raw_url || item.gist?.rawUrl || "",
+      htmlUrl: response.data?.html_url || item.gist?.htmlUrl || "",
+      description: response.data?.description || item.gist?.description || "",
+      updatedAt: new Date(response.data?.updated_at || Date.now()).getTime(),
+      downloaded: true,
+    };
+    item.name = filename;
+    await saveMeta(item);
+    await persistIndex();
+    showToast(gistId ? (previousFilename && previousFilename !== filename ? "已重命名并更新 Gist" : "已更新到 Gist") : "已上传到 Gist");
+  } catch (error) {
+    console.error("上传 Gist 失败", error);
+    showToast(String(error?.message) === "422" ? "上传文件内容为空 Err 422" : "上传 Gist 失败");
+  } finally {
+    syncingItemId.value = null;
+    syncingAction.value = "";
+  }
+};
+
+const downloadGistItem = async (item, loadAfterDownload = false) => {
+  if (!item.gist?.rawUrl) return;
+  syncingItemId.value = item.id;
+  syncingAction.value = "gist";
+  try {
+    const response = await sendReq("GET", item.gist.rawUrl);
+    if (response.status !== 200) throw new Error(response.status || "请求失败");
+    const content = typeof response.data === "string" ? response.data : JSON.stringify(response.data, null, 2);
+    await idbStorage.setItem(contentKey(item.id), content);
+    Object.assign(item, buildMeta(content), { updatedAt: Date.now() });
+    item.gist.downloaded = true;
+    await saveMeta(item);
+    await persistIndex();
+    if (loadAfterDownload) {
+      await loadItem(item);
+    } else if (currentItemId.value === item.id) {
+      isSwitchingItem = true;
+      cmStore.setCmCode(content);
+      lastSavedContent.value = content;
+      isSwitchingItem = false;
+    }
+    showToast("已下载到本地");
+  } catch (error) {
+    console.error("下载 Gist 失败", error);
+    showToast("下载 Gist 失败");
+  } finally {
+    syncingItemId.value = null;
+    syncingAction.value = "";
+  }
+};
+
+const handleItemAction = async (item) => {
+  if (item.gist?.rawUrl && !hasLocalContent(item)) {
+    await downloadGistItem(item, true);
+    return;
+  }
+  if (item.id === currentItemId.value) {
+    if (item.url) await refreshUrlItem(item);
+    else await renameItem(item);
+    return;
+  }
+  await loadItem(item);
+};
+
+const loadItemForList = async (item) => {
+  if (item.gist?.rawUrl && !hasLocalContent(item)) {
+    await downloadGistItem(item, true);
+    return;
+  }
+  await loadItem(item);
+};
+
 const createNewBlank = async () => {
   if (currentItemId.value && !cmStore.CmCode) {
     showToast("已经是新建状态");
@@ -506,10 +907,11 @@ const createNewBlank = async () => {
   // ★ 新建文件清除手动语言（需在 buildMeta 之前）
   cmStore.setManualLanguage("");
 
-  const defaultName = `CH_${new Date()
-    .toLocaleString("zh-CN")
-    .replace(/[^\d\s]/g, "")
-    .replace(/\D/g, "_")}.js`;
+  const usedNumbers = savedItems.value
+    .map((savedItem) => /^CH_(\d+)(?:\.txt)?$/i.exec(savedItem.name)?.[1])
+    .filter(Boolean)
+    .map(Number);
+  const defaultName = `CH_${String(Math.max(0, ...usedNumbers) + 1).padStart(3, "0")}.txt`;
   const item = {
     id: createId(),
     name: defaultName,
@@ -615,6 +1017,12 @@ const loadItem = async (item) => {
   try {
     const content = await idbStorage.getItem(contentKey(item.id));
 
+    // Gist 拉取时只登记元数据；未下载前不能把空编辑器内容写回本地缓存。
+    if (item.gist && typeof content !== "string") {
+      showToast("这是 Gist 远程文件，请先点击下载");
+      return;
+    }
+
     // ★ 大文件加载前先告诉 cmView 跳过立即语言同步，
     //   等 CodeMirror 渲染完成后再延迟触发，避免主线程卡死导致滚动崩溃
     if (content && content.length > LARGE_FILE_THRESHOLD) {
@@ -650,10 +1058,12 @@ const loadItem = async (item) => {
 };
 
 async function copyUrl(item, type) {
-  const text = type === "blob" && item.blobUrl ? item.blobUrl : item.url;
+  const text = type === "html" ? item.gist?.htmlUrl : type === "gist" ? item.gist?.rawUrl : type === "blob" ? item.blobUrl : item.url;
+  if (!text) return;
   try {
     await toClipboard(text);
-    showToast("已复制 " + (type === "blob" ? "blob" : "raw") + " URL");
+    const label = type === "html" ? "HtmlUrl" : type === "blob" ? "blob url" : type === "gist" ? "gist url" : item.blobUrl ? "raw url" : "url";
+    showToast(`已复制 ${label}`);
   } catch {
     showToast("复制失败");
   }
@@ -661,7 +1071,7 @@ async function copyUrl(item, type) {
 
 async function refreshUrlItem(item) {
   if (!item.url) return;
-  loadingItemId.value = item.id;
+  refreshingUrlItemId.value = item.id;
   try {
     let currentURL = item.url;
     let res = await sendReq("GET", currentURL);
@@ -713,15 +1123,55 @@ async function refreshUrlItem(item) {
     showToast("刷新失败");
     isSwitchingItem = false;
   } finally {
-    loadingItemId.value = null;
+    refreshingUrlItemId.value = null;
   }
 }
 
 const renameItem = async (item) => {
   const newName = await askPrompt("重命名", item.name);
   if (!newName || newName === item.name) return;
-  item.name = newName;
-  cmStore.setCurrentFileName(newName);
+  const name = item.gist?.id ? toGistFileName(newName) : newName;
+  if (item.gist?.id && item.gist.filename !== name) {
+    const { token } = getGistCredentials();
+    if (!token) {
+      showToast("请先在设置中配置 Gist Token");
+      return;
+    }
+    syncingItemId.value = item.id;
+    syncingAction.value = "rename";
+    try {
+      const content = (await idbStorage.getItem(contentKey(item.id))) || "";
+      const response = await sendReq(
+        "PATCH",
+        `https://api.github.com/gists/${item.gist.id}`,
+        { Authorization: `token ${token}`, Accept: "application/vnd.github.v3+json" },
+        JSON.stringify({
+          files: {
+            [name]: { content },
+            [item.gist.filename]: null,
+          },
+        }),
+      );
+      if (response.status !== 200) throw new Error(response.status || "请求失败");
+      const remoteFile = response.data?.files?.[name];
+      if (!remoteFile?.raw_url) throw new Error("未获取到文件地址");
+      item.gist = {
+        ...item.gist,
+        filename: name,
+        rawUrl: remoteFile.raw_url,
+        updatedAt: new Date(response.data?.updated_at || Date.now()).getTime(),
+      };
+    } catch (error) {
+      console.error("重命名 Gist 文件失败", error);
+      showToast("重命名 Gist 文件失败");
+      return;
+    } finally {
+      syncingItemId.value = null;
+      syncingAction.value = "";
+    }
+  }
+  item.name = name;
+  if (currentItemId.value === item.id) cmStore.setCurrentFileName(name);
   await saveMeta(item);
   await persistIndex();
   showToast("已重命名为 " + newName);
@@ -783,6 +1233,9 @@ const setCurrentItem = async (id, fileName = "") => {
 
 let isDirty = false;
 
+const hasCurrentItemChanges = (item, content) =>
+  content !== lastSavedContent.value || (cmStore.currentFileName || item.name) !== item.name || (cmStore.manualLanguage || "") !== (item.manualLanguage || "");
+
 const syncCurrentItemContent = async () => {
   const id = currentItemId.value;
   if (!id) return;
@@ -794,13 +1247,16 @@ const syncCurrentItemContent = async () => {
   const content = cmStore.CmCode || "";
 
   try {
+    const idx = savedItems.value.findIndex((i) => i.id === id);
+    if (idx === -1) return;
+    if (!hasCurrentItemChanges(savedItems.value[idx], content)) {
+      isDirty = false;
+      return;
+    }
     await idbStorage.setItem(contentKey(id), content);
 
     lastSavedContent.value = content;
     isDirty = false;
-
-    const idx = savedItems.value.findIndex((i) => i.id === id);
-    if (idx === -1) return;
 
     savedItems.value[idx] = {
       ...savedItems.value[idx],
@@ -881,11 +1337,15 @@ const flushCurrentSave = async () => {
   const content = cmStore.CmCode;
   if (content == null) return;
   try {
-    await idbStorage.setItem(contentKey(id), content);
-    lastSavedContent.value = content;
-    isDirty = false;
     const idx = savedItems.value.findIndex((i) => i.id === id);
     if (idx !== -1) {
+      if (!hasCurrentItemChanges(savedItems.value[idx], content)) {
+        isDirty = false;
+        return;
+      }
+      await idbStorage.setItem(contentKey(id), content);
+      lastSavedContent.value = content;
+      isDirty = false;
       savedItems.value[idx] = { ...savedItems.value[idx], name: cmStore.currentFileName || savedItems.value[idx].name, ...buildMeta(content) };
       await saveMeta(savedItems.value[idx]);
       await persistIndex();
@@ -1797,40 +2257,22 @@ onBeforeUnmount(() => {
 
 .saves-item {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   padding: 12px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.03);
   position: relative;
 }
 
-.saves-item-del {
+.saves-item > input[type="checkbox"] {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 18px;
-  height: 18px;
-  line-height: 16px;
-  text-align: center;
-  font-size: 13px;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  opacity: 0.1;
-  cursor: pointer;
-  border-radius: 50%;
-  padding: 0;
-  z-index: 1;
+  top: 13px;
+  left: 12px;
 }
 
-.saves-item-del:hover {
-  opacity: 1;
-  background: rgba(128, 128, 128, 0.15);
-}
-
-.saves-item-current .saves-load-btn {
-  background: rgba(92, 125, 190, 0.2);
-  border-color: rgba(92, 125, 190, 0.5);
+.saves-item:has(> input[type="checkbox"]) .saves-item-info {
+  padding-left: 22px;
 }
 
 .saves-item-info {
@@ -1850,11 +2292,29 @@ onBeforeUnmount(() => {
   /* display: flex; */
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+  padding-right: 12px;
   opacity: 0.8;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+}
+
+.saves-item-source {
+  display: inline-block;
+  flex: 0 0 auto;
+  max-width: 100%;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(92, 125, 190, 0.16);
+  color: #5276b5;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: normal;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 /* .saves-item-name-span { */
@@ -1907,20 +2367,72 @@ onBeforeUnmount(() => {
   opacity: 0.5;
 }
 
-.saves-load-btn {
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 14px;
-  border: 0px;
-  background: #8f98c60e;
-  color: var(--text);
-  margin-right: 10px;
-  margin-left: -4px;
-  flex-shrink: 0;
+.saves-item-sync-actions {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.saves-load-btn:disabled {
-  opacity: 0.4;
+.saves-item-action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.saves-item-action-group-right {
+  justify-content: flex-end;
+}
+
+.saves-sync-btn {
+  min-width: 34px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 15px;
+  background: rgba(92, 125, 190, 0.12);
+  color: var(--text);
+  font-size: 10px;
+}
+
+.saves-sync-btn:disabled {
+  opacity: 0.45;
+}
+
+.saves-sync-btn.is-syncing {
+  opacity: 0.45;
+  transform: scale(0.94);
+}
+
+.saves-sync-btn.is-current {
+  background: rgba(92, 125, 190, 0.36);
+  /* color: #5276b5; */
+  /* font-weight: 600; */
+}
+
+.saves-gist-children {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: -2px 0 8px 28px;
+  padding: 0;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.saves-gist-child {
+  margin: 0;
+}
+
+.saves-gist-child-new {
+  border: 0;
+  border-radius: 15px;
+  padding: 7px 12px;
+  color: #5276b5;
+  background: rgba(92, 125, 190, 0.1);
+  font-size: 11px;
+  text-align: left;
+  margin-right: 13px;
 }
 
 /* ===== 自定义弹窗样式 ===== */
@@ -1937,8 +2449,13 @@ onBeforeUnmount(() => {
 
 .modal-box {
   width: 100%;
-  max-width: 320px;
-  background: #d7d7d7;
+  max-width: 300px;
+  min-height: 120px;
+  background: #ffffffd2;
+  /* color-mix(in srgb, var(--van-background-2, #d7d7d712) 78%, transparent); */
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  border: 0.1px solid rgba(255, 255, 255, 0.05);
   color: var(--text, #222);
   border-radius: 20px;
   padding: 18px 16px 14px;
@@ -1946,9 +2463,10 @@ onBeforeUnmount(() => {
 }
 
 .modal-title {
-  font-size: 15px;
-  margin-bottom: 12px;
+  font-size: 17px;
   line-height: 1.4;
+  text-align: center;
+  margin: 14px 10px 18px 11px;
 }
 
 .modal-input {
@@ -1957,29 +2475,32 @@ onBeforeUnmount(() => {
   font-size: 14px;
   padding: 8px 10px;
   border-radius: 14px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  background: transparent;
+  border: 0;
+  /* 1px solid rgba(128, 128, 128, 0.1); */
+  background: #00000023;
   color: inherit;
   outline: none;
   margin-bottom: 14px;
 }
 
 .modal-input:focus {
-  border-color: #5c7dbe;
+  border-color: #5c7dbe60;
 }
 
 .modal-actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 10px;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 24px;
+   margin-bottom: 24px;
 }
 
 .modal-btn {
-  font-size: 12px;
-  padding: 4px 15px;
-  border-radius: 14px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  background: transparent;
+  font-size: 14px;
+  padding: 7px 18px;
+  border-radius: 20px;
+  border: 0;
+  background: rgba(92, 125, 190, 0.12);
   color: inherit;
 }
 
@@ -2026,7 +2547,7 @@ onBeforeUnmount(() => {
 
 @media (prefers-color-scheme: dark) {
   .modal-box {
-    background: #16181c;
+    background: #16181c0c;
   }
   .log-panel {
     background: #1c1e234c;

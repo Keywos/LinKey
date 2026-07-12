@@ -96,6 +96,7 @@ import { defineAsyncComponent, onBeforeUnmount, ref } from "vue";
 import { showToast } from "vant";
 import { sendReq } from "@/http/http.js";
 import { useCmStore } from "@/store/cmCodeStore.js";
+import { codehubStorage, contentKey, getGistItemId, metaKey, SAVES_INDEX_KEY } from "@/storage/codehubStorage.js";
 const cmStore = useCmStore();
 
 const EditCode = defineAsyncComponent(() => import("@/EditCode/cmView.vue"));
@@ -163,6 +164,37 @@ else if (tname === "Gist Edit") {
 
 cmStore.setCmCode(inp.value);
 
+const saveGistFileLocally = async (gist, file, fileName, fileContent) => {
+  const id = getGistItemId(gist.id, fileName);
+  const content = typeof fileContent === "string" ? fileContent : String(fileContent || "");
+  const savedIds = await codehubStorage.getItem(SAVES_INDEX_KEY);
+  const ids = new Set(Array.isArray(savedIds) ? savedIds : []);
+  ids.add(id);
+  await codehubStorage.setItem(contentKey(id), content);
+  await codehubStorage.setItem(metaKey(id), {
+    name: fileName,
+    length: content.length,
+    preview: content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100),
+    updatedAt: new Date(gist.updated_at || Date.now()).getTime(),
+    language: "",
+    manualLanguage: "",
+    url: "",
+    blobUrl: "",
+    gist: {
+      id: gist.id,
+      folderName: gist.description || Object.keys(gist.files || {})[0] || fileName,
+      filename: fileName,
+      rawUrl: file?.raw_url || "",
+      htmlUrl: gist.html_url || "",
+      description: gist.description || "",
+      user: gist.owner?.login || "",
+      updatedAt: new Date(gist.updated_at || Date.now()).getTime(),
+      downloaded: true,
+    },
+  });
+  await codehubStorage.setItem(SAVES_INDEX_KEY, [...ids]);
+};
+
 const onSubmit = async (values) => {
   isloding.value = true;
   try {
@@ -193,6 +225,7 @@ const onSubmit = async (values) => {
     showToast("请求成功" + res.status);
     const file = res.data?.files?.[filename.value];
     if (file?.raw_url) {
+      await saveGistFileLocally(res.data, file, filename.value, cmStore.CmCode);
       rawURL.value = file.raw_url;
       rawurlForever.value = file.raw_url.replace(/\/raw\/\w+?\//, "/raw/");
       if (isEditPatchNew) {
@@ -208,6 +241,7 @@ const onSubmit = async (values) => {
           public: publicProp,
           created: forTS(new Date(created_at).getTime()),
           updated: forTS(new Date(updated_at).getTime()),
+          updatedAt: new Date(updated_at).getTime(),
           desc: description,
           user: owner?.login || "",
         };

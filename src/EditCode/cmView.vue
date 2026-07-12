@@ -13,7 +13,15 @@
               </select>
             </div>
             <div class="editor-background-select-wrap">
-              <select v-model="editorDarkBackground" class="editor-background-select" title="编辑器背景颜色" aria-label="编辑器背景颜色" @pointerdown.stop @click.stop @change="setEditorDarkBackground">
+              <select
+                v-model="editorDarkBackground"
+                class="editor-background-select"
+                title="编辑器背景颜色"
+                aria-label="编辑器背景颜色"
+                @pointerdown.stop
+                @click.stop
+                @change="setEditorDarkBackground"
+              >
                 <option v-for="option in editorDarkBackgroundOptions" :key="option.value" :value="option.value">
                   {{ option.label }}
                 </option>
@@ -193,7 +201,6 @@ import { json } from "@codemirror/lang-json";
 import { yaml } from "@codemirror/lang-yaml";
 
 import { detectEditorLanguage, EDITOR_LANGUAGE_OPTIONS, loadEditorLanguageExtension, normalizeEditorLanguage } from "@/EditCode/editorLanguages";
-import { renameFileExtension } from "@/EditCode/fileLanguageUtils";
 import { shikiHighlight, SHIKI_SUPPORTED_LANGUAGES } from "@/EditCode/shikiHighlight";
 import { computed, nextTick, ref, reactive, onBeforeUnmount, onMounted, watch, watchEffect } from "vue";
 import {
@@ -344,7 +351,7 @@ const editorLanguage_json = {
   json5: "JSON5",
   yaml: "YAML",
   ini: "INI",
-  plaintext: "纯文本",
+  plaintext: "TXT",
   detect: {
     auto: "自动检测语言",
     cancel: "取消自动检测",
@@ -427,20 +434,6 @@ const createShikiHighlight = (language = activeLanguage.value) =>
 const applyLanguage = async (language, requestId = ++languageRequestId) => {
   const nextLanguage = normalizeEditorLanguage(language, "plaintext");
   if (!view || requestId !== languageRequestId) return;
-
-  // ★ 只有文件名无扩展名时才自动改写后缀（例如 example → example.js）
-  //   有扩展名的文件保留原始后缀，避免 .json 被改写成 .js 或 .sg 被改写成 .txt
-  if (!_skipNextFileRename) {
-    const name = cmStore.currentFileName || "";
-    const hasExt = name.includes(".") && !name.endsWith(".");
-    if (!hasExt) {
-      const renamedFile = renameFileExtension(name, nextLanguage);
-      if (renamedFile !== name) {
-        cmStore.setCurrentFileName(renamedFile);
-      }
-    }
-  }
-  _skipNextFileRename = false; // 用完即重置
 
   if (nextLanguage === activeLanguage.value) return;
 
@@ -882,6 +875,9 @@ const refreshEditorTheme = () => {
 onBeforeUnmount(() => {
   clearLanguageDetectionTimer();
   clearTimeout(syncTimer);
+  clearTimeout(_storeSyncTimer);
+  _storeSyncTimer = null;
+  _pendingStoreContent = null;
   clearTimeout(replaceAllArmTimer);
   window.removeEventListener("resize", keepSearchFabInViewport);
   window.removeEventListener("orientationchange", handleViewportChange);
@@ -1396,7 +1392,6 @@ const toggleCollapsed = () => {
 </script>
 
 <style lang="scss" scoped>
-
 .editor-background-select-wrap {
   display: flex;
   align-items: center;
@@ -1421,7 +1416,7 @@ const toggleCollapsed = () => {
   appearance: none;
   -webkit-appearance: none;
   opacity: 0.7;
-  padding-right:6px;
+  padding-right: 6px;
   touch-action: manipulation;
   cursor: pointer;
 }
@@ -1439,6 +1434,59 @@ const toggleCollapsed = () => {
   height: 30px;
   justify-content: center;
   align-items: center;
+}
+
+.cm-toolbar-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  margin: 0 0 8px;
+}
+
+.cm-toolbar-wrapper {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+}
+
+.cm-img-button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 5px 7px;
+  box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+.cm-img-button::-webkit-scrollbar {
+  display: none;
+}
+
+.cm-img-button > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: max-content;
+}
+
+.cm-collapse-btn {
+  display: grid;
+  place-items: center;
+  flex: 0 0 31px;
+  width: 31px;
+  height: 34px;
+  margin-right: 10px;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #222;
+  cursor: pointer;
 }
 
 @media (max-width: 480px), (orientation: landscape) and (max-height: 600px) {
@@ -1677,8 +1725,8 @@ const toggleCollapsed = () => {
   }
 
   .cm-search-input:focus {
-    border-color: #6d9edc;
-    box-shadow: 0 0 0 3px rgba(109, 158, 220, 0.14);
+    border-color: #6d9ddc44;
+    // box-shadow: 0 0 0 1px rgba(109, 158, 220, 0.14);
   }
 
   .cm-search-input.invalid {

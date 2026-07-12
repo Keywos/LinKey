@@ -122,12 +122,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { showConfirmDialog, showToast } from "vant";
 import { sendReq } from "@/http/http.js";
 import github from "@/img/svg/github.svg";
 import { useRouter } from "vue-router";
 import { useGistStore } from "@/store/gistStore";
+import { codehubStorage, GIST_LIST_KEY, syncGistFilesToCodeHub } from "@/storage/codehubStorage.js";
 
 import useV3Clipboard from "vue-clipboard3";
 const { toClipboard } = useV3Clipboard();
@@ -137,6 +138,14 @@ const activeName = ref(0);
 const router = useRouter();
 const showCentertf = ref(false);
 const listpop = ref({ filesNames: [], files: {} });
+
+const saveGistsToCodeHub = async (gists) => {
+  try {
+    await syncGistFilesToCodeHub(gists);
+  } catch (error) {
+    console.error("写入 Code Hub Gist 索引失败", error);
+  }
+};
 
 const isloding = ref(false);
 
@@ -330,6 +339,16 @@ if (LocalGetToken && LocalGetToken?.n !== "" && LocalGetToken?.t != "") {
 missingSettings.length && showToast(missingSettings.join(", "));
 const loading = ref(false);
 
+const refreshGistCredentials = () => {
+  username.value = localStorage.getItem("GistUserN") || "";
+  try {
+    LocalGetToken = JSON.parse(localStorage.getItem("GistUserT") || "null");
+  } catch {
+    LocalGetToken = null;
+  }
+  token.value = LocalGetToken?.t || "";
+};
+
 const retxts = ref("刷新成功");
 const onRefresh = () => {
   if (username.value && token.value) {
@@ -367,6 +386,7 @@ const rereq = async (isPullRefresh = false) => {
         public: publicProp,
         created: forTS(new Date(created_at).getTime()),
         updated: forTS(new Date(updated_at).getTime()),
+        updatedAt: new Date(updated_at).getTime(),
         desc: description,
         user: owner?.login || "",
       }));
@@ -376,8 +396,9 @@ const rereq = async (isPullRefresh = false) => {
 
     if (resdata.length > 0) {
       useGS.setGistRes(resdata);
-      if (localStorage.getItem("LocalGistResTure") == 1) {
-        localStorage.setItem("GistRes", JSON.stringify(resdata));
+      await saveGistsToCodeHub(resdata);
+      if (localStorage.getItem("LocalGistResTure") !== "0") {
+        await codehubStorage.setItem(GIST_LIST_KEY, resdata);
       }
       if (!isPullRefresh) showToast("刷新成功");
     }
@@ -399,29 +420,52 @@ function forTS(timestampInSeconds) {
   return `${String(year).slice(2)}/${month}/${day} ${hours}:${minutes}`;
 }
 
-onMounted(() => {
-  if (localStorage.getItem("LocalGistRe") == 1) {
-    try {
-      const gl = JSON.parse(localStorage.getItem("GistRes"));
-      let io = 0;
-      if (Array.isArray(gl) && gl.length != 0) {
-        gl.forEach((i) => {
-          if (!i || typeof i !== "object" || !Array.isArray(i.filesNames)) throw new Error("读取到无效缓存数据");
-          io++;
-        });
-        useGS.setGistRes(gl);
-      }
-      showToast("获取本地缓存成功");
-      console.log("挂载成功", io);
-    } catch (error) {
-      localStorage.removeItem("GistRes");
-      showToast("获取本地缓存失败, 移除缓存");
+const shouldLoadLocalGists = () => localStorage.getItem("LocalGistRe") !== "0";
+
+const loadLocalGistCache = async (showResult = true) => {
+  if (!shouldLoadLocalGists()) return;
+  try {
+    const gl = await codehubStorage.getItem(GIST_LIST_KEY);
+    if (!Array.isArray(gl) || gl.length === 0) {
+      if (showResult) showToast("没有可用的 Gist 本地缓存");
+      return;
     }
+    const cachedGists = gl.map((item) => {
+      if (!item || typeof item !== "object" || !item.id || !item.files || typeof item.files !== "object") {
+        throw new Error("读取到无效缓存数据");
+      }
+      return {
+        ...item,
+        filesNames: Array.isArray(item.filesNames) ? item.filesNames : Object.keys(item.files),
+      };
+    });
+    useGS.setGistRes(cachedGists);
+    await codehubStorage.setItem(GIST_LIST_KEY, cachedGists);
+    await saveGistsToCodeHub(cachedGists);
+    if (showResult) showToast(`获取本地缓存成功：${cachedGists.length} 项`);
+  } catch (error) {
+    await codehubStorage.removeItem(GIST_LIST_KEY);
+    showToast("获取本地缓存失败，已移除无效缓存");
   }
+};
+
+const handleLocalGistCacheSettingChange = (event) => {
+  if (event.detail?.enabled) loadLocalGistCache(false);
+};
+
+onMounted(async () => {
+  await loadLocalGistCache();
+  window.addEventListener("gist-local-cache-setting-change", handleLocalGistCacheSettingChange);
+  window.addEventListener("gist-credentials-change", refreshGistCredentials);
   if (localStorage.getItem("AutoGistRe") == 1) {
     showToast("正在拉取远程资源");
     rereq();
   }
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("gist-local-cache-setting-change", handleLocalGistCacheSettingChange);
+  window.removeEventListener("gist-credentials-change", refreshGistCredentials);
 });
 </script>
 

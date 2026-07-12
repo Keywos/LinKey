@@ -107,6 +107,7 @@ import { computed, ref } from "vue";
 import { sendReq } from "@/http/http.js";
 import { showToast } from "vant";
 import { useGistStore } from "@/store/gistStore";
+import { codehubStorage, GIST_LIST_KEY } from "@/storage/codehubStorage.js";
 
 const useGStore = useGistStore();
 const beforeClose = () => {
@@ -115,11 +116,10 @@ const beforeClose = () => {
 
 const getStoredBoolean = (key, defaultValue = false) => {
   const value = localStorage.getItem(key);
-  return value === null ? defaultValue : value === "1";
+  return value === null ? defaultValue : value !== "0";
 };
 const setStoredBoolean = (key, value) => {
-  if (value) localStorage.setItem(key, "1");
-  else localStorage.removeItem(key);
+  localStorage.setItem(key, value ? "1" : "0");
 };
 const EDITOR_DARK_BACKGROUNDS = ["#282c34", "#141414", "#000000"];
 const storedEditorBackground = localStorage.getItem("EditorDarkBackground");
@@ -165,6 +165,7 @@ const saveisn = () => {
   localStorage.setItem("GistUserN", username.value);
   iseditsname.value = false;
   isreadonlysName.value = true;
+  window.dispatchEvent(new Event("gist-credentials-change"));
 };
 
 const editis = () => {
@@ -194,6 +195,7 @@ const saveis = async () => {
         isedits.value = false;
         isreadonlys.value = true;
         gistid.value = LocalGetToken.n || "";
+        window.dispatchEvent(new Event("gist-credentials-change"));
         showToast("保存成功");
       } else {
         showToast("验证失败, 用户名 或 Token 错误; 服务器返回状态码" + res.status);
@@ -223,7 +225,10 @@ const setGistauto = (value) => setStoredBoolean("AutoGistRe", value);
 const setBGC = (value) => setStoredBoolean("ISBGC", value);
 
 const autoGistlocal = ref(getStoredBoolean("LocalGistRe", true));
-const setGistautolocal = (value) => setStoredBoolean("LocalGistRe", value);
+const setGistautolocal = (value) => {
+  setStoredBoolean("LocalGistRe", value);
+  window.dispatchEvent(new CustomEvent("gist-local-cache-setting-change", { detail: { enabled: value } }));
+};
 
 const autoISBGC = ref(getStoredBoolean("ISBGC"));
 const autoGistlocala = ref(getStoredBoolean("LocalGistResTure", true));
@@ -265,8 +270,8 @@ const rePwa = async () => {
 };
 
 
-const cleargist = () => {
-  localStorage.removeItem("LocalGistResTure");
+const cleargist = async () => {
+  await codehubStorage.removeItem(GIST_LIST_KEY);
   useGStore.setGistRes([]);
   showToast("清除 Gist 本地缓存成功");
 };
