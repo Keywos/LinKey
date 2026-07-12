@@ -6,14 +6,14 @@
         <div class="cm-img-button">
           <div>
             <div class="editor-background-select-wrap">
-              <select v-model="selectedLanguage" class="editor-background-select" :title="selectedLanguageTitle" aria-label="Editor language" @change="onLanguageChange">
+              <select v-model="selectedLanguage" class="editor-background-select" :title="selectedLanguageTitle" aria-label="Editor language" @pointerdown.stop @click.stop @change="onLanguageChange">
                 <option v-for="option in languageOptions" :key="option.value" :value="option.value">
                   {{ option.label }}
                 </option>
               </select>
             </div>
             <div class="editor-background-select-wrap">
-              <select v-model="editorDarkBackground" class="editor-background-select" title="编辑器背景颜色" aria-label="编辑器背景颜色" @change="setEditorDarkBackground">
+              <select v-model="editorDarkBackground" class="editor-background-select" title="编辑器背景颜色" aria-label="编辑器背景颜色" @pointerdown.stop @click.stop @change="setEditorDarkBackground">
                 <option v-for="option in editorDarkBackgroundOptions" :key="option.value" :value="option.value">
                   {{ option.label }}
                 </option>
@@ -1400,13 +1400,14 @@ const toggleCollapsed = () => {
 .editor-background-select-wrap {
   display: flex;
   align-items: center;
-  flex-shrink: 0;
+  flex: 0 0 48px;
   // width: 40px;
   height: 34px;
+  touch-action: manipulation;
 }
 
 .editor-background-select {
-  width: 42px;
+  width: 48px;
   height: 30px;
   border: 0;
   border-radius: 10px;
@@ -1421,6 +1422,8 @@ const toggleCollapsed = () => {
   -webkit-appearance: none;
   opacity: 0.7;
   padding-right:6px;
+  touch-action: manipulation;
+  cursor: pointer;
 }
 
 .editor-background-select option {
