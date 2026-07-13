@@ -97,14 +97,7 @@
                   拉取 Gist
                 </button>
                 <button class="saves-sync-btn" @click.stop="renameItem(item)">重命名</button>
-                <button
-                  class="saves-sync-btn"
-                  :class="{ 'is-current': item.id === currentItemId }"
-                  :disabled="loadingItemId === item.id"
-                  @click.stop="loadItemForList(item)"
-                >
-                  加载
-                </button>
+                <button class="saves-sync-btn" :class="{ 'is-current': item.id === currentItemId }" :disabled="loadingItemId === item.id" @click.stop="loadItemForList(item)">加载</button>
               </div>
             </div>
           </div>
@@ -171,14 +164,7 @@
                     从 Gist 拉取
                   </button>
                   <button class="saves-sync-btn" @click.stop="renameItem(child)">重命名</button>
-                  <button
-                    class="saves-sync-btn"
-                    :class="{ 'is-current': child.id === currentItemId }"
-                    :disabled="loadingItemId === child.id"
-                    @click.stop="loadItemForList(child)"
-                  >
-                    加载
-                  </button>
+                  <button class="saves-sync-btn" :class="{ 'is-current': child.id === currentItemId }" :disabled="loadingItemId === child.id" @click.stop="loadItemForList(child)">加载</button>
                 </div>
               </div>
             </div>
@@ -235,15 +221,7 @@
     <div class="modal-box">
       <div class="modal-title">{{ promptState.title }}</div>
       <input ref="promptInputRef" v-model="promptState.value" class="modal-input" type="text" autofocus @input="autoFillScriptHubUserAgent" @keyup.enter="promptConfirm" @keyup.esc="promptCancel" />
-      <input
-        v-if="promptState.hasUserAgent"
-        v-model="promptState.userAgent"
-        class="modal-input"
-        type="text"
-        placeholder="UA（可选）"
-        @keyup.enter="promptConfirm"
-        @keyup.esc="promptCancel"
-      />
+      <input v-if="promptState.hasUserAgent" v-model="promptState.userAgent" class="modal-input" type="text" placeholder="UA（可选）" @keyup.enter="promptConfirm" @keyup.esc="promptCancel" />
       <div class="modal-actions">
         <button class="modal-btn" @click="pasteToPromptInput">粘贴</button>
         <button class="modal-btn" @click="promptCancel">取消</button>
@@ -285,7 +263,18 @@ import { useCmStore } from "@/store/cmCodeStore.js";
 import useV3Clipboard from "vue-clipboard3";
 import { useRoute } from "vue-router";
 import { sendReq } from "@/http/http.js";
-import { codehubStorage as idbStorage, contentKey, getGistItemId, metaKey, moveCodeHubItemId, prependGistFileToCache, removeGistFilesFromCache, removeGistFilesFromCodeHub, renameGistFileInCodeHub, SAVES_INDEX_KEY } from "@/storage/codehubStorage.js";
+import {
+  codehubStorage as idbStorage,
+  contentKey,
+  getGistItemId,
+  metaKey,
+  moveCodeHubItemId,
+  prependGistFileToCache,
+  removeGistFilesFromCache,
+  removeGistFilesFromCodeHub,
+  renameGistFileInCodeHub,
+  SAVES_INDEX_KEY,
+} from "@/storage/codehubStorage.js";
 
 import JSZip from "jszip";
 import "./env.js";
@@ -2020,7 +2009,6 @@ function getSandboxWorker() {
   return _sandboxWorker;
 }
 
-/** 在主线程中直接执行用户脚本（捕获 console 输出） */
 function executeInMainThread(code, onLog) {
   return new Promise((resolve) => {
     const logs = [];
@@ -2094,7 +2082,7 @@ function executeInMainThread(code, onLog) {
     var _savedConsole = window.console;
     window.console = mockConsole;
     try {
-      _execResult = (0, eval)("(async function(){try{\n" + code + "\n}catch(e){try{console.error('[Uncaught] '+(e&&e.stack?e.stack:(e&&e.message?e.message:e)))}catch(_){}}})()");
+      _execResult = (0, eval)("(async function(console){try{\n" + code + "\n}catch(e){try{console.error('[Uncaught] '+(e&&e.stack?e.stack:(e&&e.message?e.message:e)))}catch(_){}}})")(mockConsole);
     } catch (e) {
       _execError = e;
     }
@@ -2606,7 +2594,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 20px;
   margin-top: 24px;
-   margin-bottom: 24px;
+  margin-bottom: 24px;
 }
 
 .modal-btn {
