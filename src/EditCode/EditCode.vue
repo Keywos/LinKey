@@ -33,16 +33,16 @@
       <div ref="savesListRef" class="saves-list">
         <div v-if="savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
         <template v-for="item in sortedSavedItems" :key="item.id">
-          <div  @click.stop="loadItemForList(item)" v-if="shouldShowSavedItem(item)" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
+          <div @click.stop="loadItemForList(item)" v-if="shouldShowSavedItem(item)" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
             <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" />
 
-            <div class="saves-item-info" >
+            <div class="saves-item-info">
               <span class="saves-item-name">
                 {{ item.name }}
                 <span v-if="item.gist" class="saves-item-source" :title="gistPath(item)">{{ gistPath(item) }}</span>
               </span>
 
-              <div class="saves-item-preview" >
+              <div class="saves-item-preview">
                 <span class="saves-item-content-preview">{{ item.preview || "" }}</span>
               </div>
 
@@ -98,8 +98,7 @@
                 </button>
                 <button class="saves-sync-btn" @click.stop="renameItem(item)">重命名</button>
                 <button class="saves-sync-btn" :class="{ 'is-current': item.id === currentItemId }" :disabled="loadingItemId === item.id" @click.stop="loadItemForList(item)">
-                  
-                {{ item.id === currentItemId? "当前" : "加载" }}
+                  {{ item.id === currentItemId ? "当前" : "加载" }}
                 </button>
               </div>
             </div>
@@ -176,6 +175,9 @@
             </button>
           </div>
         </template>
+        <div class="saves-footers">
+          <button class="saves-sync-btn" @click.stop="push_home">返回首页</button>
+        </div>
       </div>
     </div>
     <!-- 拖拽调整高度手柄 -->
@@ -264,7 +266,7 @@ import { showToast } from "vant";
 import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
 import useV3Clipboard from "vue-clipboard3";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { sendReq } from "@/http/http.js";
 import {
   codehubStorage as idbStorage,
@@ -284,6 +286,7 @@ import "./env.js";
 let skipWatchSave = false;
 let isSwitchingItem = false; // 切换文件期间抑制自动保存 watch
 const route = useRoute();
+const router = useRouter();
 const israw = ref(false);
 const grc = ref("");
 const { toClipboard } = useV3Clipboard();
@@ -436,6 +439,9 @@ const promptCancel = () => {
   const { resolve } = promptState.value;
   promptState.value.visible = false;
   resolve?.(null);
+};
+const push_home = () => {
+  router.push("/");
 };
 
 async function pasteToPromptInput() {
@@ -2762,5 +2768,9 @@ onBeforeUnmount(() => {
 }
 .log-resize-handle:hover {
   opacity: 0.8;
+}
+.saves-footers{
+   text-align: center;
+   padding: 66px;
 }
 </style>
