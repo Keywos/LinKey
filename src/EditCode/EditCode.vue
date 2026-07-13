@@ -96,11 +96,11 @@
                 >
                   拉取 Gist
                 </button>
-                <button class="saves-sync-btn" :disabled="syncingItemId === item.id" @click.stop="renameItem(item)">重命名</button>
+                <button class="saves-sync-btn" @click.stop="renameItem(item)">重命名</button>
                 <button
                   class="saves-sync-btn"
                   :class="{ 'is-current': item.id === currentItemId }"
-                  :disabled="loadingItemId === item.id || syncingItemId === item.id"
+                  :disabled="loadingItemId === item.id"
                   @click.stop="loadItemForList(item)"
                 >
                   加载
@@ -170,11 +170,11 @@
                   >
                     从 Gist 拉取
                   </button>
-                  <button class="saves-sync-btn" :disabled="syncingItemId === child.id" @click.stop="renameItem(child)">重命名</button>
+                  <button class="saves-sync-btn" @click.stop="renameItem(child)">重命名</button>
                   <button
                     class="saves-sync-btn"
                     :class="{ 'is-current': child.id === currentItemId }"
-                    :disabled="loadingItemId === child.id || syncingItemId === child.id"
+                    :disabled="loadingItemId === child.id"
                     @click.stop="loadItemForList(child)"
                   >
                     加载
@@ -234,7 +234,16 @@
   <div v-if="promptState.visible" class="modal-mask" @click.self="promptCancel">
     <div class="modal-box">
       <div class="modal-title">{{ promptState.title }}</div>
-      <input ref="promptInputRef" v-model="promptState.value" class="modal-input" type="text" autofocus @keyup.enter="promptConfirm" @keyup.esc="promptCancel" />
+      <input ref="promptInputRef" v-model="promptState.value" class="modal-input" type="text" autofocus @input="autoFillScriptHubUserAgent" @keyup.enter="promptConfirm" @keyup.esc="promptCancel" />
+      <input
+        v-if="promptState.hasUserAgent"
+        v-model="promptState.userAgent"
+        class="modal-input"
+        type="text"
+        placeholder="UA（可选）"
+        @keyup.enter="promptConfirm"
+        @keyup.esc="promptCancel"
+      />
       <div class="modal-actions">
         <button class="modal-btn" @click="pasteToPromptInput">粘贴</button>
         <button class="modal-btn" @click="promptCancel">取消</button>
@@ -366,7 +375,7 @@ const confirmInputRef = ref(null);
 const cmViewRef = ref(null);
 
 // ===== 自定义弹窗 =====
-const promptState = ref({ visible: false, title: "", value: "", resolve: null });
+const promptState = ref({ visible: false, title: "", value: "", userAgent: "", hasUserAgent: false, resolve: null });
 const confirmState = ref({ visible: false, title: "", value: "", hasInput: false, resolve: null });
 
 watch(
@@ -392,20 +401,43 @@ watch(
 );
 
 async function requestUrlContent() {
-  const url = await askPrompt("输入 Github/raw/普通文本链接");
-  if (!url) return;
-  await loadUrlContent(url.trim());
+  const request = await askUrlPrompt();
+  if (!request?.url) return;
+  await loadUrlContent(request.url.trim(), request.userAgent.trim());
 }
 
-function askPrompt(title, defaultValue = "") {
+function askPrompt(title, defaultValue = "", hasUserAgent = false) {
   return new Promise((resolve) => {
-    promptState.value = { visible: true, title, value: defaultValue, resolve };
+    promptState.value = {
+      visible: true,
+      title,
+      value: defaultValue,
+      userAgent: hasUserAgent ? localStorage.getItem("codeHubUserAgent") || "" : "",
+      hasUserAgent,
+      resolve,
+    };
   });
 }
 
+function askUrlPrompt() {
+  return askPrompt("输入 Github/raw/普通文本链接", "", true);
+}
+
+function autoFillScriptHubUserAgent() {
+  if (promptState.value.hasUserAgent && SCRIPT_HUB_LPX_URL_PATTERN.test(promptState.value.value)) {
+    promptState.value.userAgent = SCRIPT_HUB_USER_AGENT;
+  }
+}
+
 const promptConfirm = () => {
-  const { resolve, value } = promptState.value;
+  const { resolve, value, userAgent, hasUserAgent } = promptState.value;
   promptState.value.visible = false;
+  if (hasUserAgent) {
+    const trimmedUserAgent = userAgent.trim();
+    localStorage.setItem("codeHubUserAgent", trimmedUserAgent);
+    resolve?.({ url: value, userAgent: trimmedUserAgent });
+    return;
+  }
   resolve?.(value);
 };
 const promptCancel = () => {
@@ -453,6 +485,7 @@ const saveMeta = async (item) => {
       manualLanguage: item.manualLanguage || "",
       url: item.url || "",
       blobUrl: item.blobUrl || "",
+      userAgent: item.userAgent || "",
       gist: toStoredValue(item.gist),
       localGroupId: item.localGroupId || "",
     });
@@ -1118,14 +1151,24 @@ async function copyUrl(item, type) {
   }
 }
 
+const SCRIPT_HUB_LPX_URL_PATTERN = /.+pages\.dev.+\.lpx/;
+const SCRIPT_HUB_USER_AGENT = "script-hub/1.0.0";
+
+function getForwardRequestUrl(url, userAgent = "") {
+  if (!userAgent) return `https://surgetool.com/api/fetch?url=${url}`;
+  const linkeyHeaders = encodeURIComponent(JSON.stringify({ "User-Agent": userAgent }));
+  return `https://surgetool.com/api/fetch?url=${url}?&linkeyheaders=${linkeyHeaders}`;
+}
+
 async function refreshUrlItem(item) {
   if (!item.url) return;
   refreshingUrlItemId.value = item.id;
   try {
     let currentURL = item.url;
-    let res = await sendReq("GET", currentURL);
+    const userAgent = item.userAgent || (SCRIPT_HUB_LPX_URL_PATTERN.test(currentURL) ? SCRIPT_HUB_USER_AGENT : "");
+    let res = userAgent ? null : await sendReq("GET", currentURL);
     if (!res || !res.data) {
-      const localURL = `https://surgetool.com/api/fetch?url=${encodeURIComponent(currentURL)}`;
+      const localURL = getForwardRequestUrl(currentURL, userAgent);
       showToast("模块请求转发中…");
       res = await sendReq("GET", localURL);
     }
@@ -1691,7 +1734,7 @@ console.log(i.o.c[2])
 
 // end`;
 
-async function loadUrlContent(inputUrl) {
+async function loadUrlContent(inputUrl, inputUserAgent = "") {
   let addedItemId = null;
   try {
     let currentURL = inputUrl;
@@ -1709,11 +1752,12 @@ async function loadUrlContent(inputUrl) {
       bloburl = extractAndFormatUrl(currentURL);
     }
 
+    const userAgent = inputUserAgent || (SCRIPT_HUB_LPX_URL_PATTERN.test(currentURL) ? SCRIPT_HUB_USER_AGENT : "");
     showToast("请求中");
 
-    let res = await sendReq("GET", currentURL);
+    let res = userAgent ? null : await sendReq("GET", currentURL);
     if (!res || !res.data) {
-      const localURL = `https://surgetool.com/api/fetch?url=${encodeURIComponent(currentURL)}`;
+      const localURL = getForwardRequestUrl(currentURL, userAgent);
       showToast("模块请求转发中…");
       res = await sendReq("GET", localURL);
     }
@@ -1739,6 +1783,7 @@ async function loadUrlContent(inputUrl) {
       ...buildMeta(content),
       url: currentURL,
       blobUrl: bloburl,
+      userAgent,
     };
 
     await idbStorage.setItem(contentKey(id), content);
