@@ -140,17 +140,25 @@ if (typeof $httpClient === "undefined" && typeof self !== "undefined") {
       }
 
       var settled = false;
+
       function finish(err, resp, data) {
         if (settled) return;
         settled = true;
+
         clearTimeout(guardTimer);
-        error = err;
-        callback(err, resp, data);
-        self.__surge_pending--;
-        if (self.__surge_pending <= 0 && self.__surge_on_idle) {
-          var cb = self.__surge_on_idle;
-          self.__surge_on_idle = null;
-          cb();
+
+        try {
+          callback(err, resp, data);
+        } catch (e) {
+          console.error("$httpClient callback error:", e);
+        } finally {
+          self.__surge_pending--;
+
+          if (self.__surge_pending <= 0 && self.__surge_on_idle) {
+            const cb = self.__surge_on_idle;
+            self.__surge_on_idle = null;
+            cb();
+          }
         }
       }
 
@@ -161,6 +169,7 @@ if (typeof $httpClient === "undefined" && typeof self !== "undefined") {
       }, timeout + 1000);
 
       function done(err, resp, data) {
+        // console.log("[done]", err ? err : 'Success', !resp? "No response" : "", data ? (binaryMode ? "[binary data]" : data) : "No data");
         finish(err, resp, data);
       }
 

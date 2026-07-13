@@ -2744,7 +2744,7 @@ onBeforeUnmount(() => {
   -webkit-overflow-scrolling: touch;
 }
 .log-pre {
-  padding: 0;
+  padding: 2px;
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
