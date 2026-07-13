@@ -276,7 +276,7 @@ import { useCmStore } from "@/store/cmCodeStore.js";
 import useV3Clipboard from "vue-clipboard3";
 import { useRoute } from "vue-router";
 import { sendReq } from "@/http/http.js";
-import { codehubStorage as idbStorage, contentKey, getGistItemId, metaKey, prependGistFileToCache, removeGistFilesFromCache, removeGistFilesFromCodeHub, renameGistFileInCodeHub, SAVES_INDEX_KEY } from "@/storage/codehubStorage.js";
+import { codehubStorage as idbStorage, contentKey, getGistItemId, metaKey, moveCodeHubItemId, prependGistFileToCache, removeGistFilesFromCache, removeGistFilesFromCodeHub, renameGistFileInCodeHub, SAVES_INDEX_KEY } from "@/storage/codehubStorage.js";
 
 import JSZip from "jszip";
 import "./env.js";
@@ -832,6 +832,17 @@ const uploadItemToGist = async (item, description) => {
       downloaded: true,
     };
     item.name = filename;
+    const previousId = item.id;
+    const nextId = getGistItemId(item.gist.id, filename);
+    if (previousId !== nextId) {
+      if (gistId && previousFilename && previousFilename !== filename) {
+        await renameGistFileInCodeHub(item.gist.id, previousFilename, filename);
+      } else {
+        await moveCodeHubItemId(previousId, nextId);
+      }
+      item.id = nextId;
+      if (currentItemId.value === previousId) currentItemId.value = item.id;
+    }
     await updateGistDescriptionLocally(item.gist.id, item.gist.description);
     await prependGistFileToCache(response.data, filename, remoteFile);
     await saveMeta(item);

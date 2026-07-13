@@ -29,6 +29,21 @@ export const metaKey = (id) => `codehub_save_meta:${id}`;
 
 export const getGistItemId = (gistId, filename) => `gist:${gistId}:${encodeURIComponent(filename)}`;
 
+export const moveCodeHubItemId = async (oldId, newId) => {
+  if (!oldId || !newId || oldId === newId) return;
+  const db = await dbPromise;
+  const tx = db.transaction("store", "readwrite");
+  const store = tx.objectStore("store");
+  const [savedIds, oldContent] = await Promise.all([store.get(SAVES_INDEX_KEY), store.get(contentKey(oldId))]);
+  const ids = Array.isArray(savedIds) ? savedIds : [];
+
+  if (typeof oldContent === "string") await store.put(oldContent, contentKey(newId));
+  await store.delete(contentKey(oldId));
+  await store.delete(metaKey(oldId));
+  await store.put([...new Set(ids.map((id) => (id === oldId ? newId : id)))], SAVES_INDEX_KEY);
+  await tx.done;
+};
+
 export const updateGistDescriptionInCodeHub = async (gistId, description) => {
   const db = await dbPromise;
   const tx = db.transaction("store", "readwrite");
@@ -54,22 +69,56 @@ export const updateGistDescriptionInCodeHub = async (gistId, description) => {
   );
 };
 
+const formatGistTime = (value) => {
+  const timestamp = new Date(value || Date.now()).getTime();
+  const date = new Date(Number.isFinite(timestamp) ? timestamp : Date.now());
+  const year = String(date.getFullYear()).slice(2);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}/${month}/${day} ${hours}:${minutes}`;
+};
+
+const toCachedGist = (gist) => {
+  const files = { ...(gist.files || {}) };
+  const filesNames = Object.keys(files);
+  const updatedAt = getGistUpdatedAt(gist);
+  return {
+    ...gist,
+    files,
+    filesNames,
+    primaryFilename: gist.primaryFilename || filesNames[0] || "",
+    desc: gist.description ?? gist.desc ?? "",
+    description: gist.description ?? gist.desc ?? "",
+    created: gist.created || formatGistTime(gist.created_at),
+    updated: gist.updated || formatGistTime(gist.updated_at || updatedAt),
+    updatedAt,
+    user: gist.user || gist.owner?.login || "",
+  };
+};
+
 export const prependGistFileToCache = async (gist, filename, file) => {
   const cachedGists = await codehubStorage.getItem(GIST_LIST_KEY);
-  if (!Array.isArray(cachedGists)) return;
-  const nextGists = cachedGists.map((cachedGist) => {
+  const gists = Array.isArray(cachedGists) ? cachedGists : [];
+  const remoteFiles = gist.files && typeof gist.files === "object" ? gist.files : null;
+  let found = false;
+  const nextGists = gists.map((cachedGist) => {
     if (cachedGist?.id !== gist.id) return cachedGist;
-    const files = { ...(cachedGist.files || {}), [filename]: file };
+    found = true;
+    const files = { ...(cachedGist.files || {}), ...(remoteFiles || {}), [filename]: file };
+    const remoteFileNames = Object.keys(remoteFiles || files);
+    const existingFileNames = cachedGist.filesNames || Object.keys(cachedGist.files || {});
+    const filesNames = [...existingFileNames.filter((name) => remoteFileNames.includes(name)), ...remoteFileNames.filter((name) => !existingFileNames.includes(name))];
     return {
-      ...cachedGist,
-      files,
-      filesNames: [filename, ...(cachedGist.filesNames || Object.keys(files)).filter((name) => name !== filename)],
-      primaryFilename: cachedGist.primaryFilename || (cachedGist.filesNames || Object.keys(files))[0] || filename,
-      desc: gist.description || cachedGist.desc || "",
-      description: gist.description || cachedGist.description || "",
-      updatedAt: new Date(gist.updated_at || Date.now()).getTime(),
+      ...toCachedGist({ ...cachedGist, ...gist, files, primaryFilename: cachedGist.primaryFilename || filename }),
+      filesNames,
     };
   });
+  if (!found) {
+    const files = { ...(gist.files || {}), [filename]: file };
+    nextGists.unshift(toCachedGist({ ...gist, files, primaryFilename: filename }));
+  }
   await codehubStorage.setItem(GIST_LIST_KEY, nextGists);
 };
 
@@ -106,10 +155,15 @@ export const renameGistFileInCodeHub = async (gistId, oldName, newName) => {
     if (gist?.id !== gistId) return gist;
     const files = { ...(gist.files || {}) };
     if (files[oldName]) {
-      files[newName] = { ...files[oldName], filename: newName };
+      files[newName] ||= { ...files[oldName], filename: newName };
       delete files[oldName];
     }
-    return { ...gist, files, filesNames: (gist.filesNames || Object.keys(files)).map((name) => (name === oldName ? newName : name)) };
+    return {
+      ...gist,
+      files,
+      filesNames: (gist.filesNames || Object.keys(files)).map((name) => (name === oldName ? newName : name)),
+      primaryFilename: gist.primaryFilename === oldName ? newName : gist.primaryFilename,
+    };
   });
   await codehubStorage.setItem(GIST_LIST_KEY, nextGists);
 };
@@ -154,7 +208,9 @@ export const removeGistFilesFromCache = async (gistId, fileNames) => {
     const files = { ...(gist.files || {}) };
     for (const name of names) delete files[name];
     const filesNames = (gist.filesNames || Object.keys(files)).filter((name) => !names.has(name));
-    if (filesNames.length) nextGists.push({ ...gist, files, filesNames });
+    if (filesNames.length) {
+      nextGists.push({ ...gist, files, filesNames, primaryFilename: filesNames.includes(gist.primaryFilename) ? gist.primaryFilename : filesNames[0] });
+    }
   }
   await codehubStorage.setItem(GIST_LIST_KEY, nextGists);
 };
@@ -165,19 +221,31 @@ export const getGistUpdatedAt = (gist) => {
   return Number.isFinite(timestamp) ? timestamp : Date.now();
 };
 
-export const syncGistFilesToCodeHub = async (gists) => {
-  if (!Array.isArray(gists) || gists.length === 0) return;
+export const syncGistFilesToCodeHub = async (gists, { replace = false } = {}) => {
+  if (!Array.isArray(gists)) return;
   const db = await dbPromise;
   const tx = db.transaction("store", "readwrite");
   const store = tx.objectStore("store");
   const savedIds = await store.get(SAVES_INDEX_KEY);
   const ids = new Set(Array.isArray(savedIds) ? savedIds : []);
 
+  if (replace) {
+    const remoteGistIds = new Set(gists.map((gist) => gist?.id).filter(Boolean));
+    for (const existingId of [...ids]) {
+      const existing = await store.get(metaKey(existingId));
+      if (existing?.gist?.id && !remoteGistIds.has(existing.gist.id)) {
+        await store.delete(contentKey(existingId));
+        await store.delete(metaKey(existingId));
+        ids.delete(existingId);
+      }
+    }
+  }
+
   for (const gist of gists) {
     const updatedAt = getGistUpdatedAt(gist);
     const description = gist.description || gist.desc || "";
     const files = gist.files || {};
-    const fileNames = gist.filesNames || Object.keys(files);
+    const fileNames = Object.keys(files);
 
     // Gist 接口返回完整文件清单：删除远端已改名或已移除的旧本地条目。
     const remoteFileNames = new Set(fileNames);

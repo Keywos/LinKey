@@ -138,11 +138,11 @@ const activeName = ref(0);
 const router = useRouter();
 const showCentertf = ref(false);
 const listpop = ref({ filesNames: [], files: {} });
-const displayedFilesNames = computed(() => [...(listpop.value.filesNames || [])].reverse());
+const displayedFilesNames = computed(() => listpop.value.filesNames || Object.keys(listpop.value.files || {}));
 
-const saveGistsToCodeHub = async (gists) => {
+const saveGistsToCodeHub = async (gists, replace = false) => {
   try {
-    await syncGistFilesToCodeHub(gists);
+    await syncGistFilesToCodeHub(gists, { replace });
   } catch (error) {
     console.error("写入 Code Hub Gist 索引失败", error);
   }
@@ -406,14 +406,12 @@ const rereq = async (isPullRefresh = false) => {
       if (res.data.length < 60) break;
     }
 
-    if (resdata.length > 0) {
-      useGS.setGistRes(resdata);
-      await saveGistsToCodeHub(resdata);
-      if (localStorage.getItem("LocalGistResTure") !== "0") {
-        await codehubStorage.setItem(GIST_LIST_KEY, resdata);
-      }
-      if (!isPullRefresh) showToast("刷新成功");
+    useGS.setGistRes(resdata);
+    await saveGistsToCodeHub(resdata, true);
+    if (localStorage.getItem("LocalGistResTure") !== "0") {
+      await codehubStorage.setItem(GIST_LIST_KEY, resdata);
     }
+    if (!isPullRefresh) showToast("刷新成功");
   } catch (error) {
     showToast("刷新失败 " + error.message);
   } finally {

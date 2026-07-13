@@ -25,6 +25,7 @@ export const useGistStore = defineStore("GistStore", {
             console.log("开始删除 PATCH", id, name);
             delete i.files[name];
             i.filesNames = i.filesNames.filter((i) => i != name);
+            i.primaryFilename = i.filesNames[0] || "";
           }
         }
       });
@@ -43,15 +44,19 @@ export const useGistStore = defineStore("GistStore", {
         }
       });
     },
-    renameGistFile(id, oldName, newName, newobj) {
+    renameGistFile(id, oldName, newName, newobj, { append = false } = {}) {
       this.getGistRes.forEach((i) => {
         if (i.id != id) return;
         if (oldName !== newName) {
           delete i.files[oldName];
           i.filesNames = i.filesNames.map((name) => (name === oldName ? newName : name));
+          if (i.primaryFilename === oldName) i.primaryFilename = newName;
         }
         i.files[newName] = newobj;
-        if (!i.filesNames.includes(newName)) i.filesNames.unshift(newName);
+        if (!i.filesNames.includes(newName)) {
+          if (append) i.filesNames.push(newName);
+          else i.filesNames.unshift(newName);
+        }
       });
       if (this.geid == id && this.GistFN === oldName) this.GistFN = newName;
     },

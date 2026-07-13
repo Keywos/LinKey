@@ -235,7 +235,7 @@ const onSubmit = async (values) => {
         if (previousFilename !== filename.value) {
           await renameGistFileInCodeHub(edid.value, previousFilename, filename.value);
         }
-        useGStore.renameGistFile(edid.value, previousFilename, filename.value, file);
+        useGStore.renameGistFile(edid.value, previousFilename, filename.value, file, { append: isnew.value });
         useGStore.updateGistDescription(edid.value, res.data.description || "");
         originalFilename.value = filename.value;
       } else {
