@@ -55,6 +55,15 @@ export const useGistStore = defineStore("GistStore", {
       });
       if (this.geid == id && this.GistFN === oldName) this.GistFN = newName;
     },
+    updateGistDescription(id, description) {
+      this.getGistRes.forEach((gist) => {
+        if (gist.id === id) {
+          gist.desc = description;
+          gist.description = description;
+        }
+      });
+      if (this.geid === id) this.gidesc = description;
+    },
     addGistResposh(newRes) {
       console.log("添加资源 POSH");
       this.getGistRes.unshift(newRes);

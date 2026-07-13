@@ -96,7 +96,7 @@ import { defineAsyncComponent, onBeforeUnmount, ref } from "vue";
 import { showToast } from "vant";
 import { sendReq } from "@/http/http.js";
 import { useCmStore } from "@/store/cmCodeStore.js";
-import { codehubStorage, contentKey, getGistItemId, metaKey, SAVES_INDEX_KEY } from "@/storage/codehubStorage.js";
+import { codehubStorage, contentKey, getGistItemId, metaKey, prependGistFileToCache, renameGistFileInCodeHub, SAVES_INDEX_KEY, updateGistDescriptionInCodeHub } from "@/storage/codehubStorage.js";
 const cmStore = useCmStore();
 
 const EditCode = defineAsyncComponent(() => import("@/EditCode/cmView.vue"));
@@ -226,10 +226,17 @@ const onSubmit = async (values) => {
     const file = res.data?.files?.[filename.value];
     if (file?.raw_url) {
       await saveGistFileLocally(res.data, file, filename.value, cmStore.CmCode);
+      await updateGistDescriptionInCodeHub(res.data.id, res.data.description || "");
+      await prependGistFileToCache(res.data, filename.value, file);
       rawURL.value = file.raw_url;
       rawurlForever.value = file.raw_url.replace(/\/raw\/\w+?\//, "/raw/");
       if (isEditPatchNew) {
-        useGStore.renameGistFile(edid.value, originalFilename.value || filename.value, filename.value, file);
+        const previousFilename = originalFilename.value || filename.value;
+        if (previousFilename !== filename.value) {
+          await renameGistFileInCodeHub(edid.value, previousFilename, filename.value);
+        }
+        useGStore.renameGistFile(edid.value, previousFilename, filename.value, file);
+        useGStore.updateGistDescription(edid.value, res.data.description || "");
         originalFilename.value = filename.value;
       } else {
         const { id, html_url, files, public: publicProp, created_at, updated_at, description, owner } = res.data;
@@ -237,6 +244,7 @@ const onSubmit = async (values) => {
           id,
           html_url,
           filesNames: Object.keys(files),
+          primaryFilename: Object.keys(files)[0] || "",
           files,
           public: publicProp,
           created: forTS(new Date(created_at).getTime()),

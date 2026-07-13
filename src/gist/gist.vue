@@ -3,7 +3,7 @@
     <van-popup v-model:show="showCentertf" round :style="{ padding: '20px 20px 40px 20px' }">
       <div class="gtittle">
         <div class="gtname">
-          {{ listpop.filesNames[0] || "无数据 / 但未删除此路径" }}
+          {{ primaryGistFilename(listpop) || "无数据 / 但未删除此路径" }}
         </div>
         <div class="gtwopop">
           <div>
@@ -30,7 +30,7 @@
       </div>
 
       <van-collapse v-model="activeName" accordion class="gist-file-list">
-        <van-collapse-item v-for="(i, index) in listpop.filesNames" :name="index" :label="`Size: ${listpop.files[i]?.size} ${listpop.files[i]?.type}`">
+        <van-collapse-item v-for="(i, index) in displayedFilesNames" :name="index" :label="`Size: ${listpop.files[i]?.size} ${listpop.files[i]?.type}`">
           <template #title>
             <div class="gist-file-title">
               <span>{{ i }}</span>
@@ -54,7 +54,7 @@
         </van-collapse-item>
       </van-collapse>
       <div style="padding: 6px" />
-      <van-cell title="在当前路径新建" label="新建后 卡片显示的文件名将更改" style="opacity: 0.9" @click="patchnew(listpop.id)">
+      <van-cell title="在当前路径新建" label="新建文件会显示在列表底部" style="opacity: 0.9" @click="patchnew(listpop.id)">
         <template #right-icon>
           <van-icon name="plus" style="opacity: 0.6" />
         </template>
@@ -91,7 +91,7 @@
             <img class="kcard-imggit" :src="github" />
             <div class="kcardGN">
               <div class="kcardGNt">
-                {{ element.filesNames[0] || "无数据" }}
+                {{ primaryGistFilename(element) || "无数据" }}
               </div>
               <div class="kcard-t">
                 <div class="gdate">
@@ -128,7 +128,7 @@ import { sendReq } from "@/http/http.js";
 import github from "@/img/svg/github.svg";
 import { useRouter } from "vue-router";
 import { useGistStore } from "@/store/gistStore";
-import { codehubStorage, GIST_LIST_KEY, syncGistFilesToCodeHub } from "@/storage/codehubStorage.js";
+import { codehubStorage, GIST_LIST_KEY, syncGistFilesToCodeHub, removeGistFilesFromCache, removeGistFilesFromCodeHub } from "@/storage/codehubStorage.js";
 
 import useV3Clipboard from "vue-clipboard3";
 const { toClipboard } = useV3Clipboard();
@@ -138,6 +138,7 @@ const activeName = ref(0);
 const router = useRouter();
 const showCentertf = ref(false);
 const listpop = ref({ filesNames: [], files: {} });
+const displayedFilesNames = computed(() => [...(listpop.value.filesNames || [])].reverse());
 
 const saveGistsToCodeHub = async (gists) => {
   try {
@@ -228,7 +229,7 @@ const beforeClose = async (action) => {
         const content = {
           description: listpop.value.desc,
           public: listpop.value.public,
-          files: { [delnamei]: { content: "" } },
+          files: { [delnamei]: null },
         };
         const res = await sendReq(
           "PATCH",
@@ -240,8 +241,16 @@ const beforeClose = async (action) => {
           JSON.stringify(content)
         );
         console.log("删除 - PATCH", id, " - ", res.status);
-        if (res.status) {
-          useGS.delGistResptch(id, delnamei);
+        const remoteMissing = res.status === 404;
+        if (res.status !== 200 && !remoteMissing) throw new Error(res.status || "远程删除未确认");
+        useGS.delGistResptch(id, delnamei);
+        const deletedFiles = remoteMissing ? undefined : [delnamei];
+        await Promise.all([removeGistFilesFromCodeHub(id, deletedFiles), removeGistFilesFromCache(id, deletedFiles)]);
+        if (remoteMissing) {
+          useGS.delGistResPost(id);
+          showCentertf.value = false;
+          showToast("远程 Gist 不存在，已清理本地数据");
+        } else {
           showToast("请求删除成功 PATCH " + res.status + " " + delnamei);
         }
       } else {
@@ -250,11 +259,12 @@ const beforeClose = async (action) => {
           Accept: "application/vnd.github.v3+json",
         });
         console.log("删除 - DELETE", id, " - ", res.status);
-        if (res.status) {
-          useGS.delGistResPost(id);
-          showToast("请求删除成功 DELETE " + res.status + " " + delnamei);
-          showCentertf.value = false;
-        }
+        const remoteMissing = res.status === 404;
+        if (res.status !== 204 && !remoteMissing) throw new Error(res.status || "远程删除未确认");
+        useGS.delGistResPost(id);
+        await Promise.all([removeGistFilesFromCodeHub(id), removeGistFilesFromCache(id)]);
+        showToast(remoteMissing ? "远程 Gist 不存在，已清理本地数据" : "请求删除成功 DELETE " + res.status + " " + delnamei);
+        showCentertf.value = false;
       }
     return true;
   } catch (error) {
@@ -317,6 +327,7 @@ const gistklist = [
   },
 ];
 const gistCard = computed(() => gistklist.concat(useGS.getGistRes));
+const primaryGistFilename = (gist) => gist.primaryFilename || gist.filesNames?.[0] || "";
 const missingSettings = [];
 const username = ref("");
 const storedUsername = localStorage.getItem("GistUserN") || "";
@@ -382,6 +393,7 @@ const rereq = async (isPullRefresh = false) => {
         id,
         html_url,
         filesNames: Object.keys(files),
+        primaryFilename: Object.keys(files)[0] || "",
         files,
         public: publicProp,
         created: forTS(new Date(created_at).getTime()),
@@ -437,6 +449,7 @@ const loadLocalGistCache = async (showResult = true) => {
       return {
         ...item,
         filesNames: Array.isArray(item.filesNames) ? item.filesNames : Object.keys(item.files),
+        primaryFilename: item.primaryFilename || item.filesNames?.[0] || Object.keys(item.files)[0] || "",
       };
     });
     useGS.setGistRes(cachedGists);

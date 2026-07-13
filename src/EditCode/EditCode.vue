@@ -247,8 +247,10 @@
   <div v-if="confirmState.visible" class="modal-mask" @click.self="confirmNo">
     <div ref="confirmDialogRef" class="modal-box" tabindex="-1" @keydown.enter.prevent="confirmYes" @keydown.esc.prevent="confirmNo">
       <div class="modal-title">{{ confirmState.title }}</div>
+      <label v-if="confirmState.hasInput" class="modal-input-label" for="gist-description-input">Desc</label>
       <input
         v-if="confirmState.hasInput"
+        id="gist-description-input"
         ref="confirmInputRef"
         v-model="confirmState.value"
         class="modal-input"
@@ -274,7 +276,7 @@ import { useCmStore } from "@/store/cmCodeStore.js";
 import useV3Clipboard from "vue-clipboard3";
 import { useRoute } from "vue-router";
 import { sendReq } from "@/http/http.js";
-import { codehubStorage as idbStorage, contentKey, metaKey, SAVES_INDEX_KEY } from "@/storage/codehubStorage.js";
+import { codehubStorage as idbStorage, contentKey, getGistItemId, metaKey, prependGistFileToCache, removeGistFilesFromCache, removeGistFilesFromCodeHub, renameGistFileInCodeHub, SAVES_INDEX_KEY } from "@/storage/codehubStorage.js";
 
 import JSZip from "jszip";
 import "./env.js";
@@ -510,6 +512,7 @@ function endSavesResizePointer(e) {
 const toggleSaves = async () => {
   showSaves.value = !showSaves.value;
   await idbStorage.setItem("SHOW_SAVES_KEY", showSaves.value);
+  if (showSaves.value) await loadSaves();
 };
 
 const toggleSelectMode = () => {
@@ -634,7 +637,18 @@ const hasUrlAndGist = (item) => Boolean(item.url && item.gist?.rawUrl);
 const gistItems = (gistId) => savedItems.value.filter((item) => item.gist?.id === gistId);
 const groupItems = (item) => (item.gist?.id ? gistItems(item.gist.id) : item.localGroupId ? savedItems.value.filter((child) => child.localGroupId === item.localGroupId) : [item]);
 const isGistPrimary = (item) => groupItems(item)[0]?.id === item.id;
-const gistChildItems = (item) => groupItems(item).filter((child) => child.id !== item.id);
+const groupFileName = (item) => item.gist?.filename || item.name;
+const gistChildItems = (item) => {
+  const parentFileName = groupFileName(item);
+  const seenFileNames = new Set([parentFileName]);
+
+  return groupItems(item).filter((child) => {
+    const fileName = groupFileName(child);
+    if (child.id === item.id || seenFileNames.has(fileName)) return false;
+    seenFileNames.add(fileName);
+    return true;
+  });
+};
 const shouldShowSavedItem = (item) => isGistPrimary(item);
 const localExpansionId = (item) => item.localGroupId || item.id;
 const isItemExpanded = (item) => (item.gist?.id ? expandedGistIds.value.includes(item.gist.id) : expandedItemIds.value.includes(localExpansionId(item)));
@@ -819,6 +833,7 @@ const uploadItemToGist = async (item, description) => {
     };
     item.name = filename;
     await updateGistDescriptionLocally(item.gist.id, item.gist.description);
+    await prependGistFileToCache(response.data, filename, remoteFile);
     await saveMeta(item);
     await persistIndex();
     showToast(gistId ? (previousFilename && previousFilename !== filename ? "已重命名并更新 Gist" : "已更新到 Gist") : "已上传到 Gist");
@@ -948,6 +963,37 @@ const createNewBlank = async () => {
 const deleteSingleItem = async (item) => {
   const ok = await askConfirm(`确定删除 "${item.name}" 吗？`);
   if (!ok) return;
+  if (item.gist?.id) {
+    const { token } = getGistCredentials();
+    if (!token) {
+      showToast("请先在设置中配置 Gist Token");
+      return;
+    }
+    const gistItemsToDelete = gistItems(item.gist.id);
+    const isLastGistFile = gistItemsToDelete.length <= 1;
+    try {
+      const response = await sendReq(
+        isLastGistFile ? "DELETE" : "PATCH",
+        `https://api.github.com/gists/${item.gist.id}`,
+        { Authorization: `token ${token}`, Accept: "application/vnd.github.v3+json" },
+        isLastGistFile ? undefined : JSON.stringify({ files: { [item.gist.filename]: null } }),
+      );
+      const remoteMissing = response.status === 404;
+      if (response.status !== 204 && response.status !== 200 && !remoteMissing) throw new Error(response.status || "请求失败");
+      const deletedFiles = remoteMissing || isLastGistFile ? undefined : [item.gist.filename];
+      const removedIds = await removeGistFilesFromCodeHub(item.gist.id, deletedFiles);
+      await removeGistFilesFromCache(item.gist.id, deletedFiles);
+      const removed = new Set(removedIds);
+      savedItems.value = savedItems.value.filter((savedItem) => !removed.has(savedItem.id));
+      if (currentItemId.value && removed.has(currentItemId.value)) await setCurrentItem(null, "");
+      showToast(remoteMissing ? "远程 Gist 不存在，已清理本地数据" : isLastGistFile ? "已删除远程 Gist" : "已删除远程 Gist 文件");
+      return;
+    } catch (error) {
+      console.error("删除远程 Gist 失败", error);
+      showToast("删除远程 Gist 失败");
+      return;
+    }
+  }
   try {
     await idbStorage.removeItem(contentKey(item.id));
     await idbStorage.removeItem(metaKey(item.id));
@@ -972,6 +1018,11 @@ const deleteSelected = async () => {
   const ok = await askConfirm(`确定要删除选中的 ${ids.length} 项吗？此操作不可恢复。`);
   if (!ok) return;
 
+  const items = savedItems.value.filter((item) => ids.includes(item.id));
+  if (items.some((item) => item.gist?.id)) {
+    showToast("远程 Gist 文件请使用单条删除");
+    return;
+  }
   try {
     await Promise.all(ids.map((id) => Promise.all([idbStorage.removeItem(contentKey(id)), idbStorage.removeItem(metaKey(id))])));
   } catch (error) {
@@ -1118,7 +1169,9 @@ const renameItem = async (item) => {
   const newName = await askPrompt("重命名", item.name);
   if (!newName || newName === item.name) return;
   const name = item.gist?.id ? toGistFileName(newName) : newName;
+  const previousId = item.id;
   if (item.gist?.id && item.gist.filename !== name) {
+    const previousFilename = item.gist.filename;
     const { token } = getGistCredentials();
     if (!token) {
       showToast("请先在设置中配置 Gist Token");
@@ -1127,21 +1180,21 @@ const renameItem = async (item) => {
     syncingItemId.value = item.id;
     syncingAction.value = "rename";
     try {
-      const content = (await idbStorage.getItem(contentKey(item.id))) || "";
       const response = await sendReq(
         "PATCH",
         `https://api.github.com/gists/${item.gist.id}`,
         { Authorization: `token ${token}`, Accept: "application/vnd.github.v3+json" },
         JSON.stringify({
           files: {
-            [name]: { content },
-            [item.gist.filename]: null,
+            [previousFilename]: { filename: name },
           },
         }),
       );
       if (response.status !== 200) throw new Error(response.status || "请求失败");
       const remoteFile = response.data?.files?.[name];
       if (!remoteFile?.raw_url) throw new Error("未获取到文件地址");
+      await renameGistFileInCodeHub(item.gist.id, previousFilename, name);
+      item.id = getGistItemId(item.gist.id, name);
       item.gist = {
         ...item.gist,
         filename: name,
@@ -1158,7 +1211,10 @@ const renameItem = async (item) => {
     }
   }
   item.name = name;
-  if (currentItemId.value === item.id) cmStore.setCurrentFileName(name);
+  if (currentItemId.value === previousId) {
+    currentItemId.value = item.id;
+    cmStore.setCurrentFileName(name);
+  }
   await saveMeta(item);
   await persistIndex();
   showToast("已重命名为 " + newName);
@@ -1774,8 +1830,9 @@ onMounted(async () => {
       console.error("读取最后打开项失败", error);
     }
 
+    let lastItem = lastId ? savedItems.value.find((item) => item.id === lastId) : null;
     let lastContent = null;
-    if (lastId) {
+    if (lastItem) {
       try {
         lastContent = await idbStorage.getItem(contentKey(lastId));
       } catch (error) {
@@ -1783,18 +1840,24 @@ onMounted(async () => {
       }
     }
 
-    if (lastId && lastContent !== null && lastContent !== undefined) {
-      initialCode = lastContent;
+    if (lastItem) {
+      initialCode = typeof lastContent === "string" ? lastContent : EMPTY_CONTENT;
       currentItemId.value = lastId;
-      if (lastContent.length > LARGE_FILE_THRESHOLD) {
+      if (initialCode.length > LARGE_FILE_THRESHOLD) {
         nextTick(() => {
           cmViewRef.value?.skipNextLanguageSync();
         });
       }
-      const lastItem = savedItems.value.find((i) => i.id === lastId);
-      cmStore.setCurrentFileName(lastItem?.name || "");
-      cmStore.setManualLanguage(lastItem?.manualLanguage || "");
+      cmStore.setCurrentFileName(lastItem.name);
+      cmStore.setManualLanguage(lastItem.manualLanguage || "");
       console.log("0 已默认载入最后打开的内容");
+    } else if (savedItems.value.length > 0) {
+      const fallbackItem = [...savedItems.value].sort((a, b) => itemUpdatedAt(b) - itemUpdatedAt(a))[0];
+      const fallbackContent = await idbStorage.getItem(contentKey(fallbackItem.id));
+      initialCode = typeof fallbackContent === "string" ? fallbackContent : EMPTY_CONTENT;
+      await setCurrentItem(fallbackItem.id, fallbackItem.name);
+      cmStore.setManualLanguage(fallbackItem.manualLanguage || "");
+      console.log("0 最后打开项不存在，已载入列表中的最近文件");
     } else if (cc != "") {
       // ★ 没有 LAST_OPENED_KEY 但 Pinia 有缓存时，用它兜底
       initialCode = cc;
@@ -2454,6 +2517,14 @@ onBeforeUnmount(() => {
   line-height: 1.4;
   text-align: center;
   margin: 34px 10px 18px 11px;
+}
+
+.modal-input-label {
+  display: block;
+  margin: 0 0 5px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.65;
 }
 
 .modal-input {
