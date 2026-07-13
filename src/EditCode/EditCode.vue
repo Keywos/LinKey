@@ -33,16 +33,16 @@
       <div ref="savesListRef" class="saves-list">
         <div v-if="savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
         <template v-for="item in sortedSavedItems" :key="item.id">
-          <div v-if="shouldShowSavedItem(item)" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
+          <div  @click.stop="loadItemForList(item)" v-if="shouldShowSavedItem(item)" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
             <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" />
 
-            <div class="saves-item-info">
+            <div class="saves-item-info" >
               <span class="saves-item-name">
                 {{ item.name }}
                 <span v-if="item.gist" class="saves-item-source" :title="gistPath(item)">{{ gistPath(item) }}</span>
               </span>
 
-              <div class="saves-item-preview">
+              <div class="saves-item-preview" >
                 <span class="saves-item-content-preview">{{ item.preview || "" }}</span>
               </div>
 
@@ -97,7 +97,10 @@
                   拉取 Gist
                 </button>
                 <button class="saves-sync-btn" @click.stop="renameItem(item)">重命名</button>
-                <button class="saves-sync-btn" :class="{ 'is-current': item.id === currentItemId }" :disabled="loadingItemId === item.id" @click.stop="loadItemForList(item)">加载</button>
+                <button class="saves-sync-btn" :class="{ 'is-current': item.id === currentItemId }" :disabled="loadingItemId === item.id" @click.stop="loadItemForList(item)">
+                  
+                {{ item.id === currentItemId? "当前" : "加载" }}
+                </button>
               </div>
             </div>
           </div>
@@ -1133,7 +1136,7 @@ async function copyUrl(item, type) {
   if (!text) return;
   try {
     await toClipboard(text);
-    const label = type === "html" ? "HtmlUrl" : type === "blob" ? "blob url" : type === "gist" ? "gist url" : item.blobUrl ? "raw url" : "url";
+    const label = type === "html" ? "Html URL" : type === "blob" ? "Blob URL" : type === "gist" ? "Gist URL" : item.blobUrl ? "Raw URL" : "URL";
     showToast(`已复制 ${label}`);
   } catch {
     showToast("复制失败");
@@ -2405,7 +2408,8 @@ onBeforeUnmount(() => {
   color: #5276b5;
   font-size: 9px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.1;
+  margin-top: 2px;
   white-space: normal;
   overflow: hidden;
   overflow-wrap: anywhere;
@@ -2543,7 +2547,7 @@ onBeforeUnmount(() => {
 
 .modal-box {
   width: 100%;
-  max-width: 300px;
+  max-width: 400px;
   min-height: 120px;
   background: #ffffffd2;
   /* color-mix(in srgb, var(--van-background-2, #d7d7d712) 78%, transparent); */
