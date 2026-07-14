@@ -145,6 +145,10 @@
       </section>
     </Teleport>
     <div ref="viewRef" style="width: 100%; font-size: 11px" />
+    <div v-if="editorLoading" class="cm-content-loading" role="status" aria-live="polite">
+      <span class="cm-content-loading-spinner"></span>
+      <span>正在载入编辑器…</span>
+    </div>
     <div style="height: 10px" />
 
     <Teleport to="body">
@@ -340,6 +344,7 @@ const activeLanguage = ref("plaintext");
 const autoDetectedLanguage = ref(null);
 const isFormatting = ref(false);
 const isCopying = ref(false);
+const editorLoading = ref(false);
 
 let languageRequestId = 0;
 const editorLanguage_json = {
@@ -691,16 +696,18 @@ const CreateView = () => {
 
   const applyContentToEditor = async (nextValue) => {
     console.log("Code更新到文档");
-    const isLargeFile = nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
-    const needChunked = nextValue.length > CHUNKED_LOAD_THRESHOLD;
+    editorLoading.value = true;
+    try {
+      const isLargeFile = nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
+      const needChunked = nextValue.length > CHUNKED_LOAD_THRESHOLD;
 
-    // ★ 用户手动选过语言 → 始终用它覆盖
-    const manualLang = cmStore.manualLanguage;
-    if (manualLang) {
+      // ★ 用户手动选过语言 → 始终用它覆盖
+      const manualLang = cmStore.manualLanguage;
+      if (manualLang) {
       selectedLanguage.value = manualLang;
       autoDetectedLanguage.value = manualLang;
       await applyLanguage(manualLang);
-    } else {
+      } else {
       // ★ 没有手动语言 → 重置 selectedLanguage 为 auto，
       //    避免上一个文件的语言残留导致扩展名检测/自动检测被跳过
       selectedLanguage.value = "auto";
@@ -715,14 +722,14 @@ const CreateView = () => {
       }
     }
 
-    const skipHist = _skipNextHistory;
-    _skipNextHistory = false; // 用完即重置
+      const skipHist = _skipNextHistory;
+      _skipNextHistory = false; // 用完即重置
 
     // ★ 根据文件大小动态调整编辑辅助和历史深度
-    const editAssistEnabled = !isLargeFile;
-    const historyLimited = isLargeFile;
+      const editAssistEnabled = !isLargeFile;
+      const historyLimited = isLargeFile;
 
-    if (!needChunked) {
+      if (!needChunked) {
       // ★ 小文件：单次 dispatch 直接替换
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: nextValue },
@@ -734,7 +741,7 @@ const CreateView = () => {
         ],
         annotations: Transaction.addToHistory.of(!skipHist),
       });
-    } else {
+      } else {
       // ★ 大文件分块加载 — 防止 iOS 闪退
       _chunkedLoading = true; // 暂停 updateListener 的 store 同步
       try {
@@ -774,24 +781,26 @@ const CreateView = () => {
       console.log(`分块加载完成: ${(nextValue.length / 1024).toFixed(0)}KB, ${Math.ceil(nextValue.length / CHUNK_SIZE)} 块`);
     }
 
-    await nextTick();
+      await nextTick();
 
     // 外部加载新文件时重置格式化状态
-    isFormatted.value = false;
+      isFormatted.value = false;
 
     // ★ 如果语言已由 manualLang / extLang 锁定，无需再走 syncLanguageForDocument
-    if (normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto") {
+      if (normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto") {
       // 语言已在上方 applyLanguage，跳过后续同步
-    } else if (nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
-      syncLanguageForDocument(nextValue);
-      return;
-    } else if (_skipNextLangSync) {
-      _skipNextLangSync = false;
-      nextTick(() => {
-        debouncedSyncLanguage(nextValue);
-      });
-    } else {
-      syncLanguageForDocument(nextValue);
+      } else if (nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
+        syncLanguageForDocument(nextValue);
+      } else if (_skipNextLangSync) {
+        _skipNextLangSync = false;
+        nextTick(() => {
+          debouncedSyncLanguage(nextValue);
+        });
+      } else {
+        syncLanguageForDocument(nextValue);
+      }
+    } finally {
+      editorLoading.value = false;
     }
   };
 
@@ -1453,6 +1462,32 @@ const toggleCollapsed = () => {
   margin: 0 0 8px;
 }
 
+.cm-content-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 120px;
+  color: var(--text);
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.cm-content-loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: cm-content-loading-spin 0.8s linear infinite;
+}
+
+@keyframes cm-content-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .cm-toolbar-wrapper {
   display: flex;
   flex: 1;
@@ -1880,11 +1915,6 @@ const toggleCollapsed = () => {
       min-width: 26px;
       padding: 0 3px;
       font-size: 12px;
-    }
-
-    .cm-search-input {
- 
-      // padding-right: calc(var(--cm-search-options-width) + 13px);
     }
 
     .cm-search-nav,

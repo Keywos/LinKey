@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useStore } from "@/store/store";
-import { nextTick } from "vue";
+import { defineAsyncComponent, nextTick } from "vue";
 import Home from "./home.vue";
 import setting from "./setting/setting.vue";
 import settingping from "./setting/setping.vue";
@@ -17,6 +17,13 @@ import count from "./count/count.vue";
 import ping from "./ping/ping.vue";
 import stms from "./st/stms.vue";
 import ec from "./st/ec.vue";
+import EditCodeLoading from "./EditCode/EditCodeLoading.vue";
+
+const EditCode = defineAsyncComponent({
+  loader: () => import("./EditCode/EditCode.vue"),
+  loadingComponent: EditCodeLoading,
+  delay: 120,
+});
 
 const routes = [
   {
@@ -55,7 +62,7 @@ const routes = [
 
   {
     path: "/EditCode",
-    component: () => import("./EditCode/EditCode.vue"),
+    component: EditCode,
     name: "EditCode",
     meta: {
       title: "Edit Code",
@@ -67,7 +74,7 @@ const routes = [
 
   {
     path: "/EditCode_noNav",
-    component: () => import("./EditCode/EditCode.vue"),
+    component: EditCode,
     name: "EditCode_noNav",
     meta: {
       title: "Edit Code",
@@ -78,7 +85,7 @@ const routes = [
   },
     {
     path: "/j",
-    component: () => import("./EditCode/EditCode.vue"),
+    component: EditCode,
     name: "j",
     meta: {
       title: "Edit Code",

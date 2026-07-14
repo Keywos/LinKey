@@ -22,6 +22,24 @@ export const codehubStorage = {
   async getAllKeys() {
     return (await dbPromise).getAllKeys("store");
   },
+  async getAllEntries() {
+    const db = await dbPromise;
+    const tx = db.transaction("store", "readonly");
+    const store = tx.objectStore("store");
+    const [keys, values] = await Promise.all([store.getAllKeys(), store.getAll()]);
+    await tx.done;
+    return keys.map((key, index) => ({ key, value: values[index] }));
+  },
+  async replaceAllEntries(entries) {
+    const db = await dbPromise;
+    const tx = db.transaction("store", "readwrite");
+    const store = tx.objectStore("store");
+    await store.clear();
+    for (const { key, value } of entries) {
+      await store.put(value, key);
+    }
+    await tx.done;
+  },
 };
 
 export const contentKey = (id) => `codehub_save_content:${id}`;
@@ -274,6 +292,7 @@ export const syncGistFilesToCodeHub = async (gists, { replace = false } = {}) =>
           manualLanguage: existing?.manualLanguage || "",
           url: "",
           blobUrl: "",
+          tags: [...new Set([...(Array.isArray(existing?.tags) ? existing.tags : []).filter((tag) => tag !== "CH" && tag !== "Url"), "Gist"])],
           gist: {
             id: gist.id,
             folderName: description || fileNames[0] || filename,
