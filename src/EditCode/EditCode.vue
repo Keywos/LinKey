@@ -2116,7 +2116,6 @@ async function loadUrlContent(inputUrl, inputUserAgent = "") {
     }
   }
 }
-// http://192.168.1.10:5173/j?https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/dist/wloc.js
 onMounted(async () => {
   window.addEventListener("editor-theme-change", updateEditorPageBackground);
   const blurNavdiv = document.querySelector(".blurNavdiv");
@@ -2126,8 +2125,10 @@ onMounted(async () => {
   try {
     if (route.query?.url) {
       currentURL = route.query?.url;
+      currentURL = currentURL.replace(/^.*?(?=https?)/, ""); // q ng
     } else if (Object.keys(route.query).length > 0) {
       currentURL = Object.keys(route.query)[0];
+      currentURL = currentURL.replace(/^.*?(?=https?)/, "");
       if (currentURL.startsWith("http")) {
         currentURL = decodeURIComponent(currentURL);
       } else {
