@@ -61,6 +61,7 @@
             <div class="saves-item-info">
               <span class="saves-item-name">
                 {{ item.name }}
+                <span v-if="getItemChildrenCount(item) > 0" class="saves-item-child-count">{{ getItemChildrenCount(item)+1+" 项" }}</span>
                 <span v-if="item.gist" class="saves-item-source" :title="gistPath(item)">{{ gistPath(item) }}</span>
                 <span v-if="item.tags?.length" class="saves-item-tags">{{ item.tags.join(" · ") }}</span>
               </span>
@@ -79,7 +80,7 @@
             <div v-if="isItemActionsExpanded(item)" class="saves-item-sync-actions">
               <div class="saves-item-action-group">
                 <button class="saves-sync-btn" @click.stop="toggleItemExpansion(item)">
-                  {{ isItemExpanded(item) ? "收起" : "展开" }}
+                  {{ isItemExpanded(item) ? "收起" : getItemChildrenCount(item) > 0 ? `展开 (${getItemChildrenCount(item)})` : "展开" }}
                 </button>
                 <button
                   class="saves-sync-btn"
@@ -156,7 +157,7 @@
               <div v-if="isItemActionsExpanded(child)" class="saves-item-sync-actions">
                 <div class="saves-item-action-group">
                   <button class="saves-sync-btn" @click.stop="toggleItemExpansion(child)">
-                    {{ isItemExpanded(child) ? "收起" : "展开" }}
+                    {{ isItemExpanded(child) ? "收起" : getItemChildrenCount(child) > 0 ? `展开 (${getItemChildrenCount(child)})` : "展开" }}
                   </button>
                   <button
                     class="saves-sync-btn"
@@ -843,6 +844,7 @@ const gistChildItems = (item) => {
     return true;
   });
 };
+const getItemChildrenCount = (item) => gistChildItems(item).length;
 const shouldShowSavedItem = (item) => isGistPrimary(item);
 const localExpansionId = (item) => item.localGroupId || item.id;
 const isItemExpanded = (item) => (item.gist?.id ? expandedGistIds.value.includes(item.gist.id) : expandedItemIds.value.includes(localExpansionId(item)));
@@ -2654,6 +2656,20 @@ onBeforeUnmount(() => {
   margin-top: 2px;
   vertical-align: middle;
   opacity: 0.72;
+}
+
+.saves-item-child-count {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 2px 5px;
+  border-radius: 8px;
+  background: rgba(92, 125, 190, 0.2);
+  color: var(--text);
+  font-size: 9px;
+  line-height: 1;
+  margin-top: 2px;
+  vertical-align: middle;
+  opacity: 0.75;
 }
 
 .saves-btn:disabled {
