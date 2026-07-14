@@ -61,7 +61,7 @@
             <div class="saves-item-info">
               <span class="saves-item-name">
                 {{ item.name }}
-                <span v-if="getItemChildrenCount(item) > 0" class="saves-item-child-count">{{ getItemChildrenCount(item)+1+" 项" }}</span>
+                <span v-if="getItemChildrenCount(item) > 0" class="saves-item-child-count">{{ getItemChildrenCount(item) + 1 + " 项" }}</span>
                 <span v-if="item.gist" class="saves-item-source" :title="gistPath(item)">{{ gistPath(item) }}</span>
                 <span v-if="item.tags?.length" class="saves-item-tags">{{ item.tags.join(" · ") }}</span>
               </span>
@@ -2116,26 +2116,44 @@ async function loadUrlContent(inputUrl, inputUserAgent = "") {
     }
   }
 }
-
+// http://192.168.1.10:5173/j?https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/dist/wloc.js
 onMounted(async () => {
   window.addEventListener("editor-theme-change", updateEditorPageBackground);
   const blurNavdiv = document.querySelector(".blurNavdiv");
   blurNavdiv?.classList.add("blurNavdiv_code");
-  let currentURL = Object.keys(route.query)[0] || "";
+  let currentURL = "",
+    ua = "";
+  try {
+    if (route.query?.url) {
+      currentURL = route.query?.url;
+    } else if (Object.keys(route.query).length > 0) {
+      currentURL = Object.keys(route.query)[0];
+      if (currentURL.startsWith("http")) {
+        currentURL = decodeURIComponent(currentURL);
+      } else {
+        currentURL = "";
+      }
+    } else {
+      currentURL = "";
+    }
+  } catch (error) {}
+  try {
+    ua = decodeURIComponent(route.query?.ua) || "";
+  } catch (error) {}
+
+  console.log("检测到 URL 参数，尝试加载：" + currentURL + " " + ua);
+
   let bloburl = "";
   const state = await idbStorage.getItem("SHOW_SAVES_KEY");
-
   if (typeof state === "boolean") {
     showSaves.value = state;
   }
-
   // ★ 先加载已有列表，再处理 URL 请求，避免 loadUrlContent 的 persistIndex 覆盖已有索引
   await loadSaves();
-
   let urlLoaded = false;
   try {
     if (currentURL) {
-      await loadUrlContent(currentURL);
+      await loadUrlContent(currentURL, ua);
       urlLoaded = true;
     }
   } catch {}
