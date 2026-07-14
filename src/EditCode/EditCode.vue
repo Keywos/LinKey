@@ -2634,7 +2634,7 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   background: #8f98c61a;
   color: var(--text);
-  font-size: 11px;
+  font-size: 9px;
   line-height: 1;
 }
 
@@ -2650,7 +2650,8 @@ onBeforeUnmount(() => {
   display: inline-block;
   width: fit-content;
   margin-left: 5px;
-  padding: 3px 6px;
+  padding: 1.5px 5px;
+  margin-top: 2px;
   vertical-align: middle;
   opacity: 0.72;
 }
