@@ -86,11 +86,17 @@
             </van-popover>
           </template>
         </van-cell>
-        <van-cell v-if="chartCount < MAX_CHARTS" clickable @touchend="addChartSlot" center>
+        <van-cell v-if="chartCount > 1 || chartCount < MAX_CHARTS" center>
           <template #title>
-            <div style="text-align: center; color: #1989fa; display: flex; align-items: center; justify-content: center; gap: 4px">
-              <van-icon name="plus" size="16" />
-              <span>添加图表</span>
+            <div style="display: flex; align-items: center; justify-content: space-around">
+              <div v-if="chartCount > 1" style="color: #ee0a24; display: flex; align-items: center; gap: 4px" @touchend="removeLastChartSlot">
+                <van-icon name="delete-o" size="16" />
+                <span>删除图表</span>
+              </div>
+              <div v-if="chartCount < MAX_CHARTS" style="color: #1989fa; display: flex; align-items: center; gap: 4px" @touchend="addChartSlot">
+                <van-icon name="plus" size="16" />
+                <span>添加图表</span>
+              </div>
             </div>
           </template>
         </van-cell>
@@ -463,6 +469,30 @@ function addChartSlot() {
   seriesRawLen.push(0);
   rebuildChartSeries();
   localStorage.setItem('chartCount', chartCount.value);
+}
+
+function removeLastChartSlot() {
+  if (chartCount.value <= 1) return;
+  const n = chartCount.value - 1;
+  isRunning = false;
+  chartCount.value--;
+  isGet.value.pop();
+  TuA.value.pop();
+  checked.value.pop();
+  dev.value.pop();
+  showPopover.value.pop();
+  intag.value.pop();
+  chartData.pop();
+  first.pop();
+  after.pop();
+  pingStats.pop();
+  seriesRawLen.pop();
+  dirtySeries.delete(n);
+  downsampleCache.delete(n);
+  localStorage.removeItem(`checkedValue${n}`);
+  localStorage.removeItem(`intag${n}`);
+  localStorage.setItem('chartCount', chartCount.value);
+  rebuildChartSeries();
 }
 
 function lttbDownsample(data, threshold) {
