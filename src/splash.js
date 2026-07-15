@@ -1,23 +1,57 @@
 const splash = document.getElementById("boot-splash");
 const isVisible = () => splash?.classList.contains("boot-splash--visible");
 
-if (isVisible()) {
-  requestAnimationFrame(() => splash.classList.add("boot-splash--loading"));
-}
+const FAST_SKIP_MS = 233;
+const HOLD_MS = 160;
+const FADE_MS = 300;
 
-import("./main").then(({ initializeApp }) => {
-  initializeApp();
-  window.clearTimeout(window.linkeyBootSplashTimer);
+let appReady = false;
+let finishing = false;
 
-  if (!isVisible()) return;
+const ensureLoading = () => {
+  if (!splash) return;
+  if (!splash.classList.contains("boot-splash--visible")) {
+    splash.classList.add("boot-splash--visible");
+  }
+  if (!splash.classList.contains("boot-splash--loading")) {
+    void splash.offsetWidth;
+    splash.classList.add("boot-splash--loading");
+    window.linkeyBootSweepAt = performance.now();
+  } else if (!window.linkeyBootSweepAt) {
+    window.linkeyBootSweepAt = performance.now();
+  }
+};
+
+const tryFinish = () => {
+  if (finishing || !appReady || !isVisible()) return;
+  finishing = true;
 
   requestAnimationFrame(() => {
     splash.classList.add("boot-splash--complete");
-    localStorage.setItem("linkey:app-ready", "1");
+    try {
+      localStorage.setItem("linkey:app-ready", "1");
+    } catch (_) {}
 
     window.setTimeout(() => {
       splash.classList.add("boot-splash--done");
-      window.setTimeout(() => splash.remove(), 233);
-    }, 20);
+      window.setTimeout(() => splash.remove(), FADE_MS);
+    }, HOLD_MS);
+  });
+};
+
+import("./main").then(({ initializeApp }) => {
+  initializeApp();
+  const elapsed = performance.now() - (window.linkeyBootStartedAt || performance.now());
+  if (elapsed <= FAST_SKIP_MS) {
+    window.clearTimeout(window.linkeyBootSplashTimer);
+    splash?.remove();
+    return;
+  }
+  ensureLoading();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      appReady = true;
+      tryFinish();
+    });
   });
 });
