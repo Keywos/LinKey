@@ -310,16 +310,16 @@ watch([inp, isbase, needre, needjson, needjsona], ([newValue, tf, nr, nj, needjs
           } catch (error) {}
           xo = JSON.stringify(xo, "", 5);
         } else {
-          xo = "";
+          const lines = [];
           params.forEach((value, key) => {
             key = key.replace(/^https?:\/\/.+?\?/, "");
             if (value.length > 40) {
-              xo += "\n";
-              xo += `[${key}]\x20:\x20\x20 ${value}\n\n`;
+              lines.push(`\n[${key}]\x20:\x20\x20 ${value}\n\n`);
             } else {
-              xo += `[${key}]\x20:\x20\x20 ${value}\n`;
+              lines.push(`[${key}]\x20:\x20\x20 ${value}\n`);
             }
           });
+          xo = lines.join("");
         }
 
         urlparams.value = xo;
@@ -366,11 +366,9 @@ watch([inp, isbase, needre, needjson, needjsona], ([newValue, tf, nr, nj, needjs
         console.log(spliturl);
         const urllist = [];
         if (spliturl.length > 0) {
-          spliturl.forEach((i) => {
-            const urlname = i.split("/").pop().replace(/\?.+/, "");
-            const name = Math.random().toString().slice(2, 5) + "-" + urlname;
-            urllist.push({ url: i });
-          });
+          for (const url of spliturl) {
+            urllist.push({ url });
+          }
         }
         if (urllist.length > 0) {
           sliceUrl.value = urllist;

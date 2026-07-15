@@ -374,6 +374,17 @@ const downsampleCache = new Map();
 const DOWNSAMPLE_THROTTLE = 3;
 let downsampleTick = 0;
 let seriesRawLen = [];
+const MAX_RAW_POINTS = 5000;
+const RAW_POINTS_TRIM_SIZE = 500;
+let seriesStartIndex = new Array(chartCount.value).fill(0);
+
+function appendChartPoint(n, value) {
+  chartData[n].push(value);
+  if (chartData[n].length > MAX_RAW_POINTS) {
+    chartData[n].splice(0, RAW_POINTS_TRIM_SIZE);
+    seriesStartIndex[n] += RAW_POINTS_TRIM_SIZE;
+  }
+}
 
 function flushChart() {
   if (!myChart || !option || dirtySeries.size === 0) return;
@@ -387,14 +398,14 @@ function flushChart() {
     const cached = downsampleCache.get(i);
     let renderData;
     if (raw.length <= RENDER_THRESHOLD) {
-      renderData = raw.map((value, index) => [index, value]);
+      renderData = raw.map((value, index) => [seriesStartIndex[i] + index, value]);
       downsampleCache.delete(i);
     } else if (cached && cached.len === raw.length) {
       renderData = cached.data;
     } else if (!shouldRecompute && cached) {
       renderData = cached.data;
     } else {
-      renderData = lttbDownsample(raw, RENDER_THRESHOLD);
+      renderData = lttbDownsample(raw, RENDER_THRESHOLD, seriesStartIndex[i]);
       downsampleCache.set(i, { len: raw.length, data: renderData });
     }
     option.series[i].data = renderData;
@@ -427,7 +438,7 @@ function rebuildChartSeries() {
     large: true,
     largeThreshold: 300,
     sampling: 'lttb',
-    data: data.map((value, index) => [index, value]),
+    data: data.map((value, index) => [seriesStartIndex[i] + index, value]),
     lineStyle: { width: 1, color: chartColors[i % chartColors.length] },
     itemStyle: { opacity: 0 },
     showSymbol: false,
@@ -452,6 +463,7 @@ function addChartSlot() {
   showPopover.value.push(false);
   intag.value.push('');
   chartData.push([]);
+  seriesStartIndex.push(0);
   first.push('');
   after.push(0);
   pingStats.push({ sum: 0, min: Infinity, max: -Infinity, count: 0 });
@@ -472,6 +484,7 @@ function removeLastChartSlot() {
   showPopover.value.pop();
   intag.value.pop();
   chartData.pop();
+  seriesStartIndex.pop();
   first.pop();
   after.pop();
   pingStats.pop();
@@ -484,9 +497,9 @@ function removeLastChartSlot() {
   rebuildChartSeries();
 }
 
-function lttbDownsample(data, threshold) {
+function lttbDownsample(data, threshold, startIndex = 0) {
   if (data.length <= threshold) return data;
-  const sampled = [[0, data[0]]];
+  const sampled = [[startIndex, data[0]]];
   const bucketSize = (data.length - 2) / (threshold - 2);
   let prevIndex = 0;
   for (let i = 1; i < threshold - 1; i++) {
@@ -503,10 +516,10 @@ function lttbDownsample(data, threshold) {
       const area = Math.abs((prevIndex - nextAvgX) * (data[j] - data[prevIndex]) - (prevIndex - j) * (nextAvgY - data[prevIndex])) * 0.5;
       if (area > maxArea) { maxArea = area; maxIdx = j; }
     }
-    sampled.push([maxIdx, data[maxIdx]]);
+    sampled.push([startIndex + maxIdx, data[maxIdx]]);
     prevIndex = maxIdx;
   }
-  sampled.push([data.length - 1, data[data.length - 1]]);
+  sampled.push([startIndex + data.length - 1, data[data.length - 1]]);
   return sampled;
 }
 
@@ -533,7 +546,7 @@ function createChartOption() {
       largeThreshold: 300,
       sampling: 'lttb',
       polyline: false,
-      data: data.map((value, index) => [index, value]),
+      data: data.map((value, index) => [seriesStartIndex[i] + index, value]),
       lineStyle: { width: 1, color: chartColors[i % chartColors.length] },
       itemStyle: { opacity: 0 },
       showSymbol: false,
@@ -623,6 +636,7 @@ async function ensureECharts() {
 const clearChart = (n) => {
   isRunning = false;
   chartData[n] = [];
+  seriesStartIndex[n] = 0;
   downsampleCache.delete(n);
   seriesRawLen[n] = 0;
   pingStats[n] = { sum: 0, min: Infinity, max: -Infinity, count: 0 };
@@ -669,6 +683,7 @@ const runChartPing = async (io, n) => {
   isGet.value[n] = true;
   pingStats[n] = { sum: 0, min: Infinity, max: -Infinity, count: 0 };
   chartData[n] = [];
+  seriesStartIndex[n] = 0;
   if (first[n] === "") { first[n] = i; }
   else { ts = Date.now() - after[n]; }
   try {
@@ -685,7 +700,7 @@ const runChartPing = async (io, n) => {
         s.sum += x; s.count++;
         if (x < s.min) s.min = x;
         if (x > s.max) s.max = x;
-        chartData[n].push(x);
+        appendChartPoint(n, x);
         scheduleChartFlush(n);
         if (s.max > globalMax) {
           globalMax = s.max;
@@ -730,6 +745,7 @@ const runCardPing = async (i, n) => {
           Namec.value = i.name;
           topStats = { sum: x, min: x, max: x, count: 1 };
           chartData[0] = [x];
+          seriesStartIndex[0] = 0;
           downsampleCache.delete(0);
           rebuildChartSeries();
           if (isNewTarget) { option.yAxis.max = 100; globalMax = -Infinity; }
@@ -738,7 +754,7 @@ const runCardPing = async (i, n) => {
           topStats.sum += x; topStats.count++;
           if (x < topStats.min) topStats.min = x;
           if (x > topStats.max) topStats.max = x;
-          chartData[0].push(x);
+          appendChartPoint(0, x);
           scheduleChartFlush(0);
           MIN.value = Math.floor(topStats.min);
           MAX.value = Math.floor(topStats.max);
@@ -763,7 +779,10 @@ const calcProgress = (x) => {
   const range = x < 200 ? 70 : 100;
   return x > 900 ? 96 : Math.floor((x / Math.ceil(x / 100)) * (range / 100));
 };
+let isRefreshingCards = false;
 async function refreshAllCards() {
+  if (isRefreshingCards) return;
+  isRefreshingCards = true;
   const promises = [];
   for (const card of PingCard.value) {
     promises.push(
@@ -772,7 +791,11 @@ async function refreshAllCards() {
       })
     );
   }
-  await Promise.all(promises);
+  try {
+    await Promise.all(promises);
+  } finally {
+    isRefreshingCards = false;
+  }
 }
 
 const toggleApiModule = async (i) => {

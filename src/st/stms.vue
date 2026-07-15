@@ -179,7 +179,8 @@ const setGistautos = (i) => {
 };
 const rems = ref(localStorage.getItem("NTC") || 1);
 const overt = ref("");
-let over = [];
+let totalDuration = 0;
+let completedRequests = 0;
 let b = "";
 
 let bmsizes = localStorage.getItem("BMSIZE") || 2;
@@ -191,6 +192,7 @@ let ios = 0;
 let isapp = false;
 const yl = ref(localStorage.getItem("NTY") || 4);
 let isCancelled = false;
+let requestSession = 0;
 const isloding = ref(false);
 const islodingA = ref(false);
 const islodingAuto = ref(false);
@@ -207,6 +209,7 @@ const GetMsPromise = async () => {
     return;
   }
   await getsjson();
+  requestSession++;
   tt1 = Date.now();
   islodingA.value = true;
   isapp = false;
@@ -217,7 +220,8 @@ const GetMsPromise = async () => {
   const arrayOfObjects = Array.from({ length: rems.value }, () => "--");
 
   sliceUrl.value = arrayOfObjects;
-  over = [];
+  totalDuration = 0;
+  completedRequests = 0;
   isCancelled = false;
   for (let i = 0; i < rems.value; i++) {
     GetMsOne();
@@ -230,6 +234,7 @@ const GetMs = async () => {
     return;
   }
   await getsjson();
+  requestSession++;
   tt1 = Date.now();
   isloding.value = true;
   isapp = false;
@@ -239,7 +244,8 @@ const GetMs = async () => {
 
   sliceUrl.value = [];
 
-  over = [];
+  totalDuration = 0;
+  completedRequests = 0;
   isCancelled = false;
   for (let i = 0; i < rems.value; i++) {
     await GetMsOne();
@@ -263,6 +269,7 @@ const GetMsAuto = async () => {
   }
 
   isstiop.value = true;
+  requestSession++;
   tt1 = Date.now();
   islodingAuto.value = true;
   isapp = false;
@@ -272,7 +279,8 @@ const GetMsAuto = async () => {
 
   sliceUrl.value = [];
 
-  over = [];
+  totalDuration = 0;
+  completedRequests = 0;
   isCancelled = false;
   let i;
 
@@ -285,6 +293,7 @@ const GetMsAuto = async () => {
   stops();
 };
 const stops = () => {
+  requestSession++;
   isloding.value = false;
   islodingA.value = false;
   isCancelled = true;
@@ -388,6 +397,7 @@ watchEffect(() => {
 
 let all = 0;
 const GetMsOne = async () => {
+  const currentSession = requestSession;
   all++;
   try {
     let t1 = Date.now();
@@ -402,17 +412,19 @@ const GetMsOne = async () => {
         body: binaryData,
       })
         .then((response) => {
+          if (currentSession !== requestSession || isCancelled) return;
           if (response.status === 200) {
             resa = JSON.parse(response.headers.get("ntconfig"));
             getdev(resa);
             const gt = Date.now() - t1;
             if (rems.value > 1 || autobm.value) {
-              over.push(gt);
+              totalDuration += gt;
+              completedRequests++;
               overt.value =
                 b +
-                `${autobm.value ? `${bmsize.value}MB` : over.length + "次"}` +
+                `${autobm.value ? `${bmsize.value}MB` : completedRequests + "次"}` +
                 " 平均: " +
-                Math.floor(over.reduce((acc, curr) => acc + curr, 0) / over.length) +
+                Math.floor(totalDuration / completedRequests) +
                 "ms 耗时: " +
                 zhTime(Date.now() - tt1);
             } else overt.value = "";
@@ -438,6 +450,8 @@ const GetMsOne = async () => {
 
       let res = await sendReq("GET", "https://surgetool.com/api/test/" + ios + "?all=" + all + "&num=" + yl.value);
 
+      if (currentSession !== requestSession || isCancelled) return;
+
       if (res?.data["耗时"]) {
         const t2 = Date.now() - res.data.TS || "--";
         const gms = res.data["耗时"];
@@ -455,8 +469,9 @@ const GetMsOne = async () => {
         }
 
         if (rems.value > 1) {
-          over.push(gt);
-          overt.value = b + over.length + "次 平均: " + Math.floor(over.reduce((acc, curr) => acc + curr, 0) / over.length) + "ms 压力: " + yl.value + " 耗时: " + zhTime(Date.now() - tt1);
+          totalDuration += gt;
+          completedRequests++;
+          overt.value = b + completedRequests + "次 平均: " + Math.floor(totalDuration / completedRequests) + "ms 压力: " + yl.value + " 耗时: " + zhTime(Date.now() - tt1);
         } else overt.value = "";
 
         if (sliceUrl.value[io]) sliceUrl.value[io] = `${zhTime(tsend)} ➟ ${zhTime(gt)} ➟ ${zhTime(t2)}`;
@@ -510,6 +525,7 @@ onBeforeUnmount(() => {
   b = "";
   isCancelled = true;
   sliceUrl.value = [];
-  over = [];
+  totalDuration = 0;
+  completedRequests = 0;
 });
 </script>

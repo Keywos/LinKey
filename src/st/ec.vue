@@ -60,7 +60,9 @@
     <br />
 
     <van-cell-group v-if="!iserr" id="netmstest" inset title="">
-      <van-cell style="opacity: 0.9" v-for="(item, index) in points" :title="item.x" :value="`${item.y}MB  ${item.d}`" />
+      <van-list v-model:loading="listLoading" :finished="listFinished" @load="loadMorePoints">
+        <van-cell style="opacity: 0.9" v-for="item in visiblePoints" :key="item.x" :title="item.x" :value="`${item.y}MB  ${item.d}`" />
+      </van-list>
     </van-cell-group>
     <br />
     <br />
@@ -70,7 +72,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from "vue";
+import { computed, ref, onMounted, watch } from "vue";
 import { showToast } from "vant";
 import { onWidth } from "@/hooks/winWidth";
 const { screenWidth } = onWidth();
@@ -98,6 +100,15 @@ const points = reactive([
     d: "qa",
   },
 ]);
+const POINTS_PER_PAGE = 100;
+const renderedPointCount = ref(POINTS_PER_PAGE);
+const listLoading = ref(false);
+const visiblePoints = computed(() => points.slice(0, renderedPointCount.value));
+const listFinished = computed(() => renderedPointCount.value >= points.length);
+const loadMorePoints = () => {
+  renderedPointCount.value += POINTS_PER_PAGE;
+  listLoading.value = false;
+};
 const checkboxRefs = ref([]);
 
 const params = new URLSearchParams(window.location.search);
@@ -185,6 +196,7 @@ const toggle = (index) => {
 
   const unique = Array.from(new Set(arr.map((item) => item.x))).map((x) => arr.find((item) => item.x === x));
   points.splice(0, points.length, ...unique);
+  renderedPointCount.value = POINTS_PER_PAGE;
 };
 
 const checkedSet = ref([newLog.value]);
@@ -284,6 +296,11 @@ let option = {
       animation: false, // 禁用过渡效果
       name: "1111",
       type: "line",
+      large: true,
+      largeThreshold: 300,
+      sampling: "lttb",
+      progressive: 400,
+      progressiveThreshold: 300,
       data: points.map((item) => item.y),
       smooth: true,
       lineStyle: {
