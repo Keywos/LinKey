@@ -387,7 +387,7 @@ function flushChart() {
     const cached = downsampleCache.get(i);
     let renderData;
     if (raw.length <= RENDER_THRESHOLD) {
-      renderData = raw;
+      renderData = raw.map((value, index) => [index, value]);
       downsampleCache.delete(i);
     } else if (cached && cached.len === raw.length) {
       renderData = cached.data;
@@ -400,17 +400,6 @@ function flushChart() {
     option.series[i].data = renderData;
     seriesRawLen[i] = raw.length;
   });
-
-  const maxLen = option.series.reduce((m, s, i) => {
-    if (i === option.series.length - 1) return m; 
-    return Math.max(m, s.data.length);
-  }, 0);
-  for (let i = 0; i < option.series.length - 1; i++) {
-    const sd = option.series[i].data;
-    if (sd.length < maxLen) {
-      option.series[i].data = sd.concat(new Array(maxLen - sd.length).fill(null));
-    }
-  }
 
   myChart.setOption(option, { replaceMerge: ['series'] });
   dirtySeries.clear();
@@ -438,7 +427,7 @@ function rebuildChartSeries() {
     large: true,
     largeThreshold: 300,
     sampling: 'lttb',
-    data,
+    data: data.map((value, index) => [index, value]),
     lineStyle: { width: 1, color: chartColors[i % chartColors.length] },
     itemStyle: { opacity: 0 },
     showSymbol: false,
@@ -497,7 +486,7 @@ function removeLastChartSlot() {
 
 function lttbDownsample(data, threshold) {
   if (data.length <= threshold) return data;
-  const sampled = [data[0]];
+  const sampled = [[0, data[0]]];
   const bucketSize = (data.length - 2) / (threshold - 2);
   let prevIndex = 0;
   for (let i = 1; i < threshold - 1; i++) {
@@ -514,10 +503,10 @@ function lttbDownsample(data, threshold) {
       const area = Math.abs((prevIndex - nextAvgX) * (data[j] - data[prevIndex]) - (prevIndex - j) * (nextAvgY - data[prevIndex])) * 0.5;
       if (area > maxArea) { maxArea = area; maxIdx = j; }
     }
-    sampled.push(data[maxIdx]);
+    sampled.push([maxIdx, data[maxIdx]]);
     prevIndex = maxIdx;
   }
-  sampled.push(data[data.length - 1]);
+  sampled.push([data.length - 1, data[data.length - 1]]);
   return sampled;
 }
 
@@ -526,10 +515,12 @@ const RENDER_THRESHOLD = 666;
 function createChartOption() {
   return {
     title: { text: '' },
-    xAxis: { type: 'category', data: '', show: false },
+    xAxis: { type: 'value', show: false },
     yAxis: {
       type: 'value',
       max: 60,
+      axisLine: { show: false },
+      axisTick: { show: false },
       splitLine: { lineStyle: { color: '#cccccc40', type: 'dotted' } },
     },
     animation: false,
@@ -542,7 +533,7 @@ function createChartOption() {
       largeThreshold: 300,
       sampling: 'lttb',
       polyline: false,
-      data,
+      data: data.map((value, index) => [index, value]),
       lineStyle: { width: 1, color: chartColors[i % chartColors.length] },
       itemStyle: { opacity: 0 },
       showSymbol: false,
