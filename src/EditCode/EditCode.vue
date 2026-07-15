@@ -1793,6 +1793,7 @@ const onImportFileChange = async (e) => {
     clearTimeout(autosaveTimer);
     isDirty = false;
     isSwitchingItem = false;
+    expandedActionItemId.value = id;
 
     showToast("已导入：" + file.name);
   } catch (error) {
@@ -2100,6 +2101,7 @@ async function loadUrlContent(inputUrl, inputUserAgent = "") {
     lastSavedContent.value = content;
     isDirty = false;
     isSwitchingItem = false;
+    expandedActionItemId.value = id;
 
     showToast("载入成功");
   } catch (e) {
