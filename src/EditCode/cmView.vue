@@ -1300,15 +1300,20 @@ async function doCompress() {
     const result = await callFormatWorker("compress", {
       code,
       options: {
-        compress: {
-          drop_console: !compressOpts.keepConsole,
-        },
-        mangle: !compressOpts.keepNames,
-        format: {
-          ascii_only: compressOpts.charset === "ascii",
-          comments: false,
-        },
+  compress: {
+    drop_console: !compressOpts.keepConsole,
+    toplevel: !compressOpts.keepNames,
+  },
+  mangle: compressOpts.keepNames
+    ? false
+    : {
+        toplevel: true,
       },
+  format: {
+    ascii_only: compressOpts.charset === "ascii",
+    comments: false,
+  },
+}
     });
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: result.code },
