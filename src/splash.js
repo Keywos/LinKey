@@ -1,16 +1,12 @@
 const splash = document.getElementById("boot-splash");
 const isVisible = () => splash?.classList.contains("boot-splash--visible");
 
-// 与 CSS boot-sweep-fill 时长一致
-const SWEEP_MS = 2400;
+const FAST_SKIP_MS = 233;
 const HOLD_MS = 160;
 const FADE_MS = 300;
-const FAST_SKIP_MS = 233; // 在此时间内加载完成则不显示开屏
 
 let appReady = false;
-let sweepDone = false;
 let finishing = false;
-let sweepScheduled = false;
 
 const ensureLoading = () => {
   if (!splash) return;
@@ -27,14 +23,14 @@ const ensureLoading = () => {
 };
 
 const tryFinish = () => {
-  if (finishing || !appReady || !sweepDone || !isVisible()) return;
+  if (finishing || !appReady || !isVisible()) return;
   finishing = true;
 
   requestAnimationFrame(() => {
     splash.classList.add("boot-splash--complete");
     try {
       localStorage.setItem("linkey:app-ready", "1");
-    } catch (_) { /* ignore */ }
+    } catch (_) {}
 
     window.setTimeout(() => {
       splash.classList.add("boot-splash--done");
@@ -43,39 +39,15 @@ const tryFinish = () => {
   });
 };
 
-const scheduleSweepDone = () => {
-  if (sweepScheduled) return;
-  sweepScheduled = true;
-
-  const tick = () => {
-    if (!window.linkeyBootSweepAt) ensureLoading();
-    const startedAt = window.linkeyBootSweepAt || performance.now();
-    const wait = Math.max(0, SWEEP_MS - (performance.now() - startedAt));
-    window.setTimeout(() => {
-      sweepDone = true;
-      tryFinish();
-    }, wait);
-  };
-
-  requestAnimationFrame(() => requestAnimationFrame(tick));
-};
-
 import("./main").then(({ initializeApp }) => {
   initializeApp();
-
   const elapsed = performance.now() - (window.linkeyBootStartedAt || performance.now());
-
-  if (elapsed < FAST_SKIP_MS) {
-    // 233ms 内加载完成 — 不创建动画状态，直接移除未显示的 splash。
+  if (elapsed <= FAST_SKIP_MS) {
+    window.clearTimeout(window.linkeyBootSplashTimer);
     splash?.remove();
     return;
   }
-
-  // 超过 233ms 才开始显示并执行开屏动画。
   ensureLoading();
-  scheduleSweepDone();
-
-  // 等两帧确保 Vue 首帧渲染完成后再淡化 splash
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       appReady = true;

@@ -486,11 +486,15 @@ const GetMsOne = async () => {
   }
 };
 
+
 function getdev(res) {
-  if (res.device?.app) {
-    const ga = res.device;
+  if (res.getEnvInfo?.app) {
+    const ga = res.getEnvInfo;
     ga.device && (devices.value = ga.device);
-    ga.app && (app.value = ga.app);
+    if (ga.app) {
+      app.value = ga.app;
+      ga.version && (app.value += ga.version);
+    }
   }
 }
 
