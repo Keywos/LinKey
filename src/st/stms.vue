@@ -487,33 +487,10 @@ const GetMsOne = async () => {
 };
 
 function getdev(res) {
-  if (res["设备"]?.app || res.device?.app) {
-    const ga = res["设备"] ? res["设备"] : res.device;
-    if (ga["device-model"]) {
-      devices.value = devx[ga["device-model"]] || ga["device-model"];
-    }
-    if (ga["device"]) {
-      devices.value = devx[ga["device"]] || ga["device"];
-    }
-    if (!ga["device"] && !ga["device-model"]) {
-      devices.value = "";
-    }
-    if (ga.app) app.value = ga.app + " ";
-    if (ga.app == "Egern") {
-      app.value += ga["version"];
-    } else if (ga.app == "Surge") {
-      app.value += ga["surge-version"]; 
-    } else if (ga.app == "Stash") {
-      app.value += ga["stash-version"];
-    } else if (ga.app == "Loon") {
-      app.value += ga["version"].replace(/\(|\)/g, " ");
-    } else if (ga.app == "Scripting") {
-      app.value += ga["version"];
-    } else if (ga.app == "Quantumult X") {
-      app.value = "Quan X " + ga["version"].replace("-build", " ").replace("v", " ");
-    }
-  } else {
-    app.value = res["设备"] || res.device;
+  if (res.device?.app) {
+    const ga = res.device;
+    ga.device && (devices.value = ga.device);
+    ga.app && (app.value = ga.app);
   }
 }
 

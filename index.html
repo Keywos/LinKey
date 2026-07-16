@@ -49,6 +49,7 @@
     #boot-splash.boot-splash--loading::before {
       opacity: .85;
       transform: translate(-18%, -24%) scale(1);
+      animation: boot-ambient-breathe 2.8s ease-in-out infinite alternate;
     }
 
     #boot-splash.boot-splash--done {
@@ -110,18 +111,33 @@
         0 0 40px #8a6dff55;
     }
 
+    /*
+      进度：从顶点顺时针只扫一圈（0→100%）。
+      用 keyframes，避免 display:none → 显示后 transition 不触发。
+    */
     .boot-splash__progress {
       position: absolute;
       z-index: 1;
-      inset: -2px;
-      width: calc(100% + 4px);
-      height: calc(100% + 4px);
+      inset: -4px;
+      width: calc(100% + 8px);
+      height: calc(100% + 8px);
       overflow: visible;
       pointer-events: none;
     }
 
+    .boot-splash__progress .track {
+      fill: none;
+      stroke: #5b6cff26;
+      stroke-width: 2.5;
+    }
+
+    .boot-splash__progress .progress-glow,
+    .boot-splash__progress .progress-tail,
     .boot-splash__progress .progress-mid,
-    .boot-splash__progress .progress {
+    .boot-splash__progress .progress,
+    .boot-splash__progress .progress-hi,
+    .boot-splash__progress .progress-core,
+    .boot-splash__progress .progress-head {
       fill: none;
       stroke-linecap: round;
       stroke-dasharray: 0 100;
@@ -129,48 +145,125 @@
       opacity: 0;
     }
 
+    .boot-splash__progress .progress-glow {
+      stroke: #8a6dff;
+      stroke-width: 7;
+      filter: url(#boot-splash-soft-glow);
+    }
+
+    .boot-splash__progress .progress-tail {
+      stroke: #7b72ff;
+      stroke-width: 4.2;
+      filter: url(#boot-splash-edge-glow);
+    }
+
     .boot-splash__progress .progress-mid {
-      stroke: #4583f6;
-      stroke-width: 1.3;
+      stroke: #6e95ff;
+      stroke-width: 3.3;
+      filter: url(#boot-splash-edge-glow);
     }
 
     .boot-splash__progress .progress {
-      stroke: #4c89fc;
-      stroke-width: 1.85;
+      stroke: #5eb0ff;
+      stroke-width: 2.85;
+      filter: url(#boot-splash-edge-glow);
+    }
+
+    .boot-splash__progress .progress-hi {
+      stroke: #c0a8ff;
+      stroke-width: 2.6;
+      filter: url(#boot-splash-edge-glow);
+    }
+
+    .boot-splash__progress .progress-core {
+      stroke: #ffffffee;
+      stroke-width: 1.2;
+    }
+
+    .boot-splash__progress .progress-head {
+      stroke: #fff;
+      stroke-width: 3.4;
+      stroke-dasharray: 5 95;
+      filter: url(#boot-splash-head-glow);
     }
 
     #key rect {
       fill: #ffffffbc !important;
     }
 
+    /* 加载中：顺时针扫满一圈 */
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress-glow {
+      animation: boot-sweep-fill 2.4s cubic-bezier(.2, .75, .2, 1) forwards;
+    }
+
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress-tail {
+      animation: boot-sweep-fill 2.4s cubic-bezier(.2, .75, .2, 1) forwards;
+    }
+
     #boot-splash.boot-splash--loading .boot-splash__progress .progress-mid {
-      animation: boot-sweep-fill 3.2s cubic-bezier(.2, .75, .2, 1) forwards;
+      animation: boot-sweep-fill 2.4s cubic-bezier(.2, .75, .2, 1) forwards;
     }
 
     #boot-splash.boot-splash--loading .boot-splash__progress .progress {
-      animation: boot-sweep-fill 3.2s cubic-bezier(.2, .75, .2, 1) forwards;
+      animation: boot-sweep-fill 2.4s cubic-bezier(.2, .75, .2, 1) forwards;
     }
 
-    #boot-splash.boot-splash--loading .boot-splash__progress .progress-mid {
-      opacity: .68;
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress-hi {
+      animation: boot-sweep-fill 2.4s cubic-bezier(.2, .75, .2, 1) forwards;
     }
 
-    #boot-splash.boot-splash--loading .boot-splash__progress .progress {
-      opacity: .16;
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress-core {
+      animation: boot-sweep-fill 2.4s cubic-bezier(.2, .75, .2, 1) forwards;
+    }
+
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress-head {
+      animation:
+        boot-sweep-head 2.4s cubic-bezier(.2, .75, .2, 1) forwards,
+        boot-head-shimmer 1.2s ease-in-out infinite;
+    }
+
+    /* 层透明度（扫圈过程中保持） */
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress-glow { opacity: .32; }
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress-tail { opacity: .48; }
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress-mid { opacity: .7; }
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress { opacity: .95; }
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress-hi { opacity: .72; }
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress-core { opacity: .9; }
+    #boot-splash.boot-splash--loading .boot-splash__progress .progress-head { opacity: 1; }
+
+    /* 闭环完成：定格满环，准备淡出 */
+    #boot-splash.boot-splash--complete .boot-splash__progress .progress-glow,
+    #boot-splash.boot-splash--complete .boot-splash__progress .progress-tail,
+    #boot-splash.boot-splash--complete .boot-splash__progress .progress-mid,
+    #boot-splash.boot-splash--complete .boot-splash__progress .progress,
+    #boot-splash.boot-splash--complete .boot-splash__progress .progress-hi,
+    #boot-splash.boot-splash--complete .boot-splash__progress .progress-core {
+      animation: none;
+      stroke-dasharray: 100 0;
+      opacity: .92;
+    }
+
+    #boot-splash.boot-splash--complete .boot-splash__progress .progress-glow {
+      opacity: .48;
+    }
+
+    #boot-splash.boot-splash--complete .boot-splash__progress .progress-head {
+      animation: none;
+      opacity: 0;
+      stroke-dashoffset: -97;
     }
 
     .boot-splash__name {
-      padding-top: 30px;
-      padding-left: 4px;
+      padding-top: 14px;
       letter-spacing: .18em;
       opacity: 0;
       transform: translateY(6px);
-      font: 800 20px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 600 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: linear-gradient(90deg, #5a6a8a 0%, #6b7cff 45%, #8a6dff 100%);
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
-      transition: opacity .95s ease .08s, transform .95s cubic-bezier(.16, 1, .3, 1) .08s, letter-spacing .95s ease .08s;
+      transition: opacity .55s ease .08s, transform .55s cubic-bezier(.16, 1, .3, 1) .08s, letter-spacing .55s ease .08s;
     }
 
     #boot-splash.boot-splash--loading .boot-splash__name {
@@ -184,25 +277,41 @@
     }
 
     @keyframes boot-ambient-breathe {
-      0% {
-        transform: translate(-18%, -24%) scale(1);
-        opacity: .72;
-      }
+      0% { transform: translate(-18%, -24%) scale(1); opacity: .72; }
+      100% { transform: translate(-14%, -20%) scale(1.08); opacity: .95; }
+    }
 
-      100% {
-        transform: translate(-14%, -20%) scale(1.08);
-        opacity: .95;
+    @keyframes boot-mark-pulse {
+      0%, 100% {
+        box-shadow:
+          0 0 0 1px #ffffff2e inset,
+          0 10px 26px #718cff55,
+          0 0 28px #7a8dff30;
+      }
+      50% {
+        box-shadow:
+          0 0 0 1px #ffffff44 inset,
+          0 12px 30px #718cff66,
+          0 0 42px #8a6dff48;
       }
     }
 
+    /* 0 → 100 顺时针扫满一圈 */
     @keyframes boot-sweep-fill {
-      0% {
-        stroke-dasharray: 0 100;
-      }
+      0% { stroke-dasharray: 0 100; }
+      100% { stroke-dasharray: 100 0; }
+    }
 
-      100% {
-        stroke-dasharray: 100 0;
-      }
+    /* 光点贴着扫过的前端走完一圈 */
+    @keyframes boot-sweep-head {
+      0% { stroke-dashoffset: 0; }
+      100% { stroke-dashoffset: -97; }
+    }
+
+    @keyframes boot-head-shimmer {
+      0% { opacity: .55; }
+      50% { opacity: 1; }
+      100% { opacity: .55; }
     }
 
     html {
@@ -223,9 +332,8 @@
         background-color: #141414;
       }
 
-      .boot-splash__progress .progress-mid,
-      .boot-splash__progress .progress {
-        stroke: url(#boot-splash-white-fade);
+      .boot-splash__progress .track {
+        stroke: #8ea0ff28;
       }
 
       #boot-splash {
@@ -248,7 +356,35 @@
       }
     }
 
-    @media (prefers-reduced-motion: reduce) {}
+    @media (prefers-reduced-motion: reduce) {
+      #boot-splash::before,
+      .boot-splash__mark,
+      .boot-splash__progress .progress-glow,
+      .boot-splash__progress .progress-tail,
+      .boot-splash__progress .progress-mid,
+      .boot-splash__progress .progress,
+      .boot-splash__progress .progress-hi,
+      .boot-splash__progress .progress-core,
+      .boot-splash__progress .progress-head,
+      .boot-splash__name {
+        animation: none !important;
+        transition-duration: .01ms !important;
+      }
+
+      #boot-splash.boot-splash--loading .boot-splash__progress .progress-glow,
+      #boot-splash.boot-splash--loading .boot-splash__progress .progress-tail,
+      #boot-splash.boot-splash--loading .boot-splash__progress .progress-mid,
+      #boot-splash.boot-splash--loading .boot-splash__progress .progress,
+      #boot-splash.boot-splash--loading .boot-splash__progress .progress-hi,
+      #boot-splash.boot-splash--loading .boot-splash__progress .progress-core {
+        stroke-dasharray: 100 0;
+        opacity: .85;
+      }
+
+      #boot-splash.boot-splash--loading .boot-splash__progress .progress-head {
+        opacity: 0;
+      }
+    }
   </style>
 </head>
 
@@ -270,18 +406,53 @@
           <rect x="232.45" y="598.39" width="198.54" height="198.54" rx="20" ry="20" style="fill: #ffffff54;" />
           <rect x="463.44" y="598.39" width="198.54" height="198.54" rx="20" ry="20" style="fill: #ffffff54;" />
         </svg>
-        <svg class="boot-splash__progress" viewBox="0 0 64 64" aria-hidden="true">
+        <svg class="boot-splash__progress" viewBox="-4 -4 72 72" aria-hidden="true">
           <defs>
-            <linearGradient id="boot-splash-white-fade" gradientUnits="userSpaceOnUse" x1="1.5" y1="1.5" x2="62.5"
-              y2="62.5">
-              <stop offset="0%" stop-color="#fff" stop-opacity=".5" />
-              <stop offset="100%" stop-color="#fff" stop-opacity=".4" />
-            </linearGradient>
+            <filter id="boot-splash-soft-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="2.1" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="boot-splash-edge-glow" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation=".75" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="boot-splash-head-glow" x="-90%" y="-90%" width="280%" height="280%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
           </defs>
+          <path class="track"
+            d="M32 1.5H48A14.5 14.5 0 0 1 62.5 16V48A14.5 14.5 0 0 1 48 62.5H16A14.5 14.5 0 0 1 1.5 48V16A14.5 14.5 0 0 1 16 1.5H32Z" />
+          <path class="progress-glow"
+            d="M32 1.5H48A14.5 14.5 0 0 1 62.5 16V48A14.5 14.5 0 0 1 48 62.5H16A14.5 14.5 0 0 1 1.5 48V16A14.5 14.5 0 0 1 16 1.5H32Z"
+            pathLength="100" />
+          <path class="progress-tail"
+            d="M32 1.5H48A14.5 14.5 0 0 1 62.5 16V48A14.5 14.5 0 0 1 48 62.5H16A14.5 14.5 0 0 1 1.5 48V16A14.5 14.5 0 0 1 16 1.5H32Z"
+            pathLength="100" />
           <path class="progress-mid"
             d="M32 1.5H48A14.5 14.5 0 0 1 62.5 16V48A14.5 14.5 0 0 1 48 62.5H16A14.5 14.5 0 0 1 1.5 48V16A14.5 14.5 0 0 1 16 1.5H32Z"
             pathLength="100" />
           <path class="progress"
+            d="M32 1.5H48A14.5 14.5 0 0 1 62.5 16V48A14.5 14.5 0 0 1 48 62.5H16A14.5 14.5 0 0 1 1.5 48V16A14.5 14.5 0 0 1 16 1.5H32Z"
+            pathLength="100" />
+          <path class="progress-hi"
+            d="M32 1.5H48A14.5 14.5 0 0 1 62.5 16V48A14.5 14.5 0 0 1 48 62.5H16A14.5 14.5 0 0 1 1.5 48V16A14.5 14.5 0 0 1 16 1.5H32Z"
+            pathLength="100" />
+          <path class="progress-core"
+            d="M32 1.5H48A14.5 14.5 0 0 1 62.5 16V48A14.5 14.5 0 0 1 48 62.5H16A14.5 14.5 0 0 1 1.5 48V16A14.5 14.5 0 0 1 16 1.5H32Z"
+            pathLength="100" />
+          <path class="progress-head"
             d="M32 1.5H48A14.5 14.5 0 0 1 62.5 16V48A14.5 14.5 0 0 1 48 62.5H16A14.5 14.5 0 0 1 1.5 48V16A14.5 14.5 0 0 1 16 1.5H32Z"
             pathLength="100" />
         </svg>
@@ -290,20 +461,15 @@
     </div>
   </div>
   <script>
+    // 只记录启动时间；由应用初始化完成后统一决定是否显示 splash。
+    // 不能在此处单独设定显示计时器，否则应用已在 233ms 内就绪、
+    // 但模块回调尚未执行时，计时器仍会抢先显示开屏。
     (function () {
-      const bootSplash = document.getElementById("boot-splash");
       window.linkeyBootStartedAt = performance.now();
-      if (!bootSplash) return;
-      window.linkeyBootSplashTimer = window.setTimeout(function () {
-        bootSplash.classList.add("boot-splash--visible");
-        void bootSplash.offsetWidth;
-        bootSplash.classList.add("boot-splash--loading");
-        window.linkeyBootSweepAt = performance.now();
-      }, 200);
     })();
   </script>
   <div id="app"></div>
-  <script type="module" src="/src/splash.js"></script>
+  <script type="module" async src="/src/splash.js"></script>
 </body>
 
 </html>
