@@ -502,9 +502,9 @@ function getdev(res) {
     if (ga.app == "Egern") {
       app.value += ga["version"];
     } else if (ga.app == "Surge") {
-      app.value += ga["surge-version"]; // + " " + ga["surge-build"];
+      app.value += ga["surge-version"]; 
     } else if (ga.app == "Stash") {
-      app.value += ga["stash-version"]; // + " " + ga["stash-build"];
+      app.value += ga["stash-version"];
     } else if (ga.app == "Loon") {
       app.value += ga["version"].replace(/\(|\)/g, " ");
     } else if (ga.app == "Scripting") {
