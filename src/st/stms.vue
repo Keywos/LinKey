@@ -420,13 +420,7 @@ const GetMsOne = async () => {
             if (rems.value > 1 || autobm.value) {
               totalDuration += gt;
               completedRequests++;
-              overt.value =
-                b +
-                `${autobm.value ? `${bmsize.value}MB` : completedRequests + "次"}` +
-                " 平均: " +
-                Math.floor(totalDuration / completedRequests) +
-                "ms 耗时: " +
-                zhTime(Date.now() - tt1);
+              overt.value = b + `${autobm.value ? `${bmsize.value}MB` : completedRequests + "次"}` + " 平均: " + Math.floor(totalDuration / completedRequests) + "ms 耗时: " + zhTime(Date.now() - tt1);
             } else overt.value = "";
 
             if (sliceUrl.value[io]) {
@@ -513,6 +507,8 @@ function getdev(res) {
       app.value += ga["stash-version"]; // + " " + ga["stash-build"];
     } else if (ga.app == "Loon") {
       app.value += ga["version"].replace(/\(|\)/g, " ");
+    } else if (ga.app == "Scripting") {
+      app.value += ga["version"];
     } else if (ga.app == "Quantumult X") {
       app.value = "Quan X " + ga["version"].replace("-build", " ").replace("v", " ");
     }
