@@ -546,7 +546,7 @@ function getdev(res) {
   // showToast(JSON.stringify(res));
   if (res?.app) {
     const ga = res;
-    ga.device && (devices.value = ga.device);
+    ga.device && (devices.value = devx[ga.device] || ga.device);
     if (ga.app) {
       app.value = ga.app;
       ga.version && (app.value += " " + ga.version);
