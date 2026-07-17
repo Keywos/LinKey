@@ -4,12 +4,15 @@
     <van-cell title="需要安装此模块辅助" @click="copyText()" is-link />
     <van-field label="并发请求" readonly placeholder="">
       <template #button>
-        <van-button size="small" @click="GetMsPromise" type="primary">
-          <van-loading v-if="islodingA" type="circular" size="17px" style="width: 27px" />
-          <span v-else>Start</span>
-        </van-button>
-        &nbsp;
-        <van-button size="small" @click="stops()" type="primary">Stop</van-button>
+        <span class="test-button-group">
+          <van-button size="small" @click="GetMsPromise" type="primary">
+            <span class="test-start-content">
+              <van-loading v-if="islodingA" type="circular" size="17px" />
+              <span v-else>Start</span>
+            </span>
+          </van-button>
+          <van-button size="small" @click="stops()" type="primary">Stop</van-button>
+        </span>
       </template>
     </van-field>
 
@@ -35,12 +38,15 @@
 
     <van-field label="依次请求" readonly placeholder="">
       <template #button>
-        <van-button size="small" @click="GetMs" type="primary">
-          <van-loading v-if="isloding" type="circular" size="17px" style="width: 27px" />
-          <span v-else>Start</span>
-        </van-button>
-        &nbsp;
-        <van-button size="small" @click="stops()" type="primary">Stop</van-button>
+        <span class="test-button-group">
+          <van-button size="small" @click="GetMs" type="primary">
+            <span class="test-start-content">
+              <van-loading v-if="isloding" type="circular" size="17px" />
+              <span v-else>Start</span>
+            </span>
+          </van-button>
+          <van-button size="small" @click="stops()" type="primary">Stop</van-button>
+        </span>
       </template>
     </van-field>
   </van-cell-group>
@@ -68,13 +74,15 @@
     </van-cell>
     <van-field v-if="autobm" label="自动测试极限" readonly placeholder="从当前依次+100K">
       <template #button>
-        <van-button size="small" @click="GetMsAuto" type="primary">
-          <van-loading v-if="islodingAuto" type="circular" size="17px" style="width: 27px" />
-          <span v-else>Start</span>
-        </van-button>
-
-        &nbsp;
-        <van-button size="small" @click="GetMsAutono" type="primary">取消</van-button>
+        <span class="test-button-group">
+          <van-button size="small" @click="GetMsAuto" type="primary">
+            <span class="test-start-content">
+              <van-loading v-if="islodingAuto" type="circular" size="17px" />
+              <span v-else>Start</span>
+            </span>
+          </van-button>
+          <van-button size="small" @click="GetMsAutono" type="primary">取消</van-button>
+        </span>
       </template>
     </van-field>
   </van-cell-group>
@@ -91,13 +99,9 @@
     <van-field
       v-for="(item, index) in islodingA ? sliceUrl : sliceUrl.slice().reverse()"
       :key="index"
-      rows="1"
       :label="app"
-      type="textarea"
       :placeholder="item"
       readonly
-      show-word-limit
-      autosize
     ></van-field>
   </van-cell-group>
   <br />
@@ -143,6 +147,22 @@
 #netmstest .van-field__label {
   width: 120px !important;
   opacity: 0.8;
+}
+
+.test-start-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 17px;
+  vertical-align: middle;
+}
+
+.test-button-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
 }
 
 .chartContainerMs {
@@ -287,8 +307,9 @@ const GetMsAuto = async () => {
   for (i = bmsize.value * 10; i < 300; i++) {
     bmsize.value = i / 10;
     await getsjson();
-    await GetMsOne();
-    if (!isstiop.value) break;
+    const completed = await GetMsOne(true);
+    if (!completed || !isstiop.value) break;
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
   stops();
 };
@@ -396,7 +417,7 @@ watchEffect(() => {
 });
 
 let all = 0;
-const GetMsOne = async () => {
+const GetMsOne = async (isAutoTest = false) => {
   const currentSession = requestSession;
   all++;
   try {
@@ -407,7 +428,7 @@ const GetMsOne = async () => {
       const binaryData = resNewBody(largeJSON);
       let resa,
         od = autobms.value ? "onlydata/_b" + bmsize.value : "";
-      await fetch("https://surgetool.com/api/ping/binary/" + od + "_c" + ios + "?all=" + all + "_t" + Date.now(), {
+      return await fetch("https://surgetool.com/api/ping/binary/" + od + "_c" + ios + "?all=" + all + "_t" + Date.now(), {
         method: "POST",
         body: binaryData,
       })
@@ -427,17 +448,20 @@ const GetMsOne = async () => {
               sliceUrl.value[io] = `${zhTime(resa.t1 - t1)} ➟ ${autobms.value ? `${bmsize.value}MB` : `${resa.t2 - resa.t1}·${resa.t3 - resa.t2}`}  ➟ ${zhTime(Date.now() - resa.t3)}`;
             }
             io++;
-            if (io == rems.value) stops();
+            if (io == rems.value && !isAutoTest) stops();
+            return true;
           } else {
             stops();
             isstiop.value = false;
             showToast("请求失败");
+            return false;
           }
         })
         .catch((e) => {
           stops();
           isstiop.value = false;
           showToast("请求失败");
+          return false;
         });
     } else {
       if (!islodingA.value) sliceUrl.value.push("....");
