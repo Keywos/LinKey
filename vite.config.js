@@ -42,6 +42,7 @@ export default {
 
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,json}"],
+        navigateFallback: "/index.html",
         runtimeCaching: [
           {
             urlPattern: ({ request }) => request.destination === "script",
@@ -52,7 +53,7 @@ export default {
             },
           },
           {
-            urlPattern: ({ request }) => request.destination === "style" || request.destination === "image" || request.destination === "document" || request.destination === "font",
+            urlPattern: ({ request }) => request.destination === "style" || request.destination === "image" || request.destination === "font",
 
             handler: "CacheFirst",
             options: {

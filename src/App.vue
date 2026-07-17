@@ -2,8 +2,8 @@
   <van-config-provider :theme="theme">
     <div>
       <div v-if="isbgc" class="jbsss" />
-      <div v-if="isNeedNav" class="blurNavdiv">
-        <van-nav-bar :title="metatittleRef" left-text="" :left-arrow="isNavBackRef" :placeholder="true" :border="false" @click-left="onClickLeft" @click-right="" />
+      <div v-if="isNeedNav" class="blurNavdiv" :class="{ 'blurNavdiv-hidden': hideTopBarTitle }">
+        <van-nav-bar :title="hideTopBarTitle ? '' : metatittleRef" left-text="" :left-arrow="isNavBackRef" :placeholder="true" :border="false" :class="{ 'pwa-nav-bar': isPWA && !isLandscape }" @click-left="onClickLeft" @click-right="" />
       </div>
       <div class="tabzw"></div>
     </div>
@@ -29,7 +29,7 @@
 </template>
 
 <script setup>
-import { ref, watchEffect, computed, onMounted } from "vue";
+import { ref, watchEffect, computed, onMounted, onBeforeUnmount } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useTheme } from "@/hooks/theme";
 import { onWidth } from "@/hooks/winWidth";
@@ -122,6 +122,10 @@ const isNavBackRef = ref(false);
 const isNeedNav = ref(false);
 
 const isbgc = ref(localStorage.getItem("ISBGC") == "1" || false);
+const hideTopBarTitle = ref(localStorage.getItem("HideTopBarTitle") !== "0");
+const updateTopBarVisibility = (event) => {
+  hideTopBarTitle.value = event.detail.hidden;
+};
 
 const route = useRoute();
 
@@ -140,6 +144,14 @@ watchEffect(() => {
   isNavBackRef.value = !!meta.isNavBack;
   isNeedNav.value = !!meta.isNavTop;
   isNeedTabBarRef.value = !!meta.needTabBar;
+});
+
+onMounted(() => {
+  window.addEventListener("top-bar-visibility-change", updateTopBarVisibility);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("top-bar-visibility-change", updateTopBarVisibility);
 });
 </script>
 
@@ -160,6 +172,55 @@ watchEffect(() => {
   margin-bottom: -3px;
 }
 
+.van-nav-bar__left {
+  width: 40px;
+  height: 40px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  // position: absolute;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0.5px solid rgba(255, 255, 255, 0.066);
+  background:
+    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.017), transparent 34%),
+    rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 0.5px 0.5px rgba(255, 255, 255, 0.05),
+    inset 0 -0.5px 1px rgba(255, 255, 255, 0.05),
+    0 3px 10px rgba(30, 45, 60, 0.049);
+  backdrop-filter: blur(7px) saturate(1.35);
+  -webkit-backdrop-filter: blur(7px) saturate(1.35);
+  transform: translate(20px, 26px);
+}
+
+// .van-nav-bar__left::before {
+//   content: "";
+//   position: absolute;
+//   inset: 0;
+//   border: 0.5px solid transparent;
+//   border-radius: inherit;
+//   background: linear-gradient(to bottom, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.2) 20%, rgba(255, 255, 255, 0.015) 38%, rgba(255, 255, 255, 0.03) 62%, rgba(255, 255, 255, 0.2) 80%, rgba(255, 255, 255, 0.2) 100%) border-box;
+//   -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+//   mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+//   -webkit-mask-composite: xor;
+//   mask-composite: exclude;
+//   pointer-events: none;
+// }
+
+.pwa-nav-bar .van-nav-bar__left {
+  transform: translate(20px, calc(26px + env(safe-area-inset-top)));
+}
+
+.van-nav-bar__arrow {
+  position: relative;
+  z-index: 1;
+  font-weight: 1200;
+  transform: scale(1.2);
+}
+
 .blurNavdiv {
   /* 顶部毛玻璃 */
   position: fixed;
@@ -175,6 +236,14 @@ watchEffect(() => {
 
 .blurNavdiv_border {
   border-bottom: #00000004 solid 1px;
+}
+
+.blurNavdiv-hidden {
+  background: transparent;
+}
+
+.blurNavdiv-hidden.blurNavdiv_border {
+  border-bottom: 0;
 }
 
 .van-nav-bar {

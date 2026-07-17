@@ -595,6 +595,12 @@ h2 {
   top: auto;
   bottom: var(--van-toast-position-bottom-distance);
 }
+html:not(.pwa-standalone) .van-toast.van-popup--center {
+  top: calc(8.1% - 24px) !important;
+}
+.pwa-standalone .van-toast.van-popup--center {
+  top: calc(8.6% + 20px) !important;
+}
 .van-toast__icon {
   font-size: var(--van-toast-icon-size);
 }

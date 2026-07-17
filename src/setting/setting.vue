@@ -15,6 +15,14 @@
       </van-popup>
     </van-cell-group>
 
+    <van-cell-group inset title="界面设置">
+      <van-cell class="van-cell-sw" center title="隐藏顶部状态栏" label="隐藏标题，保留左上角返回按钮">
+        <template #right-icon>
+          <van-switch v-model="hideTopBarTitle" @change="setHideTopBarTitle" />
+        </template>
+      </van-cell>
+    </van-cell-group>
+
     <van-cell-group inset title="编辑器主题">
       <van-field class="editor-theme-field" label="背景颜色">
         <template #input>
@@ -120,6 +128,11 @@ const getStoredBoolean = (key, defaultValue = false) => {
 };
 const setStoredBoolean = (key, value) => {
   localStorage.setItem(key, value ? "1" : "0");
+};
+const hideTopBarTitle = ref(getStoredBoolean("HideTopBarTitle", true));
+const setHideTopBarTitle = (value) => {
+  setStoredBoolean("HideTopBarTitle", value);
+  window.dispatchEvent(new CustomEvent("top-bar-visibility-change", { detail: { hidden: value } }));
 };
 const EDITOR_DARK_BACKGROUNDS = ["#282c34", "#141414", "#000000"];
 const storedEditorBackground = localStorage.getItem("EditorDarkBackground");
