@@ -222,7 +222,7 @@ import { foldGutter, bracketMatching } from "@codemirror/language";
 import { undo, redo, history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { closeBrackets, autocompletion } from "@codemirror/autocomplete";
 import { Compartment, EditorState, Transaction } from "@codemirror/state";
-import { hyperLink } from "@/EditCode/link";
+import { hyperLink } from "@/EditCode/link/index.ts";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { showToast } from "vant";
 import copyimg from "@/img/svg/copy.svg";
