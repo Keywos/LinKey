@@ -28,12 +28,12 @@
 
     <van-field v-if="!autobm" name="slider" label="滑块选择">
       <template #input>
-        <van-slider v-model="yl" bar-height="24px" :step="1" :min="1" max="18" />
+        <van-slider v-model="yl" bar-height="24px" :step="1" :min="1" max="1024" />
       </template>
     </van-field>
 
-    <van-cell v-if="!autobm" center title="压力">
-      <van-stepper v-model="yl" button-size="22" step="1" min="1" max="18" />
+    <van-cell v-if="!autobm" center title="压力 MB">
+      <van-stepper v-model="yl" button-size="22" step="1" min="1" max="1024" />
     </van-cell>
 
     <van-field label="依次请求" readonly placeholder="">
@@ -88,6 +88,16 @@
   </van-cell-group>
 
   <div style="height: 12px"></div>
+  <van-cell-group v-if="!autobm && testAverageRows.length" inset title="">
+     <span v-if="app" style="opacity: 0.35; font-size: 12px; padding-bottom: 20px; margin-top: 12px; display: flex; justify-content: center; height: 10px">
+      Web:{{ version }} &nbsp;{{ devices }}&nbsp; {{ app }}
+    </span>
+      <span v-if="overt" style="opacity: 0.35; font-size: 13px; padding-bottom: 20px; margin-top: 12px; display: flex; justify-content: center; height: 10px">
+      {{ overt }}
+    </span>
+    <van-field v-for="item in testAverageRows" :key="item.name" :label="item.name" :placeholder="`平均: ${item.value}ms`" readonly></van-field>
+  </van-cell-group>
+  <br/>
   <van-cell-group id="netmstest" v-if="sliceUrl.length > 0" inset title="">
     <span v-if="app" style="opacity: 0.35; font-size: 12px; padding-bottom: 20px; margin-top: 12px; display: flex; justify-content: center; height: 10px">
       Web:{{ version }} &nbsp;{{ devices }}&nbsp; {{ app }}
@@ -96,14 +106,9 @@
       {{ overt }}
     </span>
 
-    <van-field
-      v-for="(item, index) in islodingA ? sliceUrl : sliceUrl.slice().reverse()"
-      :key="index"
-      :label="app"
-      :placeholder="item"
-      readonly
-    ></van-field>
+    <van-field v-for="(item, index) in islodingA ? sliceUrl : sliceUrl.slice().reverse()" :key="index" :label="app" :placeholder="item" readonly></van-field>
   </van-cell-group>
+
   <br />
   <br />
   <div class="infop">
@@ -206,6 +211,9 @@ let b = "";
 let bmsizes = localStorage.getItem("BMSIZE") || 2;
 const bmsize = ref(bmsizes);
 const sliceUrl = ref([]);
+const testAverageRows = ref([]);
+const testTotals = {};
+const testCounts = {};
 const app = ref("");
 let io = 0;
 let ios = 0;
@@ -240,6 +248,7 @@ const GetMsPromise = async () => {
   const arrayOfObjects = Array.from({ length: rems.value }, () => "--");
 
   sliceUrl.value = arrayOfObjects;
+  resetTestAverages();
   totalDuration = 0;
   completedRequests = 0;
   isCancelled = false;
@@ -263,6 +272,7 @@ const GetMs = async () => {
   ios = 0;
 
   sliceUrl.value = [];
+  resetTestAverages();
 
   totalDuration = 0;
   completedRequests = 0;
@@ -417,6 +427,27 @@ watchEffect(() => {
 });
 
 let all = 0;
+function resetTestAverages() {
+  testAverageRows.value = [];
+  Object.keys(testTotals).forEach((name) => delete testTotals[name]);
+  Object.keys(testCounts).forEach((name) => delete testCounts[name]);
+}
+
+function updateTestAverages(test) {
+  if (!test || typeof test !== "object") return;
+
+  Object.entries(test).forEach(([name, value]) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return;
+    testTotals[name] = (testTotals[name] || 0) + value;
+    testCounts[name] = (testCounts[name] || 0) + 1;
+  });
+
+  testAverageRows.value = Object.keys(testTotals).map((name) => ({
+    name,
+    value: (testTotals[name] / testCounts[name]).toFixed(2),
+  }));
+}
+
 const GetMsOne = async (isAutoTest = false) => {
   const currentSession = requestSession;
   all++;
@@ -436,7 +467,7 @@ const GetMsOne = async (isAutoTest = false) => {
           if (currentSession !== requestSession || isCancelled) return;
           if (response.status === 200) {
             resa = JSON.parse(response.headers.get("ntconfig"));
-            getdev(resa);
+            resa.getEnvInfo && getdev(resa.getEnvInfo);
             const gt = Date.now() - t1;
             if (rems.value > 1 || autobm.value) {
               totalDuration += gt;
@@ -480,10 +511,11 @@ const GetMsOne = async (isAutoTest = false) => {
         }
 
         const gt = parseInt(gms.slice(0, -2), 10);
+        updateTestAverages(res.data.test);
 
-        if (res?.data["设备"] && !isapp) {
+        if (res?.data?.device && !isapp) {
           isapp = true;
-          getdev(res.data);
+          getdev(res.data.device);
         }
 
         if (rems.value > 1) {
@@ -511,8 +543,9 @@ const GetMsOne = async (isAutoTest = false) => {
 };
 
 function getdev(res) {
-  if (res.getEnvInfo?.app) {
-    const ga = res.getEnvInfo;
+  // showToast(JSON.stringify(res));
+  if (res?.app) {
+    const ga = res;
     ga.device && (devices.value = ga.device);
     if (ga.app) {
       app.value = ga.app;
