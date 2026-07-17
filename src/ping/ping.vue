@@ -129,7 +129,9 @@
     <van-cell-group inset title="Ping 选项设置">
       <van-cell v-for="(item, index) in listSet" clickable :key="item" :title="item" @click="toggleCheckbox(index)">
         <template #right-icon>
-          <van-checkbox :name="item" :ref="(el) => (checkboxRefs[index] = el)" @touchend.stop />
+          <span @click.stop>
+            <van-checkbox :name="item" :ref="(el) => (checkboxRefs[index] = el)" />
+          </span>
         </template>
       </van-cell>
     </van-cell-group>

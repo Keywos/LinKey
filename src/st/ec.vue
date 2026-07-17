@@ -18,7 +18,7 @@
     <van-cell-group inset>
       <van-collapse v-model="showPopover" accordion :border="false">
         <van-collapse-item title="历史记录" name="12" label="">
-          <van-checkbox-group v-model="checkedSet" style="padding-bottom: 10px; max-height: 300px; overflow: auto; padding-top: 10px; padding-bottom: 20px; border-radius: 14px; margin: -14px">
+          <van-checkbox-group v-model="checkedSet" style="padding-bottom: 10px; max-height: 300px; overflow: auto; padding-top: 10px; padding-bottom: 20px; border-radius: 14px; margin: -14px" @change="refreshSelectedPoints">
             <van-cell-group inset title="">
               <van-swipe-cell v-for="(item, index) in ecList" :key="item">
                 <template #left>
@@ -27,7 +27,9 @@
 
                 <van-cell clickable :title="item" @click="toggle(index)" :border="false">
                   <template #right-icon>
-                    <van-checkbox :name="item" :ref="(el) => (checkboxRefs[index] = el)" @touchend.stop />
+                    <span @click.stop>
+                      <van-checkbox :name="item" :ref="(el) => (checkboxRefs[index] = el)" />
+                    </span>
                   </template>
                 </van-cell>
 
@@ -47,8 +49,6 @@
 
               <br />
               右滑列表可以单独删除某行数据
-              <br />
-              右边的对号点了没反应，要点击列表
               <br />
               清除当前传入的数据 刷新后任然会重新加载
             </div>
@@ -180,16 +180,17 @@ const clearCacheAll = () => {
 
 const toggle = (index) => {
   checkboxRefs.value[index].toggle();
-  // console.log("1", checkedSet.value);
-  // console.log("2", checkboxRefs.value);
-  let xx = checkedSet.value;
+};
 
-  xx.sort((a, b) => {
+const refreshSelectedPoints = () => {
+  const selectedItems = [...checkedSet.value];
+
+  selectedItems.sort((a, b) => {
     const toNum = (str) => parseInt(str.replace(".log", "").replace(/-/g, ""));
     return toNum(a) - toNum(b);
   });
   let arr = [];
-  for (const item of xx) {
+  for (const item of selectedItems) {
     let a = JSON.parse(localStorage.getItem(item) || "[]");
     arr = [...arr, ...a];
   }
