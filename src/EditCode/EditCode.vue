@@ -53,9 +53,12 @@
         <input ref="backupRestoreInputRef" type="file" accept=".zip,application/zip" style="display: none" @change="onBackupRestoreFileChange" />
       </div>
       <div ref="savesListRef" class="saves-list">
-        <div v-if="savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
+        <Transition name="saves-empty">
+          <div v-if="!isLoadingSaves && savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
+        </Transition>
         <template v-for="item in sortedSavedItems" :key="item.id">
-          <div @click.stop="toggleItemActions(item)" v-if="shouldShowSavedItem(item)" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
+          <Transition name="saves-item" appear>
+            <div @click.stop="toggleItemActions(item)" v-if="shouldShowSavedItem(item)" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
             <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" @click.stop />
 
             <div class="saves-item-info">
@@ -77,7 +80,9 @@
               </span>
             </div>
 
-            <div v-if="isItemActionsExpanded(item)" class="saves-item-sync-actions">
+            <Transition :name="actionPanelsReady ? 'saves-actions' : ''">
+              <div v-if="isItemActionsExpanded(item)" class="saves-item-sync-actions">
+              <div class="saves-item-sync-actions-content">
               <div class="saves-item-action-group">
                 <button class="saves-sync-btn" @click.stop="toggleItemExpansion(item)">
                   {{ isItemExpanded(item) ? "收起" : getItemChildrenCount(item) > 0 ? `展开 (${getItemChildrenCount(item)})` : "展开" }}
@@ -126,9 +131,14 @@
                   {{ item.id === currentItemId ? "当前" : "加载" }}
                 </button> -->
               </div>
+              </div>
+              </div>
+            </Transition>
             </div>
-          </div>
-          <div v-if="shouldShowSavedItem(item) && isItemExpanded(item)" class="saves-gist-children">
+          </Transition>
+          <Transition name="saves-children">
+            <div v-if="shouldShowSavedItem(item) && isItemExpanded(item)" class="saves-gist-children">
+            <div class="saves-gist-children-content">
             <div
               @click.stop="toggleItemActions(child)"
               v-for="child in gistChildItems(item)"
@@ -206,7 +216,9 @@
             <button class="saves-gist-child saves-gist-child-new" @click.stop="createExpandedFile(item)">
               {{ item.gist?.id ? "+ 新建 Gist 文件" : "+ 新建" }}
             </button>
-          </div>
+            </div>
+            </div>
+          </Transition>
         </template>
         <div class="saves-footers">
           <button class="saves-sync-btn" @click.stop="push_home">返回首页</button>
@@ -224,7 +236,7 @@
       <div class="saves-resize-bar"></div>
     </div>
   </div>
-  <cmView ref="cmViewRef" id="main" :isReadOnly="false" />
+  <cmView v-if="editorReady" ref="cmViewRef" id="main" :isReadOnly="false" />
 
   <!-- ★ 可拖拽控制台面板 -->
   <div
@@ -567,6 +579,7 @@ const normalizeTags = (tags) => [...new Set((Array.isArray(tags) ? tags : []).ma
 const savedItems = ref([]);
 const timeSortDescending = ref(true);
 const saveSearchQuery = ref("");
+const isLoadingSaves = ref(true);
 const contentSearchIds = ref(null);
 const searchingSavedContent = ref(false);
 const selectedTags = ref([]);
@@ -596,6 +609,8 @@ const syncingItemId = ref(null);
 const syncingAction = ref("");
 const syncingAllGists = ref(false);
 const expandedActionItemId = ref(null);
+const actionPanelsReady = ref(false);
+const editorReady = ref(false);
 const expandedGistIds = ref([]);
 const expandedItemIds = ref([]);
 const savesListWidth = ref(0);
@@ -718,6 +733,7 @@ const toggleItemActions = async (item) => {
 };
 
 const loadSaves = async () => {
+  isLoadingSaves.value = true;
   try {
     const list = await idbStorage.getItem(SAVES_INDEX_KEY);
     const ids = Array.isArray(list) ? list : [];
@@ -789,6 +805,8 @@ const loadSaves = async () => {
   } catch (error) {
     console.error("读取保存列表失败", error);
     savedItems.value = [];
+  } finally {
+    isLoadingSaves.value = false;
   }
 };
 
@@ -2271,6 +2289,9 @@ onMounted(async () => {
 
   // 进入页面时恢复上次打开文件的操作区。
   expandedActionItemId.value = currentItemId.value;
+  await nextTick();
+  actionPanelsReady.value = true;
+  editorReady.value = true;
 
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("beforeunload", handleBeforeUnload);
@@ -2609,10 +2630,6 @@ onBeforeUnmount(() => {
   flex: 1;
 }
 
-.saves-toolbar-toggle {
-  /* flex: 0 0 auto; */
-}
-
 .saves-toolbar-actions {
   display: flex;
   align-items: center;
@@ -2722,6 +2739,23 @@ onBeforeUnmount(() => {
   text-align: center;
   opacity: 0.5;
   font-size: 13px;
+}
+
+.saves-empty-enter-active,
+.saves-empty-leave-active,
+.saves-item-enter-active,
+.saves-item-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.saves-empty-enter-from,
+.saves-empty-leave-to,
+.saves-item-enter-from,
+.saves-item-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .saves-resize-handle {
@@ -2869,10 +2903,39 @@ onBeforeUnmount(() => {
 }
 
 .saves-item-sync-actions {
+  display: grid;
+  grid-template-rows: 1fr;
+  align-items: center;
+  overflow: hidden;
+}
+
+.saves-item-sync-actions-content {
+  min-height: 0;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
-  align-items: center;
+}
+
+.saves-actions-enter-active,
+.saves-actions-leave-active {
+  transition:
+    grid-template-rows 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    margin-top 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.16s ease-out;
+}
+
+.saves-actions-enter-from,
+.saves-actions-leave-to {
+  grid-template-rows: 0fr;
+  margin-top: -8px;
+  opacity: 0;
+}
+
+.saves-actions-enter-to,
+.saves-actions-leave-from {
+  grid-template-rows: 1fr;
+  margin-top: 0;
+  opacity: 1;
 }
 
 .saves-item-action-group {
@@ -2912,13 +2975,42 @@ onBeforeUnmount(() => {
 }
 
 .saves-gist-children {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-rows: 1fr;
   margin: -2px 0 8px 28px;
   padding: 0;
   border-radius: 10px;
   background: transparent;
+  overflow: hidden;
+}
+
+.saves-gist-children-content {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.saves-children-enter-active,
+.saves-children-leave-active {
+  transition:
+    grid-template-rows 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    margin 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.2s ease-out;
+}
+
+.saves-children-enter-from,
+.saves-children-leave-to {
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  margin-bottom: 0;
+  opacity: 0;
+}
+
+.saves-children-enter-to,
+.saves-children-leave-from {
+  grid-template-rows: 1fr;
+  opacity: 1;
 }
 
 .saves-gist-child {
