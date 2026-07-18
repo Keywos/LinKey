@@ -2166,9 +2166,7 @@ onMounted(async () => {
 
   let bloburl = "";
   const state = await idbStorage.getItem("SHOW_SAVES_KEY");
-  if (typeof state === "boolean") {
-    showSaves.value = state;
-  }
+  const shouldRestoreSavesPanel = state === true;
   // ★ 先加载已有列表，再处理 URL 请求，避免 loadUrlContent 的 persistIndex 覆盖已有索引
   await loadSaves();
   let urlLoaded = false;
@@ -2289,6 +2287,7 @@ onMounted(async () => {
 
   // 进入页面时恢复上次打开文件的操作区。
   expandedActionItemId.value = currentItemId.value;
+  showSaves.value = shouldRestoreSavesPanel;
   await nextTick();
   actionPanelsReady.value = true;
   editorReady.value = true;
