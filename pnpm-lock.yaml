@@ -4,6 +4,10 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  lru-cache: 8.0.5
+  '@babel/helper-compilation-targets>lru-cache': 7.18.3
+
 importers:
 
   .:
