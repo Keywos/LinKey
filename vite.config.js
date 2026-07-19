@@ -45,14 +45,6 @@ export default {
         navigateFallback: "/index.html",
         runtimeCaching: [
           {
-            urlPattern: ({ request }) => request.destination === "script",
-
-            handler: "StaleWhileRevalidate",
-            options: {
-              cacheName: "js-cache",
-            },
-          },
-          {
             urlPattern: ({ request }) => request.destination === "style" || request.destination === "image" || request.destination === "font",
 
             handler: "CacheFirst",

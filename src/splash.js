@@ -8,6 +8,25 @@ const FADE_MS = 300;
 let appReady = false;
 let finishing = false;
 
+const BOOT_RECOVERY_KEY = "linkey:boot-recovery-attempted";
+
+const recoverFromStaleScripts = async () => {
+  try {
+    if (sessionStorage.getItem(BOOT_RECOVERY_KEY)) return false;
+    sessionStorage.setItem(BOOT_RECOVERY_KEY, "1");
+
+    if ("caches" in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.filter((name) => name.startsWith("js-cache")).map((name) => caches.delete(name)));
+    }
+
+    window.location.reload();
+    return true;
+  } catch (_) {
+    return false;
+  }
+};
+
 const ensureLoading = () => {
   if (!splash) return;
   if (!splash.classList.contains("boot-splash--visible")) {
@@ -39,19 +58,23 @@ const tryFinish = () => {
   });
 };
 
-import("./main").then(({ initializeApp }) => {
-  initializeApp();
-  const elapsed = performance.now() - (window.linkeyBootStartedAt || performance.now());
-  if (elapsed <= FAST_SKIP_MS) {
-    window.clearTimeout(window.linkeyBootSplashTimer);
-    splash?.remove();
-    return;
-  }
-  ensureLoading();
-  requestAnimationFrame(() => {
+import("./main")
+  .then(({ initializeApp }) => {
+    initializeApp();
+    const elapsed = performance.now() - (window.linkeyBootStartedAt || performance.now());
+    if (elapsed <= FAST_SKIP_MS) {
+      window.clearTimeout(window.linkeyBootSplashTimer);
+      splash?.remove();
+      return;
+    }
+    ensureLoading();
     requestAnimationFrame(() => {
-      appReady = true;
-      tryFinish();
+      requestAnimationFrame(() => {
+        appReady = true;
+        tryFinish();
+      });
     });
+  })
+  .catch(async () => {
+    if (!(await recoverFromStaleScripts())) splash?.remove();
   });
-});
