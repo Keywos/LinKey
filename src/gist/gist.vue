@@ -180,23 +180,6 @@ const imgcopy = async (i) => {
   }
 };
 
-// const imgpreview = async (i) => {
-//   try {
-//     showToast("开始请求");
-//     const url = listpop.value.files[i]?.raw_url;
-//     const res = await sendReq("GET", url);
-//     console.log(res.status);
-//     console.log(res);
-//     if (res.status == "200") {
-//       console.log("11");
-//       useGS.setGistResPreview(res.data, "Gist Preview");
-//       console.log("22");
-//       router.push("/gist/gistEdit");
-//     }
-//   } catch (e) {
-//     showToast("预览失败 " + e.message);
-//   }
-// };
 
 const imgedit = async (i) => {
   try {
@@ -213,7 +196,7 @@ const imgedit = async (i) => {
       router.push("/gist/gistEdit");
     }
   } catch (e) {
-    showToast("请求编辑失败 " + e.message);
+    showToast("请求编辑失败： " + e.message);
   }
 };
 //

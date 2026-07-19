@@ -1,8 +1,9 @@
 {
   "name": "linkey",
   "private": true,
-  "version": "5.20.887",
+  "version": "5.20.888",
   "type": "module",
+  "packageManager": "pnpm@11.0.9",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
