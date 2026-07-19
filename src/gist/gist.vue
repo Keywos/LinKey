@@ -129,6 +129,7 @@ import github from "@/img/svg/github.svg";
 import { useRouter } from "vue-router";
 import { useGistStore } from "@/store/gistStore";
 import { codehubStorage, GIST_LIST_KEY, syncGistFilesToCodeHub, removeGistFilesFromCache, removeGistFilesFromCodeHub } from "@/storage/codehubStorage.js";
+import { toStableGistRawUrl } from "@/gist/rawUrl.js";
 
 import useV3Clipboard from "vue-clipboard3";
 const { toClipboard } = useV3Clipboard();
@@ -172,7 +173,7 @@ const htmlyl = async () => {
   }
 };
 const imgcopy = async (i) => {
-  const url = listpop.value.files[i]?.raw_url?.replace(/\/raw\/\w+?\//, "/raw/");
+  const url = toStableGistRawUrl(listpop.value.files[i]?.raw_url);
   if (url) {
     await toClipboard(url);
     showToast("复制 URL 成功");
@@ -200,7 +201,7 @@ const imgcopy = async (i) => {
 const imgedit = async (i) => {
   try {
     showToast("开始请求 Edit");
-    const url = listpop.value.files[i]?.raw_url;
+    const url = toStableGistRawUrl(listpop.value.files[i]?.raw_url);
     if (!url) {
       showToast("未找到文件地址");
       return;

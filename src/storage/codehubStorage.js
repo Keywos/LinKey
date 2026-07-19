@@ -1,4 +1,5 @@
 import { openDB } from "idb";
+import { toStableGistRawUrl } from "@/gist/rawUrl.js";
 
 export const SAVES_INDEX_KEY = "codehub_saves_index";
 export const GIST_LIST_KEY = "codehub_gist_list";
@@ -297,7 +298,7 @@ export const syncGistFilesToCodeHub = async (gists, { replace = false } = {}) =>
             id: gist.id,
             folderName: description || fileNames[0] || filename,
             filename,
-            rawUrl: file.raw_url,
+            rawUrl: toStableGistRawUrl(file.raw_url),
             htmlUrl: gist.html_url || "",
             description,
             user: gist.user || gist.owner?.login || "",

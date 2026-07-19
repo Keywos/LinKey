@@ -97,6 +97,7 @@ import { showToast } from "vant";
 import { sendReq } from "@/http/http.js";
 import { useCmStore } from "@/store/cmCodeStore.js";
 import { codehubStorage, contentKey, getGistItemId, metaKey, prependGistFileToCache, renameGistFileInCodeHub, SAVES_INDEX_KEY, updateGistDescriptionInCodeHub } from "@/storage/codehubStorage.js";
+import { toStableGistRawUrl } from "@/gist/rawUrl.js";
 const cmStore = useCmStore();
 
 const EditCode = defineAsyncComponent(() => import("@/EditCode/cmView.vue"));
@@ -184,7 +185,7 @@ const saveGistFileLocally = async (gist, file, fileName, fileContent) => {
       id: gist.id,
       folderName: gist.description || Object.keys(gist.files || {})[0] || fileName,
       filename: fileName,
-      rawUrl: file?.raw_url || "",
+      rawUrl: toStableGistRawUrl(file?.raw_url),
       htmlUrl: gist.html_url || "",
       description: gist.description || "",
       user: gist.owner?.login || "",
@@ -228,8 +229,8 @@ const onSubmit = async (values) => {
       await saveGistFileLocally(res.data, file, filename.value, cmStore.CmCode);
       await updateGistDescriptionInCodeHub(res.data.id, res.data.description || "");
       await prependGistFileToCache(res.data, filename.value, file);
-      rawURL.value = file.raw_url;
-      rawurlForever.value = file.raw_url.replace(/\/raw\/\w+?\//, "/raw/");
+      rawURL.value = toStableGistRawUrl(file.raw_url);
+      rawurlForever.value = rawURL.value;
       if (isEditPatchNew) {
         const previousFilename = originalFilename.value || filename.value;
         if (previousFilename !== filename.value) {

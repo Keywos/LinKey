@@ -335,6 +335,7 @@ import { useCmStore } from "@/store/cmCodeStore.js";
 import useV3Clipboard from "vue-clipboard3";
 import { useRoute, useRouter } from "vue-router";
 import { sendReq } from "@/http/http.js";
+import { toStableGistRawUrl } from "@/gist/rawUrl.js";
 import {
   codehubStorage as idbStorage,
   contentKey,
@@ -1041,7 +1042,7 @@ const uploadItemToGist = async (item, description) => {
       id: response.data?.id || gistId,
       folderName: response.data?.description || Object.keys(response.data?.files || {})[0] || filename,
       filename,
-      rawUrl: remoteFile?.raw_url || item.gist?.rawUrl || "",
+      rawUrl: toStableGistRawUrl(remoteFile?.raw_url || item.gist?.rawUrl),
       htmlUrl: response.data?.html_url || item.gist?.htmlUrl || "",
       description: response.data?.description || item.gist?.description || "",
       updatedAt: new Date(response.data?.updated_at || Date.now()).getTime(),
@@ -1079,7 +1080,9 @@ const downloadGistItem = async (item, loadAfterDownload = false, { notify = true
   syncingItemId.value = item.id;
   syncingAction.value = "gist";
   try {
-    const response = await sendReq("GET", item.gist.rawUrl);
+    const rawUrl = toStableGistRawUrl(item.gist.rawUrl);
+    if (item.gist.rawUrl !== rawUrl) item.gist.rawUrl = rawUrl;
+    const response = await sendReq("GET", rawUrl);
     if (response.status !== 200) throw new Error(response.status || "请求失败");
     const content = typeof response.data === "string" ? response.data : JSON.stringify(response.data, null, 2);
     await idbStorage.setItem(contentKey(item.id), content);
@@ -1487,7 +1490,7 @@ const renameItem = async (item) => {
       item.gist = {
         ...item.gist,
         filename: name,
-        rawUrl: remoteFile.raw_url,
+        rawUrl: toStableGistRawUrl(remoteFile.raw_url),
         updatedAt: new Date(response.data?.updated_at || Date.now()).getTime(),
       };
     } catch (error) {
