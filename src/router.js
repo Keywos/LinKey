@@ -17,6 +17,7 @@ import count from "./count/count.vue";
 import ping from "./ping/ping.vue";
 import stms from "./st/stms.vue";
 import ec from "./st/ec.vue";
+import speedtest from "./speedtest/speedtest.vue";
 import EditCodeLoading from "./EditCode/EditCodeLoading.vue";
 
 const EditCode = defineAsyncComponent({
@@ -83,7 +84,7 @@ const routes = [
       isNavTop: false,
     },
   },
-    {
+  {
     path: "/j",
     component: EditCode,
     name: "j",
@@ -177,6 +178,17 @@ const routes = [
     name: "netms",
     meta: {
       title: "性能测试",
+      needTabBar: false,
+      isNavBack: true,
+      isNavTop: true,
+    },
+  },
+  {
+    path: "/sp",
+    component: speedtest,
+    name: "speedtest",
+    meta: {
+      title: "speedtest",
       needTabBar: false,
       isNavBack: true,
       isNavTop: true,

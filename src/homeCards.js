@@ -22,6 +22,7 @@ export const defaultHomeCards = [
   { id: "Gist File", img: hgithub, r: "/gist" },
   { id: "Unicode ", img: sf, r: "/unicode" },
   { id: "Punycode 编解码", img: w, r: "/punycode" },
+  { id: "Speedtest", img: carry, r: "/sp" },
   { id: "Count", img: cny, r: "/count" },
   { id: "SONY", img: success, r: "/key" },
   { id: "切换 CN", img: "🇨🇳", r: "https://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143465&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=cn&urlDesc=" },
@@ -33,15 +34,27 @@ export const defaultHomeCards = [
 ];
 
 export function getHomeCards() {
-  let cards;
+  // 读取保存的卡片状态（仅用于获取 enabled 状态）
+  const savedMap = new Map();
   try {
     const savedCards = JSON.parse(localStorage.getItem(HOME_CARDS_KEY));
     if (Array.isArray(savedCards)) {
-      cards = savedCards.map((card) => ({ ...card, enabled: card.enabled !== false }));
+      for (const card of savedCards) {
+        savedMap.set(card.id, card);
+      }
     }
   } catch {}
-  if (!cards) cards = defaultHomeCards.map((card) => ({ ...card, enabled: true }));
 
+  // 始终以 defaultHomeCards 为基准，只从缓存继承 enabled 状态
+  const cards = defaultHomeCards.map((defaultCard) => {
+    const saved = savedMap.get(defaultCard.id);
+    return {
+      ...defaultCard,
+      enabled: saved ? saved.enabled !== false : true,
+    };
+  });
+
+  // 应用排序
   try {
     const sort = JSON.parse(localStorage.getItem("HomePageSort"));
     if (sort && typeof sort === "object") {
