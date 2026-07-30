@@ -236,7 +236,7 @@ const chartContainer = ref(null);
 let myChart = null;
 let chartOption = null;
 let chartData = [];
-const CHART_MAX_POINTS = 300;
+const CHART_MAX_POINTS = 9999;
 
 function formatBytes(bytes) {
   if (bytes === 0) return "0 B";
