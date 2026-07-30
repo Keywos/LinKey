@@ -8,8 +8,10 @@ import hgithub from "@/img/svg/hgithub.svg";
 import w from "@/img/svg/w.svg";
 
 export const HOME_CARDS_KEY = "HomePageCards";
-const ita = "itms-appss://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143441&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=";
+const ita = "https://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143465&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=";
 const itc = "&urlDesc=";
+
+
 
 export const defaultHomeCards = [
   { id: "极简搜索", img: safa, r: "/s" },
