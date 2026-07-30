@@ -480,7 +480,7 @@ function createChartOption() {
     grid: { left: 40, right: 16, bottom: 30, top: 10 },
     xAxis: {
       type: "value",
-      name: "秒",
+      name: "",
       min: 0,
       minInterval: 1,
       splitLine: { show: false },
@@ -492,7 +492,7 @@ function createChartOption() {
 
     yAxis: {
       type: "value",
-      name: "速度",
+      name: "",
       axisLine: { show: false },
       splitLine: {
         lineStyle: {
