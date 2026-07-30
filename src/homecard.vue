@@ -15,13 +15,16 @@
         chosenClass: 'kcard-bkcss',
         handle: 'div',
       }"
-      @change="changeSort(hcard)"
+      @change="changeSort"
     >
       <template #item="{ element }">
         <div class="kcard-one" @click="navigateToRoute(element.r)">
           <div :key="element.id" class="kcard-homea">
             <div class="kcard-font_size">
-              <img v-if="element.img.startsWith('/') || element.img.startsWith('data:') || element.img.includes('.svg') || element.img.includes('.png')" class="kcardimg" :src="element.img" alt="" />
+              <span v-if="isCustomUrlIcon(element)" class="kcard-icon-slot">
+                <img class="kcardimg kcardimg-custom" :style="getIconSizeStyle(element)" :src="element.img" alt="" />
+              </span>
+              <img v-else-if="isImageIcon(element.img)" class="kcardimg" :src="element.img" alt="" />
               <span v-else class="kcardimg-emoji">{{ element.img }}</span>
               <span class="kcard-onepan">{{ element.id }}</span>
             </div>
@@ -33,145 +36,35 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
-import ts from "@/img/svg/ts.svg";
-import success from "@/img/svg/success.svg";
-import carry from "@/img/svg/carry.svg";
-import cny from "@/img/svg/cny.svg";
-import sf from "@/img/svg/sf.svg";
-import safa from "@/img/svg/safa.svg";
-import hgithub from "@/img/svg/hgithub.svg";
-import w from "@/img/svg/w.svg";
+import { onMounted, onUnmounted, ref } from "vue";
 import { showToast } from "vant";
 import { useRouter } from "vue-router";
 import draggable from "vuedraggable";
 import myArray from "./arr.js";
-
-const ita = "itms-appss://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143441&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=";
-const itc = "&urlDesc=";
+import { getHomeCards, saveHomeCards } from "./homeCards.js";
 
 const router = useRouter();
-const hcard = ref([
-  {
-    id: "极简搜索",
-    img: safa,
-    r: "/s",
-  },
-  {
-    id: "URL 工具箱",
-    img: sf,
-    r: "/codeurl",
-  },
-  {
-    id: "Ping",
-    img: carry,
-    r: "/ping",
-  },
-  {
-    id: "性能测试",
-    img: safa,
-    r: "/netms",
-  },
-  {
-    id: "时间戳转换",
-    img: ts,
-    r: "/timestamp",
-  },
-  {
-    id: "代码编辑器",
-    img: w,
-    r: "/EditCode",
-  },
-  {
-    id: "极简代码编辑器",
-    img: w,
-    r: "/j",
-  },
-  {
-    id: "Base64 转换",
-    img: cny,
-    r: "/base64",
-  },
-  {
-    id: "Troubleshoot",
-    img: safa,
-    r: "/st",
-  },
-  {
-    id: "Gist File",
-    img: hgithub,
-    r: "/gist",
-  },
-  {
-    id: "Unicode ",
-    img: sf,
-    r: "/unicode",
-  },
-  {
-    id: "Punycode 编解码",
-    img: w,
-    r: "/punycode",
-  },
-  {
-    id: "Count",
-    img: cny,
-    r: "/count",
-  },
-  {
-    id: "SONY",
-    img: success,
-    r: "/key",
-  },
-  {
-    id: "切换 CN",
-    img: "🇨🇳",
-    r: `${ita}cn${itc}`,
-  },
-  {
-    id: "切换 US",
-    img: "🇺🇸",
-    r: `${ita}us${itc}`,
-  },
-  {
-    id: "切换 JP",
-    img: "🇯🇵",
-    r: `${ita}jp${itc}`,
-  },
-  {
-    id: "切换 KR",
-    img: "🇰🇷",
-    r: `${ita}kr${itc}`,
-  },
-  {
-    id: "切换 TR",
-    img: "🇹🇷",
-    r: `${ita}tr${itc}`,
-  },
-  {
-    id: "切换 TW",
-    img: "🇨🇳",
-    r: `${ita}tw${itc}`,
-  },
-]);
+const hcard = ref(getHomeCards().filter((card) => card.enabled));
+const isImageIcon = (icon) => icon.startsWith("/") || icon.startsWith("data:") || /^https?:\/\//.test(icon);
+const isCustomUrlIcon = (card) => /^https?:\/\//.test(card.img) && typeof card.iconSize === "number";
+const getIconSizeStyle = (card) => (isCustomUrlIcon(card) ? { "--custom-icon-size": `${card.iconSize}px` } : undefined);
 
-const changeSort = (i) => {
-  sethomes(i);
+const changeSort = () => {
+  const allCards = getHomeCards();
+  const hiddenCards = allCards.filter((card) => !card.enabled);
+  sethomes(hcard.value);
+  saveHomeCards([...hcard.value, ...hiddenCards]);
 };
-let iserr = false;
-try {
-  const getsort = JSON.parse(localStorage.getItem("HomePageSort"));
-  if (Object.keys(getsort)?.length === hcard.value.length) {
-    hcard.value.sort((a, b) => getsort[a.id] - getsort[b.id]);
-  } else iserr = true;
-} catch (e) {
-  iserr = true;
-}
-if (iserr) sethomes(hcard.value);
-
 function sethomes(i) {
   const nameSortArray = Object.fromEntries(i.map((k, index) => [k.id, index]));
   localStorage.setItem("HomePageSort", JSON.stringify(nameSortArray));
 }
+
+const refreshHomeCards = () => {
+  hcard.value = getHomeCards().filter((card) => card.enabled);
+};
+onMounted(() => window.addEventListener("home-cards-change", refreshHomeCards));
+onUnmounted(() => window.removeEventListener("home-cards-change", refreshHomeCards));
 
 let xarri = 0;
 function showToastXA() {
@@ -243,5 +136,28 @@ const navigateToRoute = (route) => {
   height: 20px;
   margin-bottom: 30px;
   font-size: 24px;
+}
+
+.kcardimg {
+  object-fit: contain;
+}
+
+.kcardimg-custom {
+  width: var(--custom-icon-size);
+  height: var(--custom-icon-size);
+}
+
+.kcard-icon-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 62px;
+  margin-left: -5px;
+  margin-top: -20px;
+}
+
+.kcard-icon-slot .kcardimg {
+  margin-bottom: 0;
 }
 </style>

@@ -287,7 +287,7 @@
         v-model="promptState.value"
         class="modal-input"
         type="text"
-        :placeholder="promptState.hasTags ? '输入标签后按回车添加' : ''"
+        :placeholder="promptState.hasTags ? '输入标签后按回车添加' : '输入 URL 链接'"
         autofocus
         @input="autoFillScriptHubUserAgent"
         @keyup.enter="promptState.hasTags ? addPromptTag() : promptConfirm()"
@@ -3052,8 +3052,8 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(18px) saturate(140%);
   border: 0.1px solid rgba(255, 255, 255, 0.05);
   color: var(--text, #222);
-  border-radius: 20px;
-  padding: 18px 16px 14px;
+  border-radius: 28px;
+  padding: 1px 18px 10px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
 }
 
@@ -3120,13 +3120,13 @@ onBeforeUnmount(() => {
 
 .modal-actions {
   display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin-top: 24px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-top: 10px;
+  margin-bottom: 6px;
 }
 
 .modal-btn {
+  flex: 1;
   font-size: 14px;
   padding: 7px 18px;
   border-radius: 20px;

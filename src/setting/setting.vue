@@ -23,6 +23,63 @@
       </van-cell>
     </van-cell-group>
 
+    <van-cell-group inset title="主页卡片">
+      <van-cell title="整理主页卡片" label="关闭后将不会显示在主页" />
+      <van-cell
+        v-for="card in homeCards"
+        :key="card.id"
+        class="home-card-cell"
+        :class="{ 'home-card-cell--editable': isCustomCard(card) }"
+        :title="card.id"
+        :label="getCardDescription(card)"
+        center
+        @click="editShortcut(card)"
+      >
+        <template #right-icon>
+          <div class="home-card-cell__actions">
+            <van-button v-if="isCustomCard(card)" size="small" plain type="danger" aria-label="删除快捷方式" @click.stop="removeShortcut(card)">删除</van-button>
+            <van-switch v-model="card.enabled" @click.stop @change="saveCardSettings" />
+          </div>
+        </template>
+      </van-cell>
+      <van-cell title="添加快捷方式" is-link @click="openAddShortcut" />
+    </van-cell-group>
+
+    <van-popup v-model:show="showShortcutPopup" round position="bottom" :lock-scroll="false" class="shortcut-popup">
+      <div class="shortcut-popup__content">
+        <h2>{{ editingShortcut ? "编辑快捷方式" : "添加快捷方式" }}</h2>
+        <van-field v-model.trim="shortcutName" label="名称" placeholder="例如：Bing" />
+        <van-field v-model.trim="shortcutUrl" label="跳转地址" placeholder="https://bing.com/ 或 /search" />
+        <van-field label="图标">
+          <template #input>
+            <van-radio-group v-model="shortcutIconType" direction="horizontal">
+              <van-radio name="emoji">Emoji</van-radio>
+              <van-radio name="url">网址</van-radio>
+              <van-radio name="builtin">内置</van-radio>
+            </van-radio-group>
+          </template>
+        </van-field>
+        <van-field v-if="shortcutIconType === 'emoji'" v-model.trim="shortcutIcon" label="Emoji" placeholder="例如：🔎" />
+        <template v-else-if="shortcutIconType === 'url'">
+          <van-field v-model.trim="shortcutIcon" label="图标网址" placeholder="https://example.com/icon.png" type="url" />
+          <van-field v-model="shortcutIconSize" label="图标大小" is-link readonly @click="showIconSizePicker = true" />
+        </template>
+        <van-field v-else v-model="shortcutBuiltInIcon" label="内置图标" is-link readonly @click="showBuiltInIconPicker = true" />
+        <div class="shortcut-popup__actions">
+          <van-button block type="primary" round position="bottom" @click="showShortcutPopup = false">取消</van-button>
+          <van-button block type="primary" round position="bottom" @click="saveShortcut">{{ editingShortcut ? "保存" : "添加" }}</van-button>
+        </div>
+      </div>
+    </van-popup>
+
+    <van-popup v-model:show="showIconSizePicker" round position="bottom" :lock-scroll="false">
+      <van-picker :columns="iconSizeOptions" @cancel="showIconSizePicker = false" @confirm="onIconSizeConfirm" />
+    </van-popup>
+
+    <van-popup v-model:show="showBuiltInIconPicker" round position="bottom" :lock-scroll="false">
+      <van-picker :columns="builtInIconOptions" @cancel="showBuiltInIconPicker = false" @confirm="onBuiltInIconConfirm" />
+    </van-popup>
+
     <van-cell-group inset title="编辑器主题">
       <van-field class="editor-theme-field" label="背景颜色">
         <template #input>
@@ -107,17 +164,153 @@
         </template>
       </van-swipe-cell>
     </van-cell-group>
+    <br />
+    <br />
+    <br />
+    <br />
+    <br />
   </div>
 </template>
 
 <script setup>
 import { computed, ref } from "vue";
 import { sendReq } from "@/http/http.js";
-import { showToast } from "vant";
+import { showConfirmDialog, showToast } from "vant";
 import { useGistStore } from "@/store/gistStore";
 import { codehubStorage, GIST_LIST_KEY } from "@/storage/codehubStorage.js";
+import { defaultHomeCards, getHomeCards, saveHomeCards } from "@/homeCards.js";
+import ts from "@/img/svg/ts.svg";
+import success from "@/img/svg/success.svg";
+import carry from "@/img/svg/carry.svg";
+import cny from "@/img/svg/cny.svg";
+import sf from "@/img/svg/sf.svg";
+import safa from "@/img/svg/safa.svg";
+import hgithub from "@/img/svg/hgithub.svg";
+import w from "@/img/svg/w.svg";
 
 const useGStore = useGistStore();
+const homeCards = ref(getHomeCards());
+const showShortcutPopup = ref(false);
+const shortcutName = ref("");
+const shortcutUrl = ref("");
+const shortcutIconType = ref("emoji");
+const shortcutIcon = ref("");
+const editingShortcut = ref(null);
+const shortcutIconSize = ref("默认（20px）");
+const showIconSizePicker = ref(false);
+const showBuiltInIconPicker = ref(false);
+const iconSizeOptions = [
+  { text: "小（24px）", value: 24 },
+  { text: "默认（34px）", value: 34 },
+  { text: "大（45px）", value: 45 },
+];
+const builtInIconOptions = [
+  { text: "Time", value: ts },
+  { text: "Success", value: success },
+  { text: "Ping", value: carry },
+  { text: "CNY", value: cny },
+  { text: "SF", value: sf },
+  { text: "Search", value: safa },
+  { text: "GitHub", value: hgithub },
+  { text: "Code", value: w },
+];
+const selectedIconSize = ref(20);
+const shortcutBuiltInIcon = ref("");
+const onIconSizeConfirm = ({ selectedOptions }) => {
+  const option = selectedOptions[0];
+  if (option) {
+    selectedIconSize.value = option.value;
+    shortcutIconSize.value = option.text;
+  }
+  showIconSizePicker.value = false;
+};
+const onBuiltInIconConfirm = ({ selectedOptions }) => {
+  const option = selectedOptions[0];
+  if (option) {
+    shortcutIcon.value = option.value;
+    shortcutBuiltInIcon.value = option.text;
+  }
+  showBuiltInIconPicker.value = false;
+};
+const saveCardSettings = () => saveHomeCards(homeCards.value);
+const getCardDescription = (card) => {
+  if (card.r.startsWith("itms-appss://")) return "App Store 地区切换";
+  if (/^https?:\/\//.test(card.r)) return "外部快捷方式";
+  return card.r;
+};
+const isCustomCard = (card) => !defaultHomeCards.some((defaultCard) => defaultCard.id === card.id && defaultCard.r === card.r);
+const removeShortcut = async (card) => {
+  const scrollY = window.scrollY;
+  try {
+    await showConfirmDialog({ title: "确认删除", message: `确定删除「${card.id}」快捷方式吗？`, lockScroll: false });
+    homeCards.value = homeCards.value.filter((currentCard) => currentCard !== card);
+    saveCardSettings();
+    showToast("快捷方式已删除");
+  } catch {
+    // 用户取消
+  }
+  window.scrollTo(0, scrollY);
+};
+const resetShortcutForm = () => {
+  editingShortcut.value = null;
+  shortcutName.value = "";
+  shortcutUrl.value = "";
+  shortcutIconType.value = "emoji";
+  shortcutIcon.value = "";
+  shortcutBuiltInIcon.value = "";
+  selectedIconSize.value = 20;
+  shortcutIconSize.value = "默认（20px）";
+};
+const editShortcut = (card) => {
+  if (!isCustomCard(card)) return;
+  editingShortcut.value = card;
+  shortcutName.value = card.id;
+  shortcutUrl.value = card.r;
+  shortcutIcon.value = card.img;
+  const builtInIcon = builtInIconOptions.find((option) => option.value === card.img);
+  shortcutIconType.value = builtInIcon ? "builtin" : /^https?:\/\//.test(card.img) ? "url" : "emoji";
+  shortcutBuiltInIcon.value = builtInIcon?.text || "";
+  selectedIconSize.value = card.iconSize || 20;
+  shortcutIconSize.value = iconSizeOptions.find((option) => option.value === selectedIconSize.value)?.text || "默认（20px）";
+  showShortcutPopup.value = true;
+};
+const openAddShortcut = () => {
+  resetShortcutForm();
+  showShortcutPopup.value = true;
+};
+const addShortcut = () => {
+  try {
+    if (!shortcutName.value || !shortcutUrl.value || !shortcutIcon.value) {
+      throw new Error("请填写名称、跳转地址和图标");
+    }
+    if (shortcutIconType.value === "url" && !["http:", "https:"].includes(new URL(shortcutIcon.value).protocol)) {
+      throw new Error("请填写有效的图标网址");
+    }
+    if (homeCards.value.some((card) => card !== editingShortcut.value && card.id === shortcutName.value)) {
+      throw new Error("快捷方式名称已存在");
+    }
+    const shortcut = {
+      id: shortcutName.value,
+      img: shortcutIcon.value,
+      r: shortcutUrl.value,
+      enabled: editingShortcut.value?.enabled ?? true,
+      ...(shortcutIconType.value === "url" ? { iconSize: selectedIconSize.value } : {}),
+    };
+    const isEditing = Boolean(editingShortcut.value);
+    if (isEditing) {
+      Object.assign(editingShortcut.value, shortcut);
+    } else {
+      homeCards.value.push(shortcut);
+    }
+    saveCardSettings();
+    showShortcutPopup.value = false;
+    resetShortcutForm();
+    showToast(isEditing ? "快捷方式已保存" : "快捷方式已添加");
+  } catch (error) {
+    showToast(error.message);
+  }
+};
+const saveShortcut = () => addShortcut();
 const beforeClose = () => {
   // showToast("");
 };
@@ -258,10 +451,10 @@ const clearhs = () => {
   showToast("清除搜索页排序缓存成功");
 };
 
-
 const rePwa = async () => {
   showToast("正在重置 PWA 缓存...");
   try {
+    localStorage.setItem("linkey:app-ready", "0");
     if ("serviceWorker" in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
       await Promise.all(registrations.map((registration) => registration.unregister()));
@@ -281,7 +474,6 @@ const rePwa = async () => {
     showToast("重置失败，请重试");
   }
 };
-
 
 const cleargist = async () => {
   await codehubStorage.removeItem(GIST_LIST_KEY);
@@ -370,5 +562,44 @@ const isclearbutton = computed(() => gistid.value.length > 0);
 .editor-theme-options .van-radio__label {
   margin-left: 0;
   white-space: nowrap;
+}
+
+.shortcut-popup__content {
+  padding: 8px 16px 20px;
+}
+
+.shortcut-popup__content h2 {
+  margin: 12px 0;
+  font-size: 18px;
+}
+
+.shortcut-popup__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.home-card-cell .van-cell__title {
+  min-width: 0;
+}
+
+.home-card-cell .van-cell__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-card-cell .van-cell__right-icon {
+  flex: 0 0 auto;
+}
+
+.home-card-cell__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.home-card-cell--editable {
+  cursor: pointer;
 }
 </style>

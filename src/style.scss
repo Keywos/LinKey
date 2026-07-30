@@ -176,6 +176,13 @@
   /* gist pop 弹窗 */
   /* color: #000000; */
 }
+.van-picker__frame {
+  &::after {
+    border: none !important;
+  }
+  background: rgba(128, 128, 128, 0.1) !important;
+  border-radius: 20px !important;
+}
 .van-cell__label {
   color: #1d1e1fac !important;
   /* display: flex !important; */
@@ -342,6 +349,17 @@
   .van-progress {
     box-shadow: none;
   }
+  .van-picker {
+    --van-picker-mask-color: none !important;
+  }
+  .van-picker__frame {
+    &::after {
+      border: none !important;
+    }
+    background: rgba(128, 128, 128, 0.12) !important;
+    border-radius: 20px !important;
+  }
+
   .jbshome {
     position: fixed;
     top: 58%;
@@ -437,9 +455,6 @@
   }
   .van-switch--on {
     background: #5671bb !important;
-  }
-  .van-slider {
-    /* background: #5671bb !important; */
   }
 
   .van-cell {
