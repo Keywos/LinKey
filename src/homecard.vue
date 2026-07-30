@@ -21,7 +21,8 @@
         <div class="kcard-one" @click="navigateToRoute(element.r)">
           <div :key="element.id" class="kcard-homea">
             <div class="kcard-font_size">
-              <img class="kcardimg" :src="element.img" alt="" />
+              <img v-if="element.img.startsWith('/') || element.img.startsWith('data:') || element.img.includes('.svg') || element.img.includes('.png')" class="kcardimg" :src="element.img" alt="" />
+              <span v-else class="kcardimg-emoji">{{ element.img }}</span>
               <span class="kcard-onepan">{{ element.id }}</span>
             </div>
           </div>
@@ -45,6 +46,9 @@ import { showToast } from "vant";
 import { useRouter } from "vue-router";
 import draggable from "vuedraggable";
 import myArray from "./arr.js";
+
+const ita = "itms-appss://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143441&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=";
+const itc = "&urlDesc=";
 
 const router = useRouter();
 const hcard = ref([
@@ -114,49 +118,39 @@ const hcard = ref([
     r: "/count",
   },
   {
-    id: "OPEN AI",
-    img: safa,
-    r: "/",
-  },
-  {
-    id: "Symbian",
-    img: w,
-    r: "/",
-  },
-  {
-    id: "WP",
-    img: cny,
-    r: "/",
-  },
-  {
-    id: "Nothing",
-    img: safa,
-    r: "/",
-  },
-  {
-    id: "Lumia",
-    img: w,
-    r: "/",
-  },
-  {
     id: "SONY",
     img: success,
     r: "/key",
   },
   {
-    id: "ZEISS",
-    img: success,
-    r: "/keys",
+    id: "切换 CN",
+    img: "🇨🇳",
+    r: `${ita}cn${itc}`,
   },
   {
-    id: "Mon",
-    img: success,
-    r: "/",
+    id: "切换 US",
+    img: "🇺🇸",
+    r: `${ita}us${itc}`,
   },
   {
-    id: "SAMSNUG",
-    img: success,
-    r: "/",
+    id: "切换 JP",
+    img: "🇯🇵",
+    r: `${ita}jp${itc}`,
+  },
+  {
+    id: "切换 KR",
+    img: "🇰🇷",
+    r: `${ita}kr${itc}`,
+  },
+  {
+    id: "切换 TR",
+    img: "🇹🇷",
+    r: `${ita}tr${itc}`,
+  },
+  {
+    id: "切换 TW",
+    img: "🇨🇳",
+    r: `${ita}tw${itc}`,
   },
 ]);
 
@@ -229,6 +223,8 @@ const navigateToRoute = (route) => {
     showToastXA();
   } else if (route === "/keys") {
     showToastXAS();
+  } else if (route.startsWith("itms-appss://") || route.startsWith("http://") || route.startsWith("https://")) {
+    window.location.href = route;
   } else router.push(route);
 };
 </script>
@@ -239,5 +235,13 @@ const navigateToRoute = (route) => {
 }
 .kcard-homea {
   padding: 10px 6px 6px 18px;
+}
+.kcardimg-emoji {
+  display: flex;
+  margin-top: -8px;
+  width: 20px;
+  height: 20px;
+  margin-bottom: 30px;
+  font-size: 24px;
 }
 </style>
