@@ -455,6 +455,9 @@ const rePwa = async () => {
   showToast("正在重置 PWA 缓存...");
   try {
     localStorage.setItem("linkey:app-ready", "0");
+    localStorage.removeItem("HomePageCards");
+    localStorage.removeItem("inkey:boot-recovery-attemptedl");
+    localStorage.removeItem("HomePageSort");
     if ("serviceWorker" in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
       await Promise.all(registrations.map((registration) => registration.unregister()));

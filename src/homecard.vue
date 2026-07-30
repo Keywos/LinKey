@@ -116,8 +116,8 @@ const navigateToRoute = (route) => {
     showToastXA();
   } else if (route === "/keys") {
     showToastXAS();
-  } else if (route.startsWith("itms-appss://") || route.startsWith("http://") || route.startsWith("https://")) {
-    window.location.href = route;
+  } else if (route.startsWith("https://")) {
+    window.open(route, "_blank");
   } else router.push(route);
 };
 </script>

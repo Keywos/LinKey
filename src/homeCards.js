@@ -8,10 +8,6 @@ import hgithub from "@/img/svg/hgithub.svg";
 import w from "@/img/svg/w.svg";
 
 export const HOME_CARDS_KEY = "HomePageCards";
-const ita = "https://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143465&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=";
-const itc = "&urlDesc=";
-
-
 
 export const defaultHomeCards = [
   { id: "极简搜索", img: safa, r: "/s" },
@@ -28,12 +24,12 @@ export const defaultHomeCards = [
   { id: "Punycode 编解码", img: w, r: "/punycode" },
   { id: "Count", img: cny, r: "/count" },
   { id: "SONY", img: success, r: "/key" },
-  { id: "切换 CN", img: "🇨🇳", r: `${ita}cn${itc}` },
-  { id: "切换 US", img: "🇺🇸", r: `${ita}us${itc}` },
-  { id: "切换 JP", img: "🇯🇵", r: `${ita}jp${itc}` },
-  { id: "切换 KR", img: "🇰🇷", r: `${ita}kr${itc}` },
-  { id: "切换 TR", img: "🇹🇷", r: `${ita}tr${itc}` },
-  { id: "切换 TW", img: "🇨🇳", r: `${ita}tw${itc}` },
+  { id: "切换 CN", img: "🇨🇳", r: "https://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143465&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=cn&urlDesc=" },
+  { id: "切换 US", img: "🇺🇸", r: "https://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143441&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=us&urlDesc=" },
+  { id: "切换 JP", img: "🇯🇵", r: "https://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143462&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=jp&urlDesc=" },
+  { id: "切换 KR", img: "🇰🇷", r: "https://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143466&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=kr&urlDesc=" },
+  { id: "切换 TW", img: "🇨🇳", r: "https://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143470&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=tw&urlDesc=" },
+  { id: "切换 TR", img: "🇹🇷", r: "https://itunes.apple.com/WebObjects/MZStore.woa/wa/resetAndRedirect?dsf=143480&mt=8&url=/WebObjects/MZStore.woa/wa/viewSoftware?mt=8&id=1108187390&cc=tr&urlDesc=" },
 ];
 
 export function getHomeCards() {
