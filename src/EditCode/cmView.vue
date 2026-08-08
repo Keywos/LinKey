@@ -1414,6 +1414,148 @@ const toggleCollapsed = () => {
 </script>
 
 <style lang="scss" scoped>
+/* ★ 压缩选项弹窗（放在媒体查询外，保证宽屏也生效） */
+.compress-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.compress-dialog {
+  width: 85%;
+  max-width: 340px;
+  background: var(--editor-overlay-sheet-background, rgba(250, 250, 252, 0.88));
+  border: 0.1px solid rgba(22, 22, 22, 0.007);
+  border-radius: 16px;
+  box-shadow: 0 10px 32px rgba(29, 38, 52, 0.24);
+  overflow: hidden;
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+}
+
+.compress-title {
+  padding: 18px 20px 10px;
+  font-size: 17px;
+  font-weight: 600;
+  color: #222;
+}
+
+.compress-body {
+  padding: 4px 20px 14px;
+}
+
+.compress-group {
+  margin-bottom: 12px;
+}
+
+.compress-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #66666680;
+  margin-bottom: 6px;
+}
+
+.compress-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  font-size: 14px;
+  color: #3333337a;
+  cursor: pointer;
+}
+
+.compress-radio input[type="radio"],
+.compress-radio input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #4a90d9;
+  cursor: pointer;
+}
+
+.compress-radio span {
+  user-select: none;
+}
+
+.compress-buttons {
+  display: flex;
+  border-top: 0.1px solid rgba(128, 128, 128, 0.05);
+}
+
+.compress-btn {
+  flex: 1;
+  height: 44px;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  color: #33333362;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.compress-btn:hover {
+  background: #f5f5f5;
+}
+
+.compress-btn:active {
+  background: #eee;
+}
+
+.compress-btn.cancel {
+  color: #999;
+}
+
+.compress-btn.primary {
+  color: #4a90d9;
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .compress-overlay {
+    background: rgba(0, 0, 0, 0.46);
+  }
+  .compress-dialog {
+    background: var(--editor-overlay-sheet-background, rgba(40, 44, 52, 0.7));
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.46);
+  }
+  .compress-title {
+    color: #e0e0e0;
+  }
+  .compress-label {
+    color: #999;
+  }
+  .compress-radio {
+    color: #ccc;
+  }
+  .compress-buttons {
+    border-top-color: rgba(255, 255, 255, 0.05);
+  }
+  .compress-btn {
+    color: #ccc;
+  }
+  .compress-btn:hover {
+    background: #3a3a3a5f;
+  }
+  .compress-btn:active {
+    background: #444;
+  }
+  .compress-btn.cancel {
+    color: #888888d7;
+  }
+  .compress-btn.primary {
+    color: #6a9ed8;
+  }
+  .compress-radio input[type="radio"],
+  .compress-radio input[type="checkbox"] {
+    accent-color: #6a9ed8;
+  }
+}
+
 .editor-background-select-wrap {
   display: flex;
   align-items: center;
@@ -1537,6 +1679,26 @@ const toggleCollapsed = () => {
   cursor: pointer;
 }
 
+/* ★ 折叠按钮图标（放在媒体查询外，保证宽屏也显示） */
+.cm-toolbar-more {
+  display: block;
+  color: currentColor;
+  line-height: 1;
+  pointer-events: none;
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+.cm-toolbar-more:active {
+  transform: scale(0.8);
+}
+.cm-toolbar-more svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
 @media (max-width: 480px), (orientation: landscape) and (max-height: 600px) {
   .cm-img-button .language-detect-button {
     flex-basis: 22px;
@@ -1589,25 +1751,6 @@ const toggleCollapsed = () => {
     width: 100%;
     height: 40px;
     margin: 0 0 8px;
-  }
-
-  .cm-toolbar-more {
-    display: block;
-    color: currentColor;
-    line-height: 1;
-    pointer-events: none;
-    transition:
-      background 0.2s,
-      transform 0.2s;
-  }
-  .cm-toolbar-more:active {
-    transform: scale(0.8);
-  }
-  .cm-toolbar-more svg {
-    display: block;
-    width: 18px;
-    height: 18px;
-    fill: currentColor;
   }
 
   .cm-img-button {
@@ -1947,106 +2090,6 @@ const toggleCollapsed = () => {
     display: none !important;
   }
 
-  /* ★ 压缩选项弹窗 */
-  .compress-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 99999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.32);
-  }
-
-  .compress-dialog {
-    width: 85%;
-    max-width: 340px;
-    background: var(--editor-overlay-sheet-background, rgba(250, 250, 252, 0.88));
-    border: 0.1px solid rgba(22, 22, 22, 0.007);
-    border-radius: 16px;
-    box-shadow: 0 10px 32px rgba(29, 38, 52, 0.24);
-    overflow: hidden;
-    backdrop-filter: blur(20px) saturate(120%);
-    -webkit-backdrop-filter: blur(20px) saturate(120%);
-  }
-
-  .compress-title {
-    padding: 18px 20px 10px;
-    font-size: 17px;
-    font-weight: 600;
-    color: #222;
-  }
-
-  .compress-body {
-    padding: 4px 20px 14px;
-  }
-
-  .compress-group {
-    margin-bottom: 12px;
-  }
-
-  .compress-label {
-    font-size: 12px;
-    font-weight: 500;
-    color: #66666680;
-    margin-bottom: 6px;
-  }
-
-  .compress-radio {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 0;
-    font-size: 14px;
-    color: #3333337a;
-    cursor: pointer;
-  }
-
-  .compress-radio input[type="radio"],
-  .compress-radio input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: #4a90d9;
-    cursor: pointer;
-  }
-
-  .compress-radio span {
-    user-select: none;
-  }
-
-  .compress-buttons {
-    display: flex;
-    border-top: 0.1px solid rgba(128, 128, 128, 0.05);
-  }
-
-  .compress-btn {
-    flex: 1;
-    height: 44px;
-    border: none;
-    background: transparent;
-    font-size: 15px;
-    color: #33333362;
-    cursor: pointer;
-    transition: background 0.12s;
-  }
-
-  .compress-btn:hover {
-    background: #f5f5f5;
-  }
-
-  .compress-btn:active {
-    background: #eee;
-  }
-
-  .compress-btn.cancel {
-    color: #999;
-  }
-
-  .compress-btn.primary {
-    color: #4a90d9;
-    font-weight: 600;
-  }
-
   .cm-search-sheet.is-dark {
     background: color-mix(in srgb, var(--editor-overlay-sheet-background, #282c34) 96%, transparent);
     border-color: rgba(255, 255, 255, 0.14);
@@ -2075,46 +2118,6 @@ const toggleCollapsed = () => {
       background: rgba(106, 158, 216, 0.22);
       color: #88bcf5;
       box-shadow: none;
-    }
-
-    .compress-overlay {
-      background: rgba(0, 0, 0, 0.46);
-    }
-    .compress-dialog {
-      background: var(--editor-overlay-sheet-background, rgba(40, 44, 52, 0.7));
-      border-color: rgba(255, 255, 255, 0.14);
-      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.46);
-    }
-    .compress-title {
-      color: #e0e0e0;
-    }
-    .compress-label {
-      color: #999;
-    }
-    .compress-radio {
-      color: #ccc;
-    }
-    .compress-buttons {
-      border-top-color: rgba(255, 255, 255, 0.05);
-    }
-    .compress-btn {
-      color: #ccc;
-    }
-    .compress-btn:hover {
-      background: #3a3a3a5f;
-    }
-    .compress-btn:active {
-      background: #444;
-    }
-    .compress-btn.cancel {
-      color: #888888d7;
-    }
-    .compress-btn.primary {
-      color: #6a9ed8;
-    }
-    .compress-radio input[type="radio"],
-    .compress-radio input[type="checkbox"] {
-      accent-color: #6a9ed8;
     }
 
     .cm-search-sheet {
