@@ -1,14 +1,14 @@
 <template>
-  <h2 class="edit-code-editor" :class="{ 'saves-open': showSaves }" style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%; margin-top: -10px">
+  <h2 class="edit-code-editor" :class="{ 'saves-open': showSaves }" style="-webkit-user-select: none; user-select: none; display: flex; justify-content: left; width: 90%; margin-top: -10px ">
     <span class="edit-code-editor-title" style="opacity: 0.6" @click="goFunction()">Code Hub</span>
     <div style="display: flex; align-items: center; gap: 10px; color: var(--text)">
       <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: 0.4">{{ showSaves ? "▴" : "▾" }}</span>
     </div>
   </h2>
 
+
   <!-- 保存列表面板 -->
-  <div v-if="showSaves" class="saves-panel">
-    <!-- <div class="saves-panel-header" @click="goFunction()">Code Hub</div> -->
+  <div v-if="showSaves" class="saves-panel"> 
     <div class="saves-body" :style="{ height: savesPanelHeight + 'px' }">
       <div class="saves-toolbar">
         <button class="saves-btn" @click="toggleToolbar">{{ toolbarExpanded ? "折叠" : "展开" }}</button>
@@ -671,6 +671,13 @@ let savesWidthResizeStartWidth = 0;
 function applySavesWidth() {
   document.documentElement.style.setProperty("--saves-width", savesWidth.value + "px");
 }
+
+// ★ 测量顶部导航栏高度，供宽屏分栏时标题栏定位使用
+const updateNavHeight = () => {
+  const nav = document.querySelector(".blurNavdiv");
+  document.documentElement.style.setProperty("--nav-height", (nav?.offsetHeight || 0) + "px");
+};
+
 
 function startSavesWidthResizePointer(e) {
   e.preventDefault();
@@ -2191,6 +2198,8 @@ async function loadUrlContent(inputUrl, inputUserAgent = "") {
 onMounted(async () => {
   window.addEventListener("editor-theme-change", updateEditorPageBackground);
   applySavesWidth(); // ★ 初始化侧边栏宽度 CSS 变量
+  updateNavHeight(); // ★ 初始化导航栏高度 CSS 变量
+  window.addEventListener("resize", updateNavHeight);
   const blurNavdiv = document.querySelector(".blurNavdiv");
   blurNavdiv?.classList.add("blurNavdiv_code");
   let currentURL = "",
@@ -2624,6 +2633,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   window.removeEventListener("beforeunload", handleBeforeUnload);
   window.removeEventListener("editor-theme-change", updateEditorPageBackground);
+  window.removeEventListener("resize", updateNavHeight);
   document.body.style.backgroundColor = "";
   const blurNavdiv = document.querySelector(".blurNavdiv");
   blurNavdiv?.classList.remove("blurNavdiv_code");
@@ -3373,8 +3383,19 @@ onBeforeUnmount(() => {
     margin: -10px 2% 0 0 !important;
     transition: margin-left 0.2s ease;
   }
+  /* ★ 面板打开时：标题固定在左侧面板顶部，形成「标题 | cmview / 文件列表 | cmview」分栏 */
   .edit-code-editor.saves-open {
-    display: none;
+    position: fixed;
+    top: var(--nav-height, 0px);
+    left: 0;
+    width: var(--saves-width, 400px) !important;
+    margin: 0 !important;
+    padding: 20px 16px 22px  18px !important; /* 底部 22px 边距 */
+    box-sizing: border-box;
+    z-index: 1002;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .saves-panel {
@@ -3407,7 +3428,7 @@ onBeforeUnmount(() => {
     height: auto !important; /* 覆盖内联拖拽高度 */
     flex: 1; /* 占满其余高度 */
     min-height: 0;
-    margin-top: 100px;
+    margin-top: calc(var(--nav-height, 0px) + 62px); /* 标题栏高度（含 22px 底部边距） */
     border-radius: 0;
   }
 
