@@ -1,5 +1,5 @@
 <template>
-  <h2 class="edit-code-editor" style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%; margin-top: -10px">
+  <h2 class="edit-code-editor" :class="{ 'saves-open': showSaves }" style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%; margin-top: -10px">
     <span style="opacity: 0.6" @click="goFunction()">Code Hub</span>
     <div style="display: flex; align-items: center; gap: 10px; color: var(--text)">
       <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: 0.4">{{ showSaves ? "▴" : "▾" }}</span>
@@ -235,8 +235,15 @@
     <div ref="savesHandleRef" class="saves-resize-handle" @pointerdown="startSavesResizePointer">
       <div class="saves-resize-bar"></div>
     </div>
+    <!-- 拖拽调整宽度手柄（宽屏时显示） -->
+    <div class="saves-vresize-handle" @pointerdown="startSavesWidthResizePointer" title="拖拽调整宽度">
+      <div class="saves-vresize-bar"></div>
+      <!-- <div class="saves-vresize-knob">
+        <span class="saves-vresize-dots"></span>
+      </div> -->
+    </div>
   </div>
-  <cmView v-if="editorReady" ref="cmViewRef" id="main" :isReadOnly="false" />
+  <cmView v-if="editorReady" ref="cmViewRef" id="main" :isReadOnly="false" :class="{ 'saves-open': showSaves }" />
 
   <!-- ★ 可拖拽控制台面板 -->
   <div
@@ -645,6 +652,47 @@ function endSavesResizePointer(e) {
   document.removeEventListener("pointerup", endSavesResizePointer);
   document.body.style.cursor = "";
   localStorage.setItem(SAVES_HEIGHT_KEY, savesPanelHeight.value.toString());
+  if (e.target) {
+    try {
+      e.target.releasePointerCapture(e.pointerId);
+    } catch {}
+  }
+}
+
+// ===== 保存面板拖拽调整宽度（宽屏：面板固定在左侧） =====
+const MIN_SAVES_WIDTH = 240;
+const MAX_SAVES_WIDTH_RATIO = 0.6;
+const SAVES_WIDTH_KEY = "codehub_saves_panel_width";
+const savesWidth = ref(parseInt(localStorage.getItem(SAVES_WIDTH_KEY), 10) || 400);
+let savesWidthResizeStartX = 0;
+let savesWidthResizeStartWidth = 0;
+
+function applySavesWidth() {
+  document.documentElement.style.setProperty("--saves-width", savesWidth.value + "px");
+}
+
+function startSavesWidthResizePointer(e) {
+  e.preventDefault();
+  savesWidthResizeStartX = e.clientX;
+  savesWidthResizeStartWidth = savesWidth.value;
+  document.addEventListener("pointermove", onSavesWidthResizePointer);
+  document.addEventListener("pointerup", endSavesWidthResizePointer);
+  document.body.style.cursor = "col-resize";
+  e.target.setPointerCapture(e.pointerId);
+}
+
+function onSavesWidthResizePointer(e) {
+  const delta = e.clientX - savesWidthResizeStartX;
+  const maxWidth = Math.round(window.innerWidth * MAX_SAVES_WIDTH_RATIO);
+  savesWidth.value = Math.min(maxWidth, Math.max(MIN_SAVES_WIDTH, savesWidthResizeStartWidth + delta));
+  applySavesWidth();
+}
+
+function endSavesWidthResizePointer(e) {
+  document.removeEventListener("pointermove", onSavesWidthResizePointer);
+  document.removeEventListener("pointerup", endSavesWidthResizePointer);
+  document.body.style.cursor = "";
+  localStorage.setItem(SAVES_WIDTH_KEY, savesWidth.value.toString());
   if (e.target) {
     try {
       e.target.releasePointerCapture(e.pointerId);
@@ -2141,6 +2189,7 @@ async function loadUrlContent(inputUrl, inputUserAgent = "") {
 }
 onMounted(async () => {
   window.addEventListener("editor-theme-change", updateEditorPageBackground);
+  applySavesWidth(); // ★ 初始化侧边栏宽度 CSS 变量
   const blurNavdiv = document.querySelector(".blurNavdiv");
   blurNavdiv?.classList.add("blurNavdiv_code");
   let currentURL = "",
@@ -2797,8 +2846,19 @@ onBeforeUnmount(() => {
   align-items: stretch;
   gap: 8px;
   padding: 12px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.03);
   position: relative;
+}
+
+/* 底部横线：左右各留 10px 边距 */
+.saves-item::after {
+  content: "";
+  position: absolute;
+  left: 13px;
+  right: 12px;
+  bottom: 0;
+  height: 1px;
+  background: rgba(128, 128, 128, 0.1);
+  pointer-events: none;
 }
 
 .saves-item > input[type="checkbox"] {
@@ -3294,5 +3354,106 @@ onBeforeUnmount(() => {
   padding: 66px;
   display: flex;
   gap: 16px;
+}
+
+/* 窄屏：隐藏宽度拖拽手柄（宽屏时在下方媒体查询中显示） */
+.saves-vresize-handle {
+  display: none;
+}
+
+/* ===== 宽屏（宽度 > 700px）：保存列表面板固定左侧，右侧为编辑器 ===== */
+@media (min-width: 700px) {
+  .edit-code-editor {
+    width: auto !important;
+    margin: -10px 2% 0 0 !important;
+    transition: margin-left 0.2s ease;
+  }
+  .edit-code-editor.saves-open {
+    margin-left: var(--saves-width, 400px) !important;
+  }
+
+  .saves-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--saves-width, 400px);
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+    z-index: 996;
+  }
+
+  .saves-body {
+    height: 100% !important; /* 覆盖内联拖拽高度，占满侧边栏 */
+    border-radius: 0;
+  }
+
+  .saves-resize-handle {
+    display: none; /* 侧边栏固定全高，无需垂直拖拽手柄 */
+  }
+
+  .cmviewRef {
+    margin: 0 2% 0 0;
+    transition: margin-left 0.2s ease;
+  }
+  .cmviewRef.saves-open {
+    margin-left: var(--saves-width, 400px);
+  }
+
+  /* 宽度拖拽手柄 + 1px 半透明分隔线 */
+  .saves-vresize-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: -7px;
+    width: 14px;
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    z-index: 5;
+  }
+
+  .saves-vresize-bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1.5px;
+    background: rgba(128, 128, 128, 0.12);
+    transition: background 0.15s;
+    pointer-events: none;
+  }
+
+  /* .saves-vresize-knob {
+    position: relative;
+    width: 18px;
+    height: 34px;
+    border-radius: 9px;
+    background: rgba(128, 128, 128, 0.16);
+    border: 0px solid rgba(128, 128, 128, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  } */
+
+  /* .saves-vresize-dots {
+    width: 8px;
+    height: 84px;
+    background: radial-gradient(circle, rgba(128, 128, 128, 0.742) 2px, transparent 2px);
+    background-size: 84px 1px;
+    background-position: center;
+  } */
+
+  .saves-vresize-handle:hover .saves-vresize-bar,
+  .saves-vresize-handle:active .saves-vresize-bar {
+    background: rgba(128, 128, 128, 0.55);
+  }
 }
 </style>
