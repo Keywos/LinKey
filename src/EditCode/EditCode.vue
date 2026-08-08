@@ -3400,7 +3400,7 @@ onBeforeUnmount(() => {
 
   .saves-panel {
     position: fixed;
-    top: 0;
+    top: var(--nav-height, 0px);
     left: 0;
     bottom: 0;
     width: var(--saves-width, 400px);
@@ -3428,7 +3428,7 @@ onBeforeUnmount(() => {
     height: auto !important; /* 覆盖内联拖拽高度 */
     flex: 1; /* 占满其余高度 */
     min-height: 0;
-    margin-top: calc(var(--nav-height, 0px) + 62px); /* 标题栏高度（含 22px 底部边距） */
+    margin-top: 62px; /* 标题栏高度（含 22px 底部边距），面板已从导航栏下方开始 */
     border-radius: 0;
   }
 
