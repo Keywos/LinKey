@@ -1675,8 +1675,14 @@ const toggleCollapsed = () => {
   padding: 0;
   border: none;
   background: transparent;
-  color: #222;
+  color: var(--text);
   cursor: pointer;
+  border-radius: 10px;
+  transition: background 0.2s;
+  opacity: 0.7;
+}
+.cm-collapse-btn:hover {
+  background: rgba(128, 128, 128, 0.1);
 }
 
 /* ★ 折叠按钮图标（放在媒体查询外，保证宽屏也显示） */
@@ -1716,7 +1722,7 @@ const toggleCollapsed = () => {
     min-width: 0;
     margin: 0;
     box-sizing: border-box;
-    color: #222;
+    color: var(--text);
   }
 
   .cm-collapse-btn {
@@ -1732,13 +1738,17 @@ const toggleCollapsed = () => {
     padding: 0;
     border: none;
     background: transparent;
-    color: #222;
+    color: var(--text);
     cursor: pointer;
     border-radius: 50%;
     opacity: 0.7;
     transition:
       background 0.2s,
       transform 0.2s;
+  }
+
+  .cm-collapse-btn:hover {
+    background: rgba(128, 128, 128, 0.1);
   }
 
   .cm-collapse-btn:active {

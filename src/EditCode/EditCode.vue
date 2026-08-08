@@ -1,6 +1,6 @@
 <template>
   <h2 class="edit-code-editor" :class="{ 'saves-open': showSaves }" style="-webkit-user-select: none; user-select: none; display: flex; justify-content: space-between; width: 90%; margin-top: -10px">
-    <span style="opacity: 0.6" @click="goFunction()">Code Hub</span>
+    <span class="edit-code-editor-title" style="opacity: 0.6" @click="goFunction()">Code Hub</span>
     <div style="display: flex; align-items: center; gap: 10px; color: var(--text)">
       <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: 0.4">{{ showSaves ? "▴" : "▾" }}</span>
     </div>
@@ -8,9 +8,10 @@
 
   <!-- 保存列表面板 -->
   <div v-if="showSaves" class="saves-panel">
+    <!-- <div class="saves-panel-header" @click="goFunction()">Code Hub</div> -->
     <div class="saves-body" :style="{ height: savesPanelHeight + 'px' }">
       <div class="saves-toolbar">
-        <button class="saves-btn saves-toolbar-toggle" @click="toggleToolbar">{{ toolbarExpanded ? "折叠" : "展开" }}</button>
+        <button class="saves-btn" @click="toggleToolbar">{{ toolbarExpanded ? "折叠" : "展开" }}</button>
         <button class="saves-btn" @click="createNewBlank">新建</button>
         <button class="saves-btn" @click="requestUrlContent">URL</button>
         <button class="saves-btn" @click="triggerImport">导入</button>
@@ -2654,6 +2655,10 @@ onBeforeUnmount(() => {
   box-shadow: 0px 10px 10px -10px #919db695;
 }
 
+.saves-panel-header {
+  display: none;
+}
+
 .saves-toolbar {
   display: flex;
   align-items: center;
@@ -3369,7 +3374,7 @@ onBeforeUnmount(() => {
     transition: margin-left 0.2s ease;
   }
   .edit-code-editor.saves-open {
-    margin-left: var(--saves-width, 400px) !important;
+    display: none;
   }
 
   .saves-panel {
@@ -3381,11 +3386,28 @@ onBeforeUnmount(() => {
     margin: 0;
     border-radius: 0;
     box-shadow: none;
-    z-index: 996;
+    z-index: 1001;
+  }
+
+  .saves-panel-header {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 12px 16px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    opacity: 0.6;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .saves-body {
-    height: 100% !important; /* 覆盖内联拖拽高度，占满侧边栏 */
+    height: auto !important; /* 覆盖内联拖拽高度 */
+    flex: 1; /* 占满其余高度 */
+    min-height: 0;
+    margin-top: 100px;
     border-radius: 0;
   }
 
