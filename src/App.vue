@@ -231,7 +231,7 @@ onBeforeUnmount(() => {
   /* background-color: #00000044; */
   /* 顶部栏 */
   /* height: v-bind(tabHeight); */
-  z-index: 1000;
+  z-index: 9000;
 }
 
 .blurNavdiv_border {
