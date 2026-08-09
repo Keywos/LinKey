@@ -75,14 +75,9 @@ export default {
     },
     rollupOptions: {
       output: {
-        manualChunks: {
-          linkv: ["vant"],
-          linkterser: ["terser"],
-          linkjs: ["@/EditCode/lang-js"],
-        },
-        entryFileNames: "[name].[hash].js",
-        chunkFileNames: "linkjs/[name].[hash].js",
-        assetFileNames: "linkassets/[name].[hash].[ext]",
+        entryFileNames: "assets/[name].[hash].js",
+        chunkFileNames: "assets/[name].[hash].js",
+        assetFileNames: "assets/[name].[hash].[ext]",
       },
     },
   },
