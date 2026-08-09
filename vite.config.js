@@ -26,7 +26,6 @@ export default {
     VitePWA({
       strategies: "generateSW",
       registerType: "autoUpdate",
-
       manifest: {
         name: "App",
         short_name: "App",
@@ -42,10 +41,11 @@ export default {
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,json}"],
         navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/\.js$/, /\.css$/, /\.(png|jpg|svg|ico)$/],
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: ({ request }) => request.destination === "style" || request.destination === "image" || request.destination === "font",
-
             handler: "CacheFirst",
             options: {
               cacheName: "asset-cache",
