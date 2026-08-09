@@ -13,18 +13,19 @@ const BOOT_RECOVERY_KEY = "linkey:boot-recovery-attempted";
 const recoverFromStaleScripts = async () => {
   try {
     if (sessionStorage.getItem(BOOT_RECOVERY_KEY)) return false;
+
     sessionStorage.setItem(BOOT_RECOVERY_KEY, "1");
 
-    // if ("caches" in window) {
-    //   const cacheNames = await caches.keys();
-    //   await Promise.all(cacheNames.filter((name) => name.startsWith("js-cache")).map((name) => caches.delete(name)));
-    // }
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((reg) => reg.unregister()));
+    }
 
     if ("caches" in window) {
       const keys = await caches.keys();
       await Promise.all(keys.map((key) => caches.delete(key)));
     }
-    
+
     window.location.reload();
     return true;
   } catch (_) {
