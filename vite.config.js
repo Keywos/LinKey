@@ -26,6 +26,7 @@ export default {
     VitePWA({
       strategies: "generateSW",
       registerType: "autoUpdate",
+
       manifest: {
         name: "App",
         short_name: "App",
@@ -41,11 +42,10 @@ export default {
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,json}"],
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/assets\//, /^\/.*\.(js|css|map)$/i],
-        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: ({ request }) => request.destination === "style" || request.destination === "image" || request.destination === "font",
+
             handler: "CacheFirst",
             options: {
               cacheName: "asset-cache",
@@ -75,6 +75,11 @@ export default {
     },
     rollupOptions: {
       output: {
+        manualChunks: {
+          linkv: ["vant"],
+          linkterser: ["terser"],
+          linkjs: ["@/EditCode/lang-js"],
+        },
         entryFileNames: "assets/[name].[hash].js",
         chunkFileNames: "assets/[name].[hash].js",
         assetFileNames: "assets/[name].[hash].[ext]",
