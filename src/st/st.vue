@@ -2,17 +2,17 @@
   <div id="STOOL">
     <div class="toptittle">
       <a class="title">
-        <img class="topimg logo" :src="sg" />
+        <!-- <img class="topimg logo" :src="sg" /> -->
         Surge Tool
       </a>
     </div>
     <div class="kpage has-image">
       <div class="container">
         <div class="main">
-          <div class="sglogoh" @click="close4">
+          <!-- <div class="sglogoh" @click="close4">
             <img :src="sg" />
             <div class="image-bg"></div>
-          </div>
+          </div> -->
           <h1 class="name">
             <span class="titleh" @click="close5">Troubleshoot</span>
           </h1>
@@ -77,7 +77,7 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { sendReq } from "@/http/http.js";
-import sg from "/sg.png";
+// import sg from "/sg.png";
 import { showToast } from "vant";
 const version = import.meta.env.PACKAGE_VERSION;
 
