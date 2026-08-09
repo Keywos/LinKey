@@ -42,7 +42,8 @@ export default {
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,json}"],
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/assets\//],
+        navigateFallbackDenylist: [/^\/assets\//, /^\/.*\.(js|css|map)$/i],
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: ({ request }) => request.destination === "style" || request.destination === "image" || request.destination === "font",
