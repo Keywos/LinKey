@@ -46,7 +46,7 @@ export default {
           {
             urlPattern: ({ request }) => request.destination === "style" || request.destination === "image" || request.destination === "font",
 
-            handler: "CacheFirst",
+            handler: "StaleWhileRevalidate",
             options: {
               cacheName: "asset-cache",
             },
