@@ -41,7 +41,7 @@ export default {
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,json}"],
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/\.js$/, /\.css$/, /\.(png|jpg|svg|ico)$/],
+        navigateFallbackDenylist: [/^\/linkassets\//, /^\/linkjs\//, /\.js$/, /\.css$/],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
