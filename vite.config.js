@@ -72,7 +72,7 @@ export default {
       },
     },
     input: {
-      main: "src/splash.js",
+      main: "index.html",
     },
     rollupOptions: {
       output: {
