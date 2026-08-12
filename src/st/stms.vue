@@ -87,17 +87,10 @@
     </van-field>
   </van-cell-group>
 
-  <div style="height: 12px"></div>
-  <van-cell-group v-if="!autobm && testAverageRows.length" inset title="">
-     <span v-if="app" style="opacity: 0.35; font-size: 12px; padding-bottom: 20px; margin-top: 12px; display: flex; justify-content: center; height: 10px">
-      Web:{{ version }} &nbsp;{{ devices }}&nbsp; {{ app }}
-    </span>
-      <span v-if="overt" style="opacity: 0.35; font-size: 13px; padding-bottom: 20px; margin-top: 12px; display: flex; justify-content: center; height: 10px">
-      {{ overt }}
-    </span>
-    <van-field v-for="item in testAverageRows" :key="item.name" :label="item.name" :placeholder="`平均: ${item.value}ms`" readonly></van-field>
-  </van-cell-group>
-  <br/>
+  <div style="height: 20px"></div>
+
+  <div ref="chartContainer" class="chartContainerMs"></div>
+  <br />
   <van-cell-group id="netmstest" v-if="sliceUrl.length > 0" inset title="">
     <span v-if="app" style="opacity: 0.35; font-size: 12px; padding-bottom: 20px; margin-top: 12px; display: flex; justify-content: center; height: 10px">
       Web:{{ version }} &nbsp;{{ devices }}&nbsp; {{ app }}
@@ -110,38 +103,18 @@
   </van-cell-group>
 
   <br />
+
+  <van-cell-group v-if="!autobm && testAverageRows.length" inset title="">
+    <span v-if="app" style="opacity: 0.35; font-size: 12px; padding-bottom: 20px; margin-top: 12px; display: flex; justify-content: center; height: 10px">
+      Web:{{ version }} &nbsp;{{ devices }}&nbsp; {{ app }}
+    </span>
+    <span v-if="overt" style="opacity: 0.35; font-size: 13px; padding-bottom: 20px; margin-top: 12px; display: flex; justify-content: center; height: 10px">
+      {{ overt }}
+    </span>
+    <van-field v-for="item in testAverageRows" :key="item.name" :label="item.name" :placeholder="`平均: ${item.value}ms`" readonly></van-field>
+  </van-cell-group>
+
   <br />
-  <div class="infop">
-    <p>
-      <b>关于 结果</b>
-    </p>
-    <p>
-      第一位数值
-      <b>浏览器发送请求</b>
-      至各App响应并开始处理脚本的时间
-    </p>
-
-    <p v-if="!autobm">第二位数值 脚本处理加解密的时间</p>
-    <div v-else>
-      <p>
-        {{ autobms ? "第二位数值 为请求 Body 大小" : "第二位数值 为解密耗时" }}
-      </p>
-      <p>
-        {{ autobms ? "第三位数值 脚本处理完毕后 浏览器接收各 App 传回数据的响应时间" : "第三位数值 为加密耗时" }}
-      </p>
-    </div>
-    <p v-if="!autobms">
-      第{{ autobm ? "四" : "三" }}位数值 脚本处理完毕后
-      <b>浏览器接收</b>
-      各App传回数据的响应时间
-    </p>
-
-    <p v-if="!autobm">
-      <b>压力选项</b>
-      涉及到各种循环、对象方法、生成对象长度、赋值、加密解密等操作 是一个综合的测试
-    </p>
-    <p>- 步进选择器内数值可以点击输入</p>
-  </div>
 
   <br />
   <br />
@@ -171,14 +144,17 @@
 }
 
 .chartContainerMs {
-  width: 97%;
-  height: 500px;
-  margin-top: 0px;
-  padding-left: 3%;
+  width: 96%;
+  height: 220px;
+  /* margin: -20px; */
+  padding-top: 12px;
+  padding-left: 1%;
+  padding-right: 2%;
+  /* padding-bottom: 10px; */
 }
 </style>
 <script setup>
-import { ref, onBeforeUnmount, watchEffect } from "vue";
+import { ref, onMounted, onBeforeUnmount, watchEffect } from "vue";
 
 import { sendReq } from "@/http/http.js";
 import { showToast } from "vant";
@@ -231,6 +207,96 @@ watchEffect(() => {
 });
 const devices = ref("");
 
+const chartContainer = ref(null);
+const chartPoints = ref([]);
+let msChart = null;
+let chartScriptPromise = null;
+
+async function ensureMsChart() {
+  if (window.echarts) return window.echarts;
+  if (!chartScriptPromise) {
+    const script = document.createElement("script");
+    script.src = "echarts.mins.js";
+    chartScriptPromise = new Promise((resolve, reject) => {
+      script.onload = () => resolve(window.echarts);
+      script.onerror = reject;
+    });
+    document.head.appendChild(script);
+  }
+  return chartScriptPromise;
+}
+
+function resetMsChart() {
+  chartPoints.value = [];
+  if (msChart) msChart.setOption({ series: [{ data: [] }] });
+}
+
+function appendMsChartPoint(value) {
+  const ms = Number(value);
+  if (!Number.isFinite(ms)) return;
+  chartPoints.value.push(ms);
+  if (chartPoints.value.length > 500) chartPoints.value.shift();
+  if (msChart) {
+    msChart.setOption({
+      // xAxis: { data: chartPoints.value.map((_, index) => index + 1) },
+      series: [{ data: chartPoints.value }],
+    });
+  }
+}
+
+onMounted(async () => {
+  try {
+    const echarts = await ensureMsChart();
+    if (!chartContainer.value) return;
+    msChart = echarts.init(chartContainer.value);
+    msChart.setOption({
+      animation: false,
+      grid: { left: 42, right: 16, top: 20, bottom: 30 },
+      // tooltip: { trigger: "axis", valueFormatter: (value) => `${value}ms` },
+      xAxis: {
+        type: "category",
+        data: [],
+        show: false,
+      },
+      yAxis: {
+        type: "value",
+        name: "",
+        min: 0,
+        axisLine: {
+          show: false,
+        },
+        axisTick: {
+          show: false,
+        },
+        splitLine: {
+          lineStyle: {
+            color: "#cccccc40",
+            type: "dotted",
+          },
+        },
+      },
+      series: [
+        {
+          name: " ",
+          type: "line",
+          // smooth: true,
+          showSymbol: false,
+          data: [0],
+        },
+      ],
+    });
+  } catch (error) {
+    console.warn("ECharts 加载失败", error);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (msChart) {
+    msChart.dispose();
+    msChart = null;
+  }
+});
+
 var tt1 = "";
 const GetMsPromise = async () => {
   if (islodingA.value || isloding.value || islodingAuto.value) {
@@ -249,6 +315,8 @@ const GetMsPromise = async () => {
 
   sliceUrl.value = arrayOfObjects;
   resetTestAverages();
+  resetMsChart();
+  resetMsChart();
   totalDuration = 0;
   completedRequests = 0;
   isCancelled = false;
@@ -273,6 +341,8 @@ const GetMs = async () => {
 
   sliceUrl.value = [];
   resetTestAverages();
+  resetMsChart();
+  resetMsChart();
 
   totalDuration = 0;
   completedRequests = 0;
@@ -469,6 +539,7 @@ const GetMsOne = async (isAutoTest = false) => {
             resa = JSON.parse(response.headers.get("ntconfig"));
             resa.getEnvInfo && getdev(resa.getEnvInfo);
             const gt = Date.now() - t1;
+            appendMsChartPoint(gt);
             if (rems.value > 1 || autobm.value) {
               totalDuration += gt;
               completedRequests++;
@@ -511,6 +582,8 @@ const GetMsOne = async (isAutoTest = false) => {
         }
 
         const gt = parseInt(gms.slice(0, -2), 10);
+        appendMsChartPoint(Date.now() - t1);
+
         updateTestAverages(res.data.test);
 
         if (res?.data?.device && !isapp) {

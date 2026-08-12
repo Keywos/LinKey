@@ -14,5 +14,5 @@ export const apis = {
   DouYin: "https://www.douyin.com/favicon.ico",
   YouTube: "https://www.youtube.com/favicon.ico",
   Openai: "https://chat.openai.com/favicon.ico",
-  test: "test",
+  TEST: "test",
 };
