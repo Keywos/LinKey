@@ -46,7 +46,7 @@ export default {
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
-            urlPattern: ({ request }) => ["style", "image", "font", "manifest"].includes(request.destination),
+            urlPattern: ({ url, request }) => url.origin === self.location.origin && ["style", "image", "font", "manifest"].includes(request.destination),
             handler: "StaleWhileRevalidate",
             options: {
               cacheName: "asset-cache",
