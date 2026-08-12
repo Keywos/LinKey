@@ -823,7 +823,7 @@ function pingRuleDomain(domain) {
     image.onerror = () => {
       finish(Date.now() - start, true);
     };
-    image.src = `https://${domain}/favicon.ico?nfi=${start}`;
+    image.src = `https://${start}.${domain}/favicon.ico`;
   });
 }
 
