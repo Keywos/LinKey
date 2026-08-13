@@ -100,32 +100,42 @@
     </div>
   </div>
   <van-cell-group inset title="Ping 设置">
+    <van-cell center title="请求次数" label="点击右边数字可以输入">
+      <van-stepper v-model="Pcs" button-size="22" step="50" min="0" />
+    </van-cell>
+
+    <van-cell center title="RULE 并发次数" label="">
+      <van-stepper v-model="RuleConcurrency" button-size="22" step="3" min="1" :max="200" />
+    </van-cell>
+
+    <van-cell center title="普通 Ping 并发次数" label="">
+      <van-stepper v-model="PingConcurrency" button-size="22" step="3" min="1" :max="200" />
+    </van-cell>
+    <van-cell center title="超时时间 [ms]">
+      <van-stepper v-model="Timeouts" button-size="22" step="50" min="50" />
+    </van-cell>
+
+    <van-cell class="van-cell-sw" center title="测试结束后再更新图表" inset label="">
+      <template #right-icon>
+        <van-switch v-model="deferChartUpdate" />
+      </template>
+    </van-cell>
+
     <van-cell title="模块地址" @click="copyModuleUrl()" is-link />
+    <van-cell title="RULE 测试地址" @click="copyRuleUrl()" is-link />
     <van-cell class="van-cell-sw" center title="使用辅助 API Ping" inset label="需要安装上面的辅助模块">
       <template #right-icon>
         <van-switch v-model="apiPing" @change="toggleApiModule(apiPing)" />
       </template>
     </van-cell>
+
     <van-cell class="van-cell-sw" center title="请求 body 加入负载" inset label="需要安装上面的辅助模块">
       <template #right-icon>
         <van-switch v-model="is_body" />
       </template>
     </van-cell>
-    <van-cell center title="请求次数" label="点击右边数字可以输入">
-      <van-stepper v-model="Pcs" button-size="22" step="50" min="0" />
-    </van-cell>
-    <van-cell title="RULE 测试地址" @click="copyRuleUrl()" is-link />
-    <van-cell center title="RULE 并发次数" label="RULE 模式同时请求数量">
-      <van-stepper v-model="RuleConcurrency" button-size="22" step="3" min="1" :max="200" />
-    </van-cell>
-
-    <van-cell center title="普通 Ping 并发次数" label="普通 Ping 同时请求数量">
-      <van-stepper v-model="PingConcurrency" button-size="22" step="3" min="1" :max="200" />
-    </van-cell>
-    <van-cell center title="超时时间 [ms]">
-      <van-stepper v-model="Timeouts" button-size="22" step="200" min="200" />
-    </van-cell>
   </van-cell-group>
+  <br />
   <van-checkbox-group v-model="checkedSet" style="padding-bottom: 60px">
     <van-cell-group inset title="Ping 选项设置">
       <van-cell v-for="(item, index) in listSet" clickable :key="item" :title="item" @click="toggleCheckbox(index)">
@@ -173,9 +183,9 @@ const CHART_FLUSH_INTERVAL = 120;
 // 单个 series 最大原始数据
 const MAX_RAW_POINTS = 5000;
 // 每次超过上限以后裁掉多少
-const RAW_POINTS_TRIM_SIZE = 500;
+const RAW_POINTS_TRIM_SIZE = 100;
 // ECharts 最终显示多少点
-const RENDER_THRESHOLD = 999;
+const RENDER_THRESHOLD = 1000;
 // RULE 最大并发
 const MAX_RULE_CONCURRENCY = 200;
 
@@ -194,6 +204,8 @@ const hasEcharts = ref(false);
 const isloding = ref(false);
 const is_body = ref(false);
 const apiPing = ref(localStorage.getItem("setApiPing") == 1 || false);
+// 测试结束后再更新 TuA 与曲线，减少测试过程中 UI/ECharts 对测速精度的影响
+const deferChartUpdate = ref(localStorage.getItem("deferChartUpdate") == "1");
 const Pcs = ref(Number(localStorage.getItem("getc")) || 50);
 const Timeouts = ref(Number(localStorage.getItem("timeouts")) || 1000);
 
@@ -215,9 +227,8 @@ let seriesStartIndex = new Array(chartCount.value).fill(0);
 let first = new Array(chartCount.value).fill("");
 let after = new Array(chartCount.value).fill("");
 let pingStats = Array.from({ length: chartCount.value }, () => ({
-  sum: 0,
-  min: Infinity,
-  max: -Infinity,
+  min: 0,
+  max: 0,
   count: 0,
 }));
 let ruleStats = ref({
@@ -229,9 +240,8 @@ let ruleStats = ref({
 });
 
 let topStats = {
-  sum: 0,
-  min: Infinity,
-  max: -Infinity,
+  min: 0,
+  max: 0,
   count: 0,
 };
 const MAX = ref("--");
@@ -239,7 +249,9 @@ const AVG = ref("--");
 const MIN = ref("--");
 const Namec = ref("--");
 const Nlength = ref(1);
-
+function sleep() {
+  return new Promise((resolve) => setTimeout(resolve, 1));
+}
 const listy = [
   {
     icon: wechat,
@@ -417,8 +429,6 @@ let chartFlushTimer = null;
 let chartFlushPending = false;
 
 let resizeTimer = null;
-
-let globalMax = -Infinity;
 let seriesRawLen = new Array(chartCount.value).fill(0);
 
 function appendChartPoint(n, value) {
@@ -706,9 +716,8 @@ function addChartSlot() {
   after.push("");
 
   pingStats.push({
-    sum: 0,
-    min: Infinity,
-    max: -Infinity,
+    min: 0,
+    max: 0,
     count: 0,
   });
 
@@ -756,22 +765,15 @@ const clearChart = (n) => {
   downsampleCache.delete(n);
   seriesRawLen[n] = 0;
   pingStats[n] = {
-    sum: 0,
-    min: Infinity,
-    max: -Infinity,
+    min: 0,
+    max: 0,
     count: 0,
   };
   TuA.value[n] = "";
   after[n] = "";
   dev.value[n] = n;
   dirtySeries.delete(n);
-  globalMax = -Infinity;
-  for (const stats of pingStats) {
-    if (Number.isFinite(stats.max) && stats.max > globalMax) {
-      globalMax = stats.max;
-    }
-  }
-  MAX.value = Number.isFinite(globalMax) ? Math.floor(globalMax) : "--";
+  MAX.value = "--";
   rebuildChartSeries();
 };
 const listArr = {
@@ -839,16 +841,71 @@ async function updateRuleApp(n) {
   }
 }
 
+// ========== 节流 UI 更新（关闭 defer 时用）==========
+const UI_UPDATE_INTERVAL = 200; // 可按手感调 120~300
+let lastUiUpdateAt = 0;
+
+function maybeUpdateUi(n, payload, force = false) {
+  const now = Date.now();
+  if (!force && now - lastUiUpdateAt < UI_UPDATE_INTERVAL) {
+    return;
+  }
+  lastUiUpdateAt = now;
+
+  const { avg, min, max, total, name, text } = payload;
+  AVG.value = Number.isFinite(avg) ? avg.toFixed(2) : "--";
+  MIN.value = Number.isFinite(min) ? Math.floor(min) : "--";
+  MAX.value = Number.isFinite(max) ? Math.floor(max) : "--";
+  Namec.value = name || "--";
+  Nlength.value = total || 0;
+  if (text != null) {
+    TuA.value[n] = text;
+  }
+}
+
+function applyPendingPointsToChart(n, pendingPoints) {
+  if (!pendingPoints.length) return;
+  chartData[n] = pendingPoints.slice();
+  seriesStartIndex[n] = 0;
+  if (chartData[n].length > MAX_RAW_POINTS) {
+    const excess = chartData[n].length - MAX_RAW_POINTS;
+    chartData[n].splice(0, excess);
+    // 与 appendChartPoint 裁剪策略对齐时可改为：
+    // while (chartData[n].length > MAX_RAW_POINTS) {
+    //   chartData[n].splice(0, RAW_POINTS_TRIM_SIZE);
+    //   seriesStartIndex[n] += RAW_POINTS_TRIM_SIZE;
+    // }
+  }
+  downsampleCache.delete(n);
+}
+
+// ========== RULE 模式 ==========
 async function runRulePing(n) {
   if (chartRunning.value[n]) {
     chartRunning.value[n] = false;
     isGet.value[n] = false;
     return;
   }
+
   const concurrency = Math.min(MAX_RULE_CONCURRENCY, Math.max(1, Math.floor(Number(RuleConcurrency.value) || 20)));
   RuleConcurrency.value = concurrency;
+
   chartRunning.value[n] = true;
   isGet.value[n] = true;
+
+  // 热路径用普通对象，避免每条结果写 ref
+
+  let min = 0;
+  let max = 0;
+  let reject = 0;
+  let total = 0;
+  const pendingPoints = [];
+
+  chartData[n] = [];
+  seriesStartIndex[n] = 0;
+  downsampleCache.delete(n);
+  lastUiUpdateAt = 0;
+
   ruleStats.value = {
     avg: 0,
     min: 0,
@@ -856,77 +913,74 @@ async function runRulePing(n) {
     reject: 0,
     total: 0,
   };
-  chartData[n] = [];
-  seriesStartIndex[n] = 0;
-  downsampleCache.delete(n);
 
-  let sum = 0;
-  let min = Infinity;
-  let max = -Infinity;
-  let reject = 0;
-  let total = 0;
   try {
     const domains = await loadRuleDomains();
     let cursor = 0;
+
     const worker = async () => {
       while (chartRunning.value[n]) {
         const index = cursor++;
         if (index >= domains.length) {
           return;
         }
+
         const result = await pingRuleDomain(domains[index]);
         if (!chartRunning.value[n]) {
           return;
         }
-
+        const ms = result.ms;
         total++;
-        sum += result.ms;
-        if (result.ms < min) {
-          min = result.ms;
+        if (result.reject) reject++;
+        pendingPoints.push(ms);
+        if (!deferChartUpdate.value) {
+          appendChartPoint(n, ms);
+          scheduleChartFlush(n);
         }
-        if (result.ms > max) {
-          max = result.ms;
-        }
-        if (result.reject) {
-          reject++;
-        }
-        const avg = sum / total;
-        ruleStats.value = {
-          avg,
-          min,
-          max,
-          reject,
-          total,
-        };
-        AVG.value = avg.toFixed(1);
-        MIN.value = min.toFixed(0);
-        MAX.value = max.toFixed(0);
-        Namec.value = "RULE";
-        Nlength.value = total;
-        appendChartPoint(n, result.ms);
-
-        scheduleChartFlush(n);
-        TuA.value[n] = `并发: ${RuleConcurrency.value}　Avg: ${avg.toFixed(1)}　Min/Max: ${min.toFixed(0)}/${max.toFixed(0)}　REJECT: ${reject}/${total}`;
+        await sleep();
       }
     };
+
     const workerCount = Math.min(concurrency, domains.length);
-    await Promise.all(
-      Array.from(
-        {
-          length: workerCount,
-        },
-        worker,
-      ),
-    );
+    await Promise.all(Array.from({ length: workerCount }, worker));
   } catch (error) {
     showToast(String(error));
   } finally {
+    max = Math.max(...pendingPoints);
+    min = Math.min(...pendingPoints);
+
     await updateRuleApp(n);
     chartRunning.value[n] = false;
     isGet.value[n] = false;
+
+    if (deferChartUpdate.value && pendingPoints.length > 0) {
+      applyPendingPointsToChart(n, pendingPoints);
+    }
+    const avg = (pendingPoints.reduce((acc, val) => acc + val, 0) / pendingPoints.length).toFixed(2);
+    ruleStats.value = {
+      avg,
+      min,
+      max,
+      reject,
+      total,
+    };
+    maybeUpdateUi(
+      n,
+      {
+        avg,
+        min,
+        max,
+        total,
+        name: "RULE",
+        text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(0)}/${max.toFixed(0)}　` + `REJECT: ${reject}/${total}`,
+      },
+      true,
+    );
+    scheduleChartFlush(n);
   }
 }
 
+// ========== 普通图表 Ping ==========
 const runChartPing = async (io, n) => {
   if (io === "RULE") {
     await runRulePing(n);
@@ -938,7 +992,6 @@ const runChartPing = async (io, n) => {
     return;
   }
 
-  // 当前图表正在运行：停止
   if (chartRunning.value[n]) {
     chartRunning.value[n] = false;
     isGet.value[n] = false;
@@ -948,146 +1001,107 @@ const runChartPing = async (io, n) => {
   hasEcharts.value = false;
 
   const url = listArr[io];
-
   const concurrency = Math.min(MAX_RULE_CONCURRENCY, Math.max(1, Math.floor(Number(PingConcurrency.value) || 1)));
-  // 同步回写，避免 UI 输入超过最大值
   PingConcurrency.value = concurrency;
 
   chartRunning.value[n] = true;
   isGet.value[n] = true;
 
-  pingStats[n] = {
-    sum: 0,
-    min: Infinity,
-    max: -Infinity,
-    count: 0,
-  };
+  // 热路径普通变量
+
+  let min = 0;
+  let max = 0;
+  let total = 0;
+  let avg = 0;
+  const pendingPoints = [];
+  let cursor = 0;
+  const totalRequests = Math.max(0, Math.floor(Number(Pcs.value) || 0));
+  const ts = Date.now();
+  let elapsed = 0;
 
   chartData[n] = [];
   seriesStartIndex[n] = 0;
   downsampleCache.delete(n);
-
   first[n] = "";
+  after[n] = 0;
+  lastUiUpdateAt = 0;
 
-  // 当前测试总次数
-  const totalRequests = Math.max(0, Math.floor(Number(Pcs.value) || 0));
-
-  // 增量统计
-  let sum = 0;
-  let min = Infinity;
-  let max = -Infinity;
-  let total = 0;
-
-  // 已分配给 worker 的任务编号
-  let cursor = 0;
-
-  // 整个测试开始时间
-  const ts = Date.now();
+  // 结束时再写回，避免热路径写 pingStats ref 结构
+  pingStats[n] = {
+    min: 0,
+    max: 0,
+    count: 0,
+  };
 
   try {
     const worker = async () => {
       while (chartRunning.value[n]) {
         const index = cursor++;
-
-        // 总请求次数达到 Pcs
         if (index >= totalRequests) {
           return;
         }
-
         let x;
-
         try {
-          const requestStart = Date.now();
-
           x = await fetchPing(url, io, n);
-
-          // 停止后，当前已经返回的请求不再进入统计
-          if (!chartRunning.value[n]) {
-            return;
-          }
-
-          void requestStart;
+          if (!chartRunning.value[n]) return;
         } catch {
-          if (!chartRunning.value[n]) {
-            return;
-          }
-
+          if (!chartRunning.value[n]) return;
           x = Number(Timeouts.value);
         }
-
-        // O(1) 增量统计
         total++;
-        sum += x;
-
-        if (x < min) {
-          min = x;
+        pendingPoints.push(x);
+        if (!deferChartUpdate.value) {
+          elapsed = Date.now() - ts;
+          after[n] = elapsed;
+          appendChartPoint(n, x);
+          scheduleChartFlush(n);
         }
-
-        if (x > max) {
-          max = x;
-        }
-
-        const avg = sum / total;
-
-        pingStats[n] = {
-          sum,
-          min,
-          max,
-          count: total,
-        };
-
-        // 图表数据
-        appendChartPoint(n, x);
-        scheduleChartFlush(n);
-
-        // 顶部统计
-        AVG.value = Math.floor(avg);
-        MIN.value = Math.floor(min);
-        MAX.value = Math.floor(max);
-
-        Namec.value = io;
-        Nlength.value = total;
-
-        // 总耗时
-        const elapsed = Date.now() - ts;
-
-        after[n] = elapsed;
-
-        TuA.value[n] =
-          `并发: ${concurrency}　Avg: ${Math.floor(avg)}　` +
-          `Min/Max: ${Math.floor(min)}/${Math.floor(max)}　` +
-          `${total}次 [` +
-          `${formatDuration(elapsed)}/` +
-          `${(elapsed / total).toFixed(1)}ms]`;
-
-        // 全局 MAX
-        if (x > globalMax) {
-          globalMax = x;
-          MAX.value = Math.floor(x);
-
-          if (option && option.yAxis && globalMax > Number(option.yAxis.max)) {
-            scheduleChartFlush(n);
-          }
-        }
+        await sleep();
       }
     };
 
-    // 实际 worker 数量不能超过请求总数
     const workerCount = Math.min(concurrency, totalRequests);
-
-    await Promise.all(
-      Array.from(
-        {
-          length: workerCount,
-        },
-        worker,
-      ),
-    );
+    await Promise.all(Array.from({ length: workerCount }, worker));
   } catch (error) {
     showToast(String(error));
   } finally {
     chartRunning.value[n] = false;
     isGet.value[n] = false;
+    max = Math.max(...pendingPoints);
+    min = Math.min(...pendingPoints);
+
+    avg = (pendingPoints.reduce((acc, val) => acc + val, 0) / pendingPoints.length).toFixed(2);
+    pingStats[n] = {
+      min,
+      max,
+      count: total,
+    };
+
+    if (deferChartUpdate.value && pendingPoints.length > 0) {
+      applyPendingPointsToChart(n, pendingPoints);
+    }
+
+    if (total > 0) {
+      elapsed = after[n] || Date.now() - ts;
+      maybeUpdateUi(
+        n,
+        {
+          avg,
+          min,
+          max,
+          total,
+          name: io,
+          text:
+            `并发: ${concurrency}　Avg: ${avg}　` +
+            `Min/Max: ${Math.floor(min)}/${Math.floor(max)}　` +
+            `${total}次 [` +
+            `${formatDuration(elapsed)}/` +
+            `${(elapsed / total).toFixed(1)}ms]`,
+        },
+        true,
+      );
+      scheduleChartFlush(n);
+    }
   }
 };
 
@@ -1108,7 +1122,7 @@ function formatDuration(e) {
 const cardRunning = ref(new Set());
 const runCardPing = async (item, index) => {
   hasEcharts.value = true;
-
+  let pinglist = [];
   if (cardRunning.value.has(index)) {
     cardRunning.value.delete(index);
     activeIndex.value = null;
@@ -1118,9 +1132,6 @@ const runCardPing = async (item, index) => {
   activeIndex.value = index;
   try {
     topStats = {
-      sum: 0,
-      min: Infinity,
-      max: -Infinity,
       count: 0,
     };
     Namec.value = item.name;
@@ -1136,28 +1147,27 @@ const runCardPing = async (item, index) => {
       if (!cardRunning.value.has(index)) {
         break;
       }
-      topStats.sum += x;
+      pinglist.push(x);
       topStats.count++;
       Nlength.value = topStats.count;
-      if (x < topStats.min) {
-        topStats.min = x;
-      }
-      if (x > topStats.max) {
-        topStats.max = x;
-      }
-      item.ms = x;
-      AVG.value = Math.floor(topStats.sum / topStats.count);
-      MIN.value = Math.floor(topStats.min);
-      MAX.value = Math.floor(topStats.max);
 
+      item.ms = x;
+      AVG.value = (pinglist.reduce((acc, val) => acc + val, 0) / pinglist.length).toFixed(2);
+      MIN.value = Math.floor(Math.min(...pinglist));
+      MAX.value = Math.floor(Math.max(...pinglist));
       if (!chartRunning.value[0]) {
         appendChartPoint(0, x);
-        scheduleChartFlush(0);
+        if (!deferChartUpdate.value) {
+          scheduleChartFlush(0);
+        }
       }
     }
   } finally {
     cardRunning.value.delete(index);
     activeIndex.value = null;
+    if (deferChartUpdate.value && !chartRunning.value[0] && (chartData[0]?.length || 0) > 0) {
+      scheduleChartFlush(0);
+    }
   }
 };
 
@@ -1316,6 +1326,10 @@ watch(Pcs, persistSettings);
 watch(Timeouts, persistSettings);
 watch(checkedSet, persistSettings, {
   deep: true,
+});
+
+watch(deferChartUpdate, (v) => {
+  localStorage.setItem("deferChartUpdate", v ? "1" : "0");
 });
 
 watch(RuleConcurrency, (value) => {
