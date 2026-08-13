@@ -823,13 +823,14 @@ function pingRuleDomain(domain) {
     image.onerror = () => {
       finish(Date.now() - start, true);
     };
-    image.src = `https://${start}.${domain}/favicon.ico`;
+    image.src = `https://td${start}.${domain}/favicon.ico`;
   });
 }
 
 async function updateRuleApp(n) {
   try {
-    const res = await sendReq("get", "https://surgetool.com/api/ping?url=test&name=TEST&ts=" + Date.now() + "&timeout=200", {});
+    const ts = Date.now();
+    const res = await sendReq("get", `https://getapp${ts}.linkey.com/api/ping?url=test&name=TEST&ts=${ts}&timeout=200`, {});
     if (res?.data?.app !== undefined) {
       dev.value[n] = res.data.app;
     }
@@ -1192,7 +1193,7 @@ async function refreshAllCards() {
 const toggleApiModule = async (enabled) => {
   if (enabled) {
     try {
-      const res = await Promise.race([sendReq("GET", "https://surgetool.com/api/ping?url=test"), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 500))]);
+      const res = await Promise.race([sendReq("GET", "https://test.linkey.com/api/ping?url=test"), new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 500))]);
       if (res?.data?.sp) {
         showToast("检测到 SPing 模块, 当前为代理APP请求");
         localStorage.setItem("setApiPing", 1);
@@ -1233,7 +1234,7 @@ const fetchPing = async (url, name, n) => {
       if (is_body.value) {
         res = await sendReq(
           "post",
-          "https://surgetool.com/api/ping?url=" + encodeURIComponent(iu) + "&name=" + encodeURIComponent(name) + "&ts=" + tss + "&timeout=" + Timeouts.value,
+          `https://pingbody${tss}.linkey.com/api/ping?url=${encodeURIComponent(iu)}&name=${encodeURIComponent(name)}&ts=${tss}&timeout=${Timeouts.value}`,
           undefined,
           JSON.stringify({
             ts: tss,
@@ -1242,7 +1243,7 @@ const fetchPing = async (url, name, n) => {
           }),
         );
       } else {
-        res = await sendReq("get", "https://surgetool.com/api/ping?url=" + encodeURIComponent(iu) + "&name=" + encodeURIComponent(name) + "&ts=" + tss + "&timeout=" + Timeouts.value);
+        res = await sendReq("get", `https://ping${tss}.linkey.com/api/ping?url=${encodeURIComponent(iu)}&name=${encodeURIComponent(name)}&ts=${tss}&timeout=${Timeouts.value}`);
       }
 
       // 保留辅助模块返回的 app，只是不再使用它返回的 ms

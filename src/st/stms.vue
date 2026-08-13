@@ -528,8 +528,9 @@ const GetMsOne = async (isAutoTest = false) => {
       if (!islodingA.value) sliceUrl.value.push("...");
       const binaryData = resNewBody(largeJSON);
       let resa,
-        od = autobms.value ? "onlydata/_b" + bmsize.value : "";
-      return await fetch("https://surgetool.com/api/ping/binary/" + od + "_c" + ios + "?all=" + all + "_t" + Date.now(), {
+        od = autobms.value ? "onlydata/_b" + bmsize.value : "",
+        tss = Date.now();
+      return await fetch(`https://binarydata${tss}.linkey.com/api/ping/binary/${od}_c${ios}?all=${all}_t${tss}`, {
         method: "POST",
         body: binaryData,
       })
@@ -567,11 +568,8 @@ const GetMsOne = async (isAutoTest = false) => {
         });
     } else {
       if (!islodingA.value) sliceUrl.value.push("....");
-
-      let res = await sendReq("GET", "https://surgetool.com/api/test/" + ios + "?all=" + all + "&num=" + yl.value);
-
+      let res = await sendReq("GET", `https://ts${t1}.linkey.com/api/test/${ios}?all=${all}&num=${yl.value}`);
       if (currentSession !== requestSession || isCancelled) return;
-
       if (res?.data["耗时"]) {
         const t2 = Date.now() - res.data.TS || "--";
         const gms = res.data["耗时"];

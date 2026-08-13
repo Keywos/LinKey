@@ -1449,9 +1449,10 @@ const SCRIPT_HUB_LPX_URL_PATTERN = /.+pages\.dev.+\.lpx/;
 const SCRIPT_HUB_USER_AGENT = "script-hub/1.0.0";
 
 function getForwardRequestUrl(url, userAgent = "") {
-  if (!userAgent) return `https://surgetool.com/api/fetch?url=${url}`;
+  const ts = Date.now();
+  if (!userAgent) return `https://fetch${ts}.linkey.com/api/fetch?url=${url}`;
   const linkeyHeaders = encodeURIComponent(JSON.stringify({ "User-Agent": userAgent }));
-  return `https://surgetool.com/api/fetch?url=${url}&linkeyheaders=${linkeyHeaders}`;
+  return `https://fetch${ts}.linkey.com/api/fetch?url=${url}&linkeyheaders=${linkeyHeaders}`;
 }
 
 async function refreshUrlItem(item) {

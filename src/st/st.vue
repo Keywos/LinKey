@@ -144,7 +144,7 @@ const close5 = () => {
 };
 const fetchData = async () => {
   try {
-    let res = await sendReq("GET", "https://surgetool.com/getkey");
+    let res = await sendReq("GET", "https://st.linkey.com/getkey");
     if (res.data?.VERSION.toString()[0] > 4) {
       res = res.data;
       geting.value = res.ALL_NUM;

@@ -212,7 +212,8 @@ if (typeof $httpClient === "undefined" && typeof self !== "undefined") {
       }
 
       function makeProxyUrl(u) {
-        var pu = "https://surgetool.com/api/fetch?url=" + encodeURIComponent(u);
+        const ts = Date.now();
+        var pu = `https://fetch${ts}.linkey.com/api/fetch?url=` + encodeURIComponent(u);
         if (headers && Object.keys(headers).length) {
           pu += "&linkeyheaders=" + encodeURIComponent(JSON.stringify(headers));
         }
@@ -337,7 +338,8 @@ if (typeof $task === "undefined" && typeof self !== "undefined") {
             });
         }
         function proxyReq() {
-          var pu = "https://surgetool.com/api/fetch?url=" + encodeURIComponent(u);
+          const ts = Date.now();
+          var pu = `https://fetch${ts}.linkey.com/api/fetch?url=` + encodeURIComponent(u);
           if (hdrs && Object.keys(hdrs).length) pu += "&headers=" + encodeURIComponent(JSON.stringify(hdrs));
           return fetch(pu, { method: "GET" }).then(function (r) {
             return r;
