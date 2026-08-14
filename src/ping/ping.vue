@@ -114,7 +114,9 @@
     <van-cell center title="超时时间 [ms]">
       <van-stepper v-model="Timeouts" button-size="22" step="50" min="50" />
     </van-cell>
-
+    <van-cell center title="刷新间隔 [ms]">
+      <van-stepper v-model="ChartInterval" button-size="22" step="50" min="10" />
+    </van-cell>
     <van-cell class="van-cell-sw" center title="测试结束后再更新图表" inset label="">
       <template #right-icon>
         <van-switch v-model="deferChartUpdate" />
@@ -181,8 +183,7 @@ const { screenWidth } = onWidth();
 const version = import.meta.env.PACKAGE_VERSION;
 
 const MAX_CHARTS = 10;
-// 图表刷新间隔。
-const CHART_FLUSH_INTERVAL = 200;
+
 // 单个 series 最大原始数据
 const MAX_RAW_POINTS = 5000;
 // 每次超过上限以后裁掉多少
@@ -203,6 +204,8 @@ const copyRuleUrl = async () => {
   showToast("已拷贝 RULE 地址");
 };
 const chartCount = ref(Math.min(Number(localStorage.getItem("chartCount")) || 4, MAX_CHARTS));
+// 图表刷新间隔。
+
 const hasEcharts = ref(false);
 const isloding = ref(false);
 const is_body = ref(false);
@@ -213,6 +216,7 @@ const deferChartUpdate = ref(localStorage.getItem("deferChartUpdate") == "1");
 const tsDomain = ref(localStorage.getItem("tsDomain") == "1");
 const Pcs = ref(Number(localStorage.getItem("getc")) || 50);
 const Timeouts = ref(Number(localStorage.getItem("timeouts")) || 1000);
+const ChartInterval = ref(Number(localStorage.getItem("ChartInterval")) || 200);
 
 const RuleConcurrency = ref(Math.min(MAX_RULE_CONCURRENCY, Math.max(1, Number(localStorage.getItem("ruleConcurrency")) || 4)));
 
@@ -570,7 +574,7 @@ function scheduleChartFlush(n) {
     chartFlushTimer = null;
     chartFlushPending = false;
     flushChart();
-  }, CHART_FLUSH_INTERVAL);
+  }, ChartInterval.value);
 }
 
 function rebuildChartSeries() {
@@ -800,11 +804,11 @@ const listArr = {
   TEST: "test",
   RULE: "rule",
 };
-const ruleDomains = ref([]);
-async function loadRuleDomains() {
-  ruleDomains.value = ruleDomainList;
-  return ruleDomains.value;
-}
+// const ruleDomains = ref([]);
+// async function loadRuleDomains() {
+//   ruleDomains.value = ruleDomainList;
+//   return ruleDomains.value;
+// }
 
 async function pingRuleDomain(domain, timeout) {
   const start = performance.now();
@@ -847,13 +851,11 @@ async function updateRuleApp(n) {
   }
 }
 
-// ========== 节流 UI 更新（关闭 defer 时用）==========
-const UI_UPDATE_INTERVAL = 200; // 可按手感调 120~300
 let lastUiUpdateAt = 0;
 
 function maybeUpdateUi(n, payload, force = false) {
   const now = Date.now();
-  if (!force && now - lastUiUpdateAt < UI_UPDATE_INTERVAL) {
+  if (!force && now - lastUiUpdateAt < ChartInterval.value) {
     return;
   }
   lastUiUpdateAt = now;
@@ -921,7 +923,7 @@ async function runRulePing(n) {
   };
 
   try {
-    const domains = await loadRuleDomains();
+    const domains = ruleDomainList;
     let cursor = 0;
 
     const worker = async () => {
@@ -989,7 +991,7 @@ async function runRulePing(n) {
         max,
         total,
         name: "RULE",
-        text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(1)}/${max.toFixed(1)}　` + `REJECT: ${reject}/${total}`,
+        text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(0)}/${max.toFixed(0)}　` + `REJECT: ${reject}/${total}`,
       },
       true,
     );
@@ -1108,7 +1110,7 @@ const runChartPing = async (io, n) => {
           max,
           total,
           name: io,
-          text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(1)}/${max.toFixed(1)}　` + `${total}次 [` + `${formatDuration(elapsed)}/` + `${(elapsed / total).toFixed(1)}ms]`,
+          text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(0)}/${max.toFixed(0)}　` + `${total}次 [` + `${formatDuration(elapsed)}/` + `${(elapsed / total).toFixed(1)}ms]`,
         },
         true,
       );
@@ -1360,11 +1362,13 @@ function persistSettings() {
   settingsDebounce = setTimeout(() => {
     localStorage.setItem("getc", String(Pcs.value));
     localStorage.setItem("timeouts", String(Timeouts.value));
+    localStorage.setItem("ChartInterval", String(ChartInterval.value));
     localStorage.setItem("PingList", JSON.stringify(checkedSet.value));
   }, 300);
 }
 watch(Pcs, persistSettings);
 watch(Timeouts, persistSettings);
+watch(ChartInterval, persistSettings);
 watch(checkedSet, persistSettings, {
   deep: true,
 });
