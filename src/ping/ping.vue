@@ -120,6 +120,11 @@
         <van-switch v-model="deferChartUpdate" />
       </template>
     </van-cell>
+    <van-cell class="van-cell-sw" center title="域名前 不加时间戳" inset label="">
+      <template #right-icon>
+        <van-switch v-model="tsDomain" />
+      </template>
+    </van-cell>
 
     <van-cell title="模块地址" @click="copyModuleUrl()" is-link />
     <van-cell title="RULE 测试地址" @click="copyRuleUrl()" is-link />
@@ -177,9 +182,7 @@ const version = import.meta.env.PACKAGE_VERSION;
 
 const MAX_CHARTS = 10;
 // 图表刷新间隔。
-// 不要设置成 16ms。
-// Ping 测量和 ECharts 绘制没有必要 60FPS。
-const CHART_FLUSH_INTERVAL = 120;
+const CHART_FLUSH_INTERVAL = 200;
 // 单个 series 最大原始数据
 const MAX_RAW_POINTS = 5000;
 // 每次超过上限以后裁掉多少
@@ -206,6 +209,8 @@ const is_body = ref(false);
 const apiPing = ref(localStorage.getItem("setApiPing") == 1 || false);
 // 测试结束后再更新 TuA 与曲线，减少测试过程中 UI/ECharts 对测速精度的影响
 const deferChartUpdate = ref(localStorage.getItem("deferChartUpdate") == "1");
+
+const tsDomain = ref(localStorage.getItem("tsDomain") == "1");
 const Pcs = ref(Number(localStorage.getItem("getc")) || 50);
 const Timeouts = ref(Number(localStorage.getItem("timeouts")) || 1000);
 
@@ -250,7 +255,7 @@ const MIN = ref("--");
 const Namec = ref("--");
 const Nlength = ref(1);
 function sleep() {
-  return new Promise((resolve) => setTimeout(resolve, 1));
+  return new Promise((resolve) => setTimeout(resolve, 3));
 }
 const listy = [
   {
@@ -800,39 +805,40 @@ async function loadRuleDomains() {
   ruleDomains.value = ruleDomainList;
   return ruleDomains.value;
 }
-function pingRuleDomain(domain) {
-  const timeout = Math.max(1, Number(Timeouts.value) || 1000);
-  const start = Date.now();
-  return new Promise((resolve) => {
-    let finished = false;
-    const finish = (ms, reject) => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      resolve({
-        domain,
-        ms: Math.min(ms, timeout),
-        reject,
-      });
+
+async function pingRuleDomain(domain, timeout) {
+  const start = performance.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  const url = !tsDomain.value ? `https://td${Date.now()}.${domain}/favicon.ico?_=${start}` : `https://${domain}/favicon.ico?_=${start}`;
+  try {
+    await fetch(url, {
+      method: "GET",
+      mode: "no-cors",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const ms = performance.now() - start;
+    return {
+      domain,
+      ms: Math.min(Math.max(ms, 0.1), timeout), // 保留小数，最低显示 0.1
+      reject: false,
     };
-    const timer = setTimeout(() => {
-      finish(timeout, true);
-    }, timeout);
-    const image = new Image();
-    image.onload = () => {
-      finish(Date.now() - start, false);
+  } catch {
+    const ms = performance.now() - start;
+    return {
+      domain,
+      ms: Math.min(Math.max(ms, 0.1), timeout),
+      reject: true,
     };
-    image.onerror = () => {
-      finish(Date.now() - start, true);
-    };
-    image.src = `https://td${start}.${domain}/favicon.ico`;
-  });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function updateRuleApp(n) {
   try {
-    const ts = Date.now();
-    const res = await sendReq("get", `https://getapp${ts}.linkey.com/api/ping?url=test&name=TEST&ts=${ts}&timeout=200`, {});
+    const res = await sendReq("get", `https://getapp.linkey.com/api/ping?url=test`, {});
     if (res?.data?.app !== undefined) {
       dev.value[n] = res.data.app;
     }
@@ -919,25 +925,36 @@ async function runRulePing(n) {
     let cursor = 0;
 
     const worker = async () => {
-      while (chartRunning.value[n]) {
-        const index = cursor++;
-        if (index >= domains.length) {
-          return;
-        }
+      const timeout = Math.max(1, Number(Timeouts.value) || 1000);
+      // 支持任意请求次数（可超过 domains.length）
+      const maxCount = Math.max(0, Number(Pcs.value) || 0);
 
-        const result = await pingRuleDomain(domains[index]);
-        if (!chartRunning.value[n]) {
-          return;
+      if (deferChartUpdate.value) {
+        while (chartRunning.value[n]) {
+          const index = cursor++;
+          if (index >= maxCount) return;
+          const domain = domains[index % domains.length];
+          const result = await pingRuleDomain(domain, timeout);
+          if (!chartRunning.value[n]) return;
+          const ms = result.ms;
+          total++;
+          if (result.reject) reject++;
+          pendingPoints.push(ms);
         }
-        const ms = result.ms;
-        total++;
-        if (result.reject) reject++;
-        pendingPoints.push(ms);
-        if (!deferChartUpdate.value) {
+      } else {
+        while (chartRunning.value[n]) {
+          const index = cursor++;
+          if (index >= maxCount) return;
+          const domain = domains[index % domains.length];
+          const result = await pingRuleDomain(domain, timeout);
+          if (!chartRunning.value[n]) return;
+          const ms = result.ms;
+          total++;
+          if (result.reject) reject++;
+          pendingPoints.push(ms);
           appendChartPoint(n, ms);
           scheduleChartFlush(n);
         }
-        await sleep();
       }
     };
 
@@ -972,7 +989,7 @@ async function runRulePing(n) {
         max,
         total,
         name: "RULE",
-        text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(0)}/${max.toFixed(0)}　` + `REJECT: ${reject}/${total}`,
+        text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(1)}/${max.toFixed(1)}　` + `REJECT: ${reject}/${total}`,
       },
       true,
     );
@@ -1035,28 +1052,28 @@ const runChartPing = async (io, n) => {
 
   try {
     const worker = async () => {
-      while (chartRunning.value[n]) {
-        const index = cursor++;
-        if (index >= totalRequests) {
-          return;
+      const timeout = Math.max(1, Number(Timeouts.value) || 1000);
+
+      if (deferChartUpdate.value) {
+        while (chartRunning.value[n]) {
+          const index = cursor++;
+          if (index >= totalRequests || !chartRunning.value[n]) return;
+          let x = await fetchPing(url, io, n, timeout);
+          total++;
+          pendingPoints.push(x);
         }
-        let x;
-        try {
-          x = await fetchPing(url, io, n);
-          if (!chartRunning.value[n]) return;
-        } catch {
-          if (!chartRunning.value[n]) return;
-          x = Number(Timeouts.value);
-        }
-        total++;
-        pendingPoints.push(x);
-        if (!deferChartUpdate.value) {
+      } else {
+        while (chartRunning.value[n]) {
+          const index = cursor++;
+          if (index >= totalRequests || !chartRunning.value[n]) return;
+          let x = await fetchPing(url, io, n, timeout);
+          total++;
+          pendingPoints.push(x);
           elapsed = Date.now() - ts;
           after[n] = elapsed;
           appendChartPoint(n, x);
           scheduleChartFlush(n);
         }
-        await sleep();
       }
     };
 
@@ -1091,17 +1108,13 @@ const runChartPing = async (io, n) => {
           max,
           total,
           name: io,
-          text:
-            `并发: ${concurrency}　Avg: ${avg}　` +
-            `Min/Max: ${Math.floor(min)}/${Math.floor(max)}　` +
-            `${total}次 [` +
-            `${formatDuration(elapsed)}/` +
-            `${(elapsed / total).toFixed(1)}ms]`,
+          text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(1)}/${max.toFixed(1)}　` + `${total}次 [` + `${formatDuration(elapsed)}/` + `${(elapsed / total).toFixed(1)}ms]`,
         },
         true,
       );
       scheduleChartFlush(n);
     }
+    updateRuleApp(n);
   }
 };
 
@@ -1143,7 +1156,7 @@ const runCardPing = async (item, index) => {
       downsampleCache.delete(0);
     }
     for (let c = 0; c < Number(Pcs.value) && cardRunning.value.has(index); c++) {
-      const x = await fetchPing(item.url, item.name);
+      const x = await fetchPing(item.url, item.name, 0, timeout);
       if (!cardRunning.value.has(index)) {
         break;
       }
@@ -1188,10 +1201,10 @@ async function refreshAllCards() {
   try {
     const promises = PingCard.value.map(async (card) => {
       try {
-        const x = await fetchPing(card.url, card.name);
+        const x = await fetchPing(card.url, card.name, 0, Timeouts.value);
         card.ms = x;
       } catch {
-        card.ms = Number(Timeouts.value);
+        card.ms = Timeouts.value;
       }
     });
     await Promise.all(promises);
@@ -1224,11 +1237,36 @@ function showApiError() {
   apiPing.value = false;
 }
 
-const fetchPing = async (url, name, n) => {
+const fetchPing = async (url, name, n, timeout) => {
   if (apiPing.value) {
     try {
+      if (url == "test") {
+        let ts = Date.now();
+        const td = !tsDomain.value ? `${ts}` : "0";
+        try {
+          if (is_body.value) {
+            await fetch(`https://pingbody${td}.linkey.com/api/ping?url=test`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ts: ts,
+                name,
+                url: "test",
+              }),
+            });
+          } else {
+            await fetch(`https://ping${td}.linkey.com/api/ping?url=test`);
+          }
+          ts = Date.now() - ts;
+        } catch {
+          ts = timeout;
+        } finally {
+          return Math.min(ts, timeout);
+        }
+      }
       let iu = "";
       const tss = Date.now();
+      const td = !tsDomain.value ? `${tss}` : "0";
       if (apis[name]) {
         iu = apis[name];
         if (iu.includes("favicon.ico")) {
@@ -1239,41 +1277,44 @@ const fetchPing = async (url, name, n) => {
       } else {
         iu = url;
       }
-      const requestStart = Date.now();
+
+      const qs = `url=${encodeURIComponent(iu)}&name=${encodeURIComponent(name)}&ts=${td}&timeout=${timeout}`;
       let res;
+
       if (is_body.value) {
-        res = await sendReq(
-          "post",
-          `https://pingbody${tss}.linkey.com/api/ping?url=${encodeURIComponent(iu)}&name=${encodeURIComponent(name)}&ts=${tss}&timeout=${Timeouts.value}`,
-          undefined,
-          JSON.stringify({
+        const response = await fetch(`https://pingbody${td}.linkey.com/api/ping?${qs}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             ts: tss,
             name,
             url: iu,
           }),
-        );
+        });
+        res = { data: await response.json() };
       } else {
-        res = await sendReq("get", `https://ping${tss}.linkey.com/api/ping?url=${encodeURIComponent(iu)}&name=${encodeURIComponent(name)}&ts=${tss}&timeout=${Timeouts.value}`);
+        const response = await fetch(`https://ping${td}.linkey.com/api/ping?${qs}`);
+        res = { data: await response.json() };
       }
 
+      const elapsed = Date.now() - tss;
       // 保留辅助模块返回的 app，只是不再使用它返回的 ms
       if (n !== undefined && res?.data?.app !== undefined) {
         if (dev.value[n] !== res.data.app) {
           dev.value[n] = res.data.app;
         }
-        if (url !== "test" && res.data.ms !== undefined) {
-          return Math.min(res.data.ms, Number(Timeouts.value));
+        if (res.data.ms !== undefined) {
+          return Math.min(res.data.ms, timeout);
         }
       }
-      const elapsed = Date.now() - requestStart;
-      return Math.min(elapsed, Number(Timeouts.value));
+      return Math.min(elapsed, timeout);
     } catch {
-      return Number(Timeouts.value);
+      return timeout;
     }
   }
 
   const start = Date.now();
-  const timeoutMs = Math.max(1, Number(Timeouts.value) || 1000);
+  const timeoutMs = Math.max(1, timeout || 1000);
   return new Promise((resolve) => {
     let finished = false;
     const finish = (value) => {
@@ -1330,6 +1371,10 @@ watch(checkedSet, persistSettings, {
 
 watch(deferChartUpdate, (v) => {
   localStorage.setItem("deferChartUpdate", v ? "1" : "0");
+});
+
+watch(tsDomain, (v) => {
+  localStorage.setItem("tsDomain", v ? "1" : "0");
 });
 
 watch(RuleConcurrency, (value) => {
