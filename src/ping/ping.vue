@@ -991,7 +991,7 @@ async function runRulePing(n) {
         max,
         total,
         name: "RULE",
-        text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(0)}/${max.toFixed(0)}　` + `REJECT: ${reject}/${total}`,
+        text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(1)}/${max.toFixed(0)}　` + `REJECT: ${reject}/${total}`,
       },
       true,
     );
@@ -1110,7 +1110,7 @@ const runChartPing = async (io, n) => {
           max,
           total,
           name: io,
-          text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(0)}/${max.toFixed(0)}　` + `${total}次 [` + `${formatDuration(elapsed)}/` + `${(elapsed / total).toFixed(1)}ms]`,
+          text: `并发: ${concurrency}　Avg: ${avg}　` + `Min/Max: ${min.toFixed(1)}/${max.toFixed(0)}　` + `${total}次 [` + `${formatDuration(elapsed)}/` + `${(elapsed / total).toFixed(1)}ms]`,
         },
         true,
       );
