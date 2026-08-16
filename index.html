@@ -40,14 +40,14 @@
       /* background: #f3f3f3; */
       opacity: 1;
       will-change: opacity, visibility;
-      transition: opacity .28s cubic-bezier(.22, 1, .36, 1), visibility .28s ease;
+      /* transition: opacity .28s cubic-bezier(.22, 1, .36, 1), visibility .28s ease; */
     }
 
     #boot-splash.boot-splash--visible {
       display: flex;
     }
 
-    #boot-splash::before {
+    /* #boot-splash::before {
       position: absolute;
       width: min(88vw, 520px);
       height: min(88vw, 520px);
@@ -59,7 +59,7 @@
       will-change: transform, opacity;
       transition: transform .9s cubic-bezier(.16, 1, .3, 1), opacity .55s ease;
       pointer-events: none;
-    }
+    } */
 
     #boot-splash.boot-splash--loading::before {
       opacity: .85;
