@@ -1,7 +1,7 @@
 const splash = document.getElementById("boot-splash");
 const isVisible = () => splash?.classList.contains("boot-splash--visible");
 
-const FAST_SKIP_MS = 233
+const FAST_SKIP_MS = 233;
 // localStorage.getItem("linkey:app-ready") == 1 ? 233 : 1;
 const HOLD_MS = 160;
 const FADE_MS = 300;
@@ -67,20 +67,26 @@ const tryFinish = () => {
 
 import("./main")
   .then(({ initializeApp }) => {
-    initializeApp();
-    const elapsed = performance.now() - (window.linkeyBootStartedAt || performance.now());
-    if (elapsed <= FAST_SKIP_MS) {
-      window.clearTimeout(window.linkeyBootSplashTimer);
-      splash?.remove();
-      return;
-    }
-    ensureLoading();
-    requestAnimationFrame(() => {
+    setTimeout(() => {
+      initializeApp();
+
+      const elapsed = performance.now() - (window.linkeyBootStartedAt || performance.now());
+
+      if (elapsed <= FAST_SKIP_MS) {
+        window.clearTimeout(window.linkeyBootSplashTimer);
+        splash?.remove();
+        return;
+      }
+
+      ensureLoading();
+
       requestAnimationFrame(() => {
-        appReady = true;
-        tryFinish();
+        requestAnimationFrame(() => {
+          appReady = true;
+          tryFinish();
+        });
       });
-    });
+    }, 23);
   })
   .catch(async () => {
     if (!(await recoverFromStaleScripts())) splash?.remove();

@@ -13,34 +13,47 @@
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>LinKey</title>
   <style>
-    html,
-    body {
+    body,
+    #app {
+      background: transparent;
+    }
+
+    html {
       background: #f3f3f3;
     }
 
     @media (prefers-color-scheme: dark) {
 
-      html,
-      body {
+      html {
         background: #141414;
       }
     }
   </style>
   <script>
     (() => {
-      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      if (!isDark) {
+      const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+
+      if (!dark) {
         document.documentElement.style.backgroundColor = "#f3f3f3";
         return;
       }
-      if (location.pathname === "/j" || location.pathname === "/EditCode") {
-        document.documentElement.style.backgroundColor = localStorage.getItem("EditorDarkBackground") ?? "#141414";
-      } else {
+
+      const path = location.pathname;
+
+      if (path !== "/j" && path !== "/EditCode") {
         document.documentElement.style.backgroundColor = "#141414";
+        return;
       }
+
+      const saved = localStorage.getItem("EditorDarkBackground");
+      document.documentElement.style.backgroundColor =
+        saved === "#282c34" ||
+          saved === "#141414" ||
+          saved === "#000000"
+          ? saved
+          : "#141414";
     })();
   </script>
-
   <style>
     #boot-splash {
       position: fixed;
@@ -51,17 +64,17 @@
       justify-content: center;
       overflow: hidden;
       color: #252a35;
-      /* background: #f3f3f3; */
+      background: #f3f3f3;
       opacity: 1;
       will-change: opacity, visibility;
-      /* transition: opacity .28s cubic-bezier(.22, 1, .36, 1), visibility .28s ease; */
+      transition: opacity .28s cubic-bezier(.22, 1, .36, 1), visibility .28s ease;
     }
 
     #boot-splash.boot-splash--visible {
       display: flex;
     }
 
-    /* #boot-splash::before {
+    #boot-splash::before {
       position: absolute;
       width: min(88vw, 520px);
       height: min(88vw, 520px);
@@ -73,7 +86,7 @@
       will-change: transform, opacity;
       transition: transform .9s cubic-bezier(.16, 1, .3, 1), opacity .55s ease;
       pointer-events: none;
-    } */
+    }
 
     #boot-splash.boot-splash--loading::before {
       opacity: .85;
@@ -248,9 +261,9 @@
     }
 
     @media (prefers-color-scheme: dark) {
-      /* body { */
-      /* background-color: #141414; */
-      /* } */
+      body {
+        background-color: #141414;
+      }
 
       .boot-splash__progress .progress-mid,
       .boot-splash__progress .progress {
