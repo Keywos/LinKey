@@ -1,7 +1,8 @@
 const splash = document.getElementById("boot-splash");
 const isVisible = () => splash?.classList.contains("boot-splash--visible");
 
-const FAST_SKIP_MS = localStorage.getItem("linkey:app-ready") == 1 ? 233 : 1;
+const FAST_SKIP_MS = 233
+// localStorage.getItem("linkey:app-ready") == 1 ? 233 : 1;
 const HOLD_MS = 160;
 const FADE_MS = 300;
 

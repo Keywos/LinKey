@@ -1,24 +1,22 @@
 <template>
-  <main class="edit-code-loading" :style="loadingStyle" role="status" aria-live="polite">
+  <main class="edit-code-loading"  role="status" aria-live="polite">
     <span class="edit-code-loading-spinner"></span>
     <span>正在加载脚本编辑器…</span>
   </main>
 </template>
 
-<script setup>
-const darkBackgrounds = new Set(["#282c34", "#141414", "#000000"]);
+<!-- <script setup> :style="loadingStyle"
 const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-const savedBackground = localStorage.getItem("EditorDarkBackground");
-const background = isDark && darkBackgrounds.has(savedBackground) ? savedBackground : isDark ? "#282c34" : "#fff";
 
 const loadingStyle = {
-  background,
+  background: isDark ? "#141414" : "#f3f3f3",
   color: isDark ? "#e2e3ea" : "#313842",
 };
-</script>
+</script> -->
 
 <style scoped>
 .edit-code-loading {
+  /* background-color: red; */
   position: fixed;
   inset: 0;
   z-index: 99999;

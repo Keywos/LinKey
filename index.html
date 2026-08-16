@@ -12,7 +12,22 @@
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>LinKey</title>
+  <script>
+    (() => {
+      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (!isDark) {
+        document.documentElement.style.backgroundColor = "#f3f3f3";
+        return;
+      }
+      if (location.pathname === "/j" || location.pathname === "/EditCode") {
+        document.documentElement.style.backgroundColor = localStorage.getItem("EditorDarkBackground") ?? "#141414";
+      } else {
+        document.documentElement.style.backgroundColor = "#141414";
+      }
+    })();
+  </script>
   <style>
+
     #boot-splash {
       position: fixed;
       z-index: 2147483647;
@@ -22,7 +37,7 @@
       justify-content: center;
       overflow: hidden;
       color: #252a35;
-      background: #f3f3f3;
+      /* background: #f3f3f3; */
       opacity: 1;
       will-change: opacity, visibility;
       transition: opacity .28s cubic-bezier(.22, 1, .36, 1), visibility .28s ease;
@@ -213,15 +228,15 @@
     }
 
     body {
-      background-color: #f3f3f3;
+      /* background-color: #f3f3f3; */
       -webkit-touch-action: pan-x pan-y;
       touch-action: pan-x pan-y;
     }
 
     @media (prefers-color-scheme: dark) {
-      body {
-        background-color: #141414;
-      }
+      /* body { */
+      /* background-color: #141414; */
+      /* } */
 
       .boot-splash__progress .progress-mid,
       .boot-splash__progress .progress {
@@ -230,7 +245,7 @@
 
       #boot-splash {
         color: #f2f4fa;
-        background: #141414;
+        background: transparent;
       }
 
       #boot-splash::before {
@@ -247,8 +262,6 @@
         fill: #ffffff8f !important;
       }
     }
-
-    @media (prefers-reduced-motion: reduce) {}
   </style>
 </head>
 
