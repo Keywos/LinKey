@@ -12,6 +12,20 @@
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>LinKey</title>
+  <style>
+    html,
+    body {
+      background: #f3f3f3;
+    }
+
+    @media (prefers-color-scheme: dark) {
+
+      html,
+      body {
+        background: #141414;
+      }
+    }
+  </style>
   <script>
     (() => {
       const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -26,8 +40,8 @@
       }
     })();
   </script>
-  <style>
 
+  <style>
     #boot-splash {
       position: fixed;
       z-index: 2147483647;
