@@ -33,6 +33,8 @@ export default {
         start_url: "/",
         scope: "/",
         display: "standalone",
+        background_color: "#141414",
+        theme_color: "#141414",
         icons: [
           { src: "144x144.png", sizes: "144x144", type: "image/png" },
           { src: "192x192.png", sizes: "192x192", type: "image/png" },

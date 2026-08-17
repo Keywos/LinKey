@@ -272,11 +272,14 @@
 
       #boot-splash {
         color: #f2f4fa;
-        background: transparent;
+        background: #141414;
       }
 
       #boot-splash::before {
         background: radial-gradient(circle, #3a4f9a88 0%, #5b3fd644 36%, transparent 70%);
+        opacity: .85;
+        transform: translate(-18%, -24%) scale(1);
+        transition: none;
       }
 
       .boot-splash__name {
