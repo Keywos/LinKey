@@ -1,14 +1,13 @@
 <template>
-  <h2 class="edit-code-editor" :class="{ 'saves-open': showSaves }" style="-webkit-user-select: none; user-select: none; display: flex; justify-content: left; width: 90%; margin-top: -10px ">
+  <h2 class="edit-code-editor" :class="{ 'saves-open': showSaves }" style="-webkit-user-select: none; user-select: none; display: flex; justify-content: left; width: 90%; margin-top: -10px">
     <span class="edit-code-editor-title" style="opacity: 0.6" @click="goFunction()">Code Hub</span>
     <div style="display: flex; align-items: center; gap: 10px; color: var(--text)">
       <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: 0.4">{{ showSaves ? "▴" : "▾" }}</span>
     </div>
   </h2>
 
-
   <!-- 保存列表面板 -->
-  <div v-if="showSaves" class="saves-panel"> 
+  <div v-if="showSaves" class="saves-panel">
     <div class="saves-body" :style="{ height: savesPanelHeight + 'px' }">
       <div class="saves-toolbar">
         <button class="saves-btn" @click="toggleToolbar">{{ toolbarExpanded ? "折叠" : "展开" }}</button>
@@ -60,164 +59,164 @@
         <template v-for="item in sortedSavedItems" :key="item.id">
           <Transition name="saves-item" appear>
             <div @click.stop="toggleItemActions(item)" v-if="shouldShowSavedItem(item)" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
-            <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" @click.stop />
+              <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" @click.stop />
 
-            <div class="saves-item-info">
-              <span class="saves-item-name">
-                {{ item.name }}
-                <span v-if="getItemChildrenCount(item) > 0" class="saves-item-child-count">{{ getItemChildrenCount(item) + 1 + " 项" }}</span>
-                <span v-if="item.gist" class="saves-item-source" :title="gistPath(item)">{{ gistPath(item) }}</span>
-                <span v-if="item.tags?.length" class="saves-item-tags">{{ item.tags.join(" · ") }}</span>
-              </span>
+              <div class="saves-item-info">
+                <span class="saves-item-name">
+                  {{ item.name }}
+                  <span v-if="getItemChildrenCount(item) > 0" class="saves-item-child-count">{{ getItemChildrenCount(item) + 1 + " 项" }}</span>
+                  <span v-if="item.gist" class="saves-item-source" :title="gistPath(item)">{{ gistPath(item) }}</span>
+                  <span v-if="item.tags?.length" class="saves-item-tags">{{ item.tags.join(" · ") }}</span>
+                </span>
 
-              <div class="saves-item-preview">
-                <span class="saves-item-content-preview">{{ item.preview || "" }}</span>
+                <div class="saves-item-preview">
+                  <span class="saves-item-content-preview">{{ item.preview || "" }}</span>
+                </div>
+
+                <span class="saves-item-meta">
+                  {{ formatTime(itemUpdatedAt(item)) }}
+                  ·
+                  {{ formatBytes(item.length) }}
+                </span>
               </div>
 
-              <span class="saves-item-meta">
-                {{ formatTime(itemUpdatedAt(item)) }}
-                ·
-                {{ formatBytes(item.length) }}
-              </span>
-            </div>
-
-            <Transition :name="actionPanelsReady ? 'saves-actions' : ''">
-              <div v-if="isItemActionsExpanded(item)" class="saves-item-sync-actions">
-              <div class="saves-item-sync-actions-content">
-              <div class="saves-item-action-group">
-                <button class="saves-sync-btn" @click.stop="toggleItemExpansion(item)">
-                  {{ isItemExpanded(item) ? "收起" : getItemChildrenCount(item) > 0 ? `展开 (${getItemChildrenCount(item)})` : "展开" }}
-                </button>
-                <button
-                  class="saves-sync-btn"
-                  :class="{ 'is-syncing': syncingItemId === item.id && syncingAction === 'upload' }"
-                  :disabled="syncingItemId === item.id && syncingAction === 'upload'"
-                  title="上传到 Gist"
-                  @click.stop="confirmUploadToGist(item)"
-                >
-                  上传
-                </button>
-                <button class="saves-sync-btn" @click.stop="deleteSingleItem(item)">删除</button>
-                <button class="saves-sync-btn" @click.stop="editItemTags(item)">+ 标签</button>
-              </div>
-              <div class="saves-item-action-group saves-item-action-group-right">
-                <button v-if="item.url" class="saves-sync-btn" @click.stop="copyUrl(item, 'raw')">
-                  {{ item.blobUrl ? "Raw" : "Url" }}
-                </button>
-                <button v-if="item.blobUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'blob')">Blob</button>
-                <button v-if="item.gist?.rawUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'gist')">Gist</button>
-                <button v-if="item.gist?.htmlUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'html')">Html</button>
-                <button
-                  v-if="item.url"
-                  class="saves-sync-btn"
-                  :class="{ 'is-syncing': refreshingUrlItemId === item.id }"
-                  :disabled="refreshingUrlItemId === item.id"
-                  title="从原始 URL 重新拉取"
-                  @click.stop="confirmRefreshFromUrl(item)"
-                >
-                  拉取 URL
-                </button>
-                <button
-                  v-if="item.gist?.rawUrl"
-                  class="saves-sync-btn"
-                  :class="{ 'is-syncing': syncingItemId === item.id && syncingAction === 'gist' }"
-                  :disabled="syncingItemId === item.id && syncingAction === 'gist'"
-                  title="从 Gist 拉取最新内容"
-                  @click.stop="confirmDownloadFromGist(item)"
-                >
-                  拉取 Gist
-                </button>
-                <button class="saves-sync-btn" @click.stop="renameItem(item)">重命名</button>
-                <!-- <button class="saves-sync-btn" :class="{ 'is-current': item.id === currentItemId }" :disabled="loadingItemId === item.id" @click.stop="loadItemForList(item)">
+              <Transition :name="actionPanelsReady ? 'saves-actions' : ''">
+                <div v-if="isItemActionsExpanded(item)" class="saves-item-sync-actions">
+                  <div class="saves-item-sync-actions-content">
+                    <div class="saves-item-action-group">
+                      <button class="saves-sync-btn" @click.stop="toggleItemExpansion(item)">
+                        {{ isItemExpanded(item) ? "收起" : getItemChildrenCount(item) > 0 ? `展开 (${getItemChildrenCount(item)})` : "展开" }}
+                      </button>
+                      <button
+                        class="saves-sync-btn"
+                        :class="{ 'is-syncing': syncingItemId === item.id && syncingAction === 'upload' }"
+                        :disabled="syncingItemId === item.id && syncingAction === 'upload'"
+                        title="上传到 Gist"
+                        @click.stop="confirmUploadToGist(item)"
+                      >
+                        上传
+                      </button>
+                      <button class="saves-sync-btn" @click.stop="deleteSingleItem(item)">删除</button>
+                      <button class="saves-sync-btn" @click.stop="editItemTags(item)">+ 标签</button>
+                    </div>
+                    <div class="saves-item-action-group saves-item-action-group-right">
+                      <button v-if="item.url" class="saves-sync-btn" @click.stop="copyUrl(item, 'raw')">
+                        {{ item.blobUrl ? "Raw" : "Url" }}
+                      </button>
+                      <button v-if="item.blobUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'blob')">Blob</button>
+                      <button v-if="item.gist?.rawUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'gist')">Gist</button>
+                      <button v-if="item.gist?.htmlUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'html')">Html</button>
+                      <button
+                        v-if="item.url"
+                        class="saves-sync-btn"
+                        :class="{ 'is-syncing': refreshingUrlItemId === item.id }"
+                        :disabled="refreshingUrlItemId === item.id"
+                        title="从原始 URL 重新拉取"
+                        @click.stop="confirmRefreshFromUrl(item)"
+                      >
+                        拉取 URL
+                      </button>
+                      <button
+                        v-if="item.gist?.rawUrl"
+                        class="saves-sync-btn"
+                        :class="{ 'is-syncing': syncingItemId === item.id && syncingAction === 'gist' }"
+                        :disabled="syncingItemId === item.id && syncingAction === 'gist'"
+                        title="从 Gist 拉取最新内容"
+                        @click.stop="confirmDownloadFromGist(item)"
+                      >
+                        拉取 Gist
+                      </button>
+                      <button class="saves-sync-btn" @click.stop="renameItem(item)">重命名</button>
+                      <!-- <button class="saves-sync-btn" :class="{ 'is-current': item.id === currentItemId }" :disabled="loadingItemId === item.id" @click.stop="loadItemForList(item)">
                   {{ item.id === currentItemId ? "当前" : "加载" }}
                 </button> -->
-              </div>
-              </div>
-              </div>
-            </Transition>
+                    </div>
+                  </div>
+                </div>
+              </Transition>
             </div>
           </Transition>
           <Transition name="saves-children">
             <div v-if="shouldShowSavedItem(item) && isItemExpanded(item)" class="saves-gist-children">
-            <div class="saves-gist-children-content">
-            <div
-              @click.stop="toggleItemActions(child)"
-              v-for="child in gistChildItems(item)"
-              :key="child.id"
-              class="saves-item saves-gist-child"
-              :class="{ 'saves-item-current': child.id === currentItemId }"
-            >
-              <input v-if="selectMode" type="checkbox" :value="child.id" v-model="checkedIds" @click.stop />
+              <div class="saves-gist-children-content">
+                <div
+                  @click.stop="toggleItemActions(child)"
+                  v-for="child in gistChildItems(item)"
+                  :key="child.id"
+                  class="saves-item saves-gist-child"
+                  :class="{ 'saves-item-current': child.id === currentItemId }"
+                >
+                  <input v-if="selectMode" type="checkbox" :value="child.id" v-model="checkedIds" @click.stop />
 
-              <div class="saves-item-info">
-                <span class="saves-item-name">
-                  {{ child.name }}
-                  <span v-if="child.gist" class="saves-item-source" :title="gistPath(child)">{{ gistPath(child) }}</span>
-                  <span v-if="child.tags?.length" class="saves-item-tags">{{ child.tags.join(" · ") }}</span>
-                </span>
-                <div class="saves-item-preview">
-                  <span class="saves-item-content-preview">{{ child.preview || "" }}</span>
-                </div>
-                <span class="saves-item-meta">
-                  {{ formatTime(itemUpdatedAt(child)) }}
-                  ·
-                  {{ formatBytes(child.length) }}
-                </span>
-              </div>
+                  <div class="saves-item-info">
+                    <span class="saves-item-name">
+                      {{ child.name }}
+                      <span v-if="child.gist" class="saves-item-source" :title="gistPath(child)">{{ gistPath(child) }}</span>
+                      <span v-if="child.tags?.length" class="saves-item-tags">{{ child.tags.join(" · ") }}</span>
+                    </span>
+                    <div class="saves-item-preview">
+                      <span class="saves-item-content-preview">{{ child.preview || "" }}</span>
+                    </div>
+                    <span class="saves-item-meta">
+                      {{ formatTime(itemUpdatedAt(child)) }}
+                      ·
+                      {{ formatBytes(child.length) }}
+                    </span>
+                  </div>
 
-              <div v-if="isItemActionsExpanded(child)" class="saves-item-sync-actions">
-                <div class="saves-item-action-group">
-                  <button class="saves-sync-btn" @click.stop="toggleItemExpansion(child)">
-                    {{ isItemExpanded(child) ? "收起" : getItemChildrenCount(child) > 0 ? `展开 (${getItemChildrenCount(child)})` : "展开" }}
-                  </button>
-                  <button
-                    class="saves-sync-btn"
-                    :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'upload' }"
-                    :disabled="syncingItemId === child.id && syncingAction === 'upload'"
-                    title="上传到 Gist"
-                    @click.stop="confirmUploadToGist(child)"
-                  >
-                    上传
-                  </button>
-                  <button class="saves-sync-btn" @click.stop="deleteSingleItem(child)">删除</button>
-                  <button class="saves-sync-btn" @click.stop="editItemTags(child)">+ 标签</button>
+                  <div v-if="isItemActionsExpanded(child)" class="saves-item-sync-actions">
+                    <div class="saves-item-action-group">
+                      <button class="saves-sync-btn" @click.stop="toggleItemExpansion(child)">
+                        {{ isItemExpanded(child) ? "收起" : getItemChildrenCount(child) > 0 ? `展开 (${getItemChildrenCount(child)})` : "展开" }}
+                      </button>
+                      <button
+                        class="saves-sync-btn"
+                        :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'upload' }"
+                        :disabled="syncingItemId === child.id && syncingAction === 'upload'"
+                        title="上传到 Gist"
+                        @click.stop="confirmUploadToGist(child)"
+                      >
+                        上传
+                      </button>
+                      <button class="saves-sync-btn" @click.stop="deleteSingleItem(child)">删除</button>
+                      <button class="saves-sync-btn" @click.stop="editItemTags(child)">+ 标签</button>
+                    </div>
+                    <div class="saves-item-action-group saves-item-action-group-right">
+                      <button v-if="child.url" class="saves-sync-btn" @click.stop="copyUrl(child, 'Raw')">
+                        {{ child.blobUrl ? "Raw" : "Url" }}
+                      </button>
+                      <button v-if="child.blobUrl" title="复制 Blob URL" class="saves-sync-btn" @click.stop="copyUrl(child, 'Blob')">Blob</button>
+                      <button v-if="child.gist?.rawUrl" class="saves-sync-btn" title="复制 Gist URL" @click.stop="copyUrl(child, 'Gist')">Gist</button>
+                      <button v-if="child.gist?.htmlUrl" class="saves-sync-btn" title="复制 Html URL" @click.stop="copyUrl(child, 'Html')">Html</button>
+                      <button
+                        v-if="child.url"
+                        class="saves-sync-btn"
+                        :class="{ 'is-syncing': refreshingUrlItemId === child.id }"
+                        :disabled="refreshingUrlItemId === child.id"
+                        title="从原始 URL 重新拉取"
+                        @click.stop="confirmRefreshFromUrl(child)"
+                      >
+                        从 URL 拉取
+                      </button>
+                      <button
+                        v-if="child.gist?.rawUrl"
+                        class="saves-sync-btn"
+                        :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'gist' }"
+                        :disabled="syncingItemId === child.id && syncingAction === 'gist'"
+                        title="从 Gist 拉取最新内容"
+                        @click.stop="confirmDownloadFromGist(child)"
+                      >
+                        从 Gist 拉取
+                      </button>
+                      <button class="saves-sync-btn" @click.stop="renameItem(child)">重命名</button>
+                      <button class="saves-sync-btn" :class="{ 'is-current': child.id === currentItemId }" :disabled="loadingItemId === child.id" @click.stop="loadItemForList(child)">加载</button>
+                    </div>
+                  </div>
                 </div>
-                <div class="saves-item-action-group saves-item-action-group-right">
-                  <button v-if="child.url" class="saves-sync-btn" @click.stop="copyUrl(child, 'Raw')">
-                    {{ child.blobUrl ? "Raw" : "Url" }}
-                  </button>
-                  <button v-if="child.blobUrl" title="复制 Blob URL" class="saves-sync-btn" @click.stop="copyUrl(child, 'Blob')">Blob</button>
-                  <button v-if="child.gist?.rawUrl" class="saves-sync-btn" title="复制 Gist URL" @click.stop="copyUrl(child, 'Gist')">Gist</button>
-                  <button v-if="child.gist?.htmlUrl" class="saves-sync-btn" title="复制 Html URL" @click.stop="copyUrl(child, 'Html')">Html</button>
-                  <button
-                    v-if="child.url"
-                    class="saves-sync-btn"
-                    :class="{ 'is-syncing': refreshingUrlItemId === child.id }"
-                    :disabled="refreshingUrlItemId === child.id"
-                    title="从原始 URL 重新拉取"
-                    @click.stop="confirmRefreshFromUrl(child)"
-                  >
-                    从 URL 拉取
-                  </button>
-                  <button
-                    v-if="child.gist?.rawUrl"
-                    class="saves-sync-btn"
-                    :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'gist' }"
-                    :disabled="syncingItemId === child.id && syncingAction === 'gist'"
-                    title="从 Gist 拉取最新内容"
-                    @click.stop="confirmDownloadFromGist(child)"
-                  >
-                    从 Gist 拉取
-                  </button>
-                  <button class="saves-sync-btn" @click.stop="renameItem(child)">重命名</button>
-                  <button class="saves-sync-btn" :class="{ 'is-current': child.id === currentItemId }" :disabled="loadingItemId === child.id" @click.stop="loadItemForList(child)">加载</button>
-                </div>
+                <button class="saves-gist-child saves-gist-child-new" @click.stop="createExpandedFile(item)">
+                  {{ item.gist?.id ? "+ 新建 Gist 文件" : "+ 新建" }}
+                </button>
               </div>
-            </div>
-            <button class="saves-gist-child saves-gist-child-new" @click.stop="createExpandedFile(item)">
-              {{ item.gist?.id ? "+ 新建 Gist 文件" : "+ 新建" }}
-            </button>
-            </div>
             </div>
           </Transition>
         </template>
@@ -677,7 +676,6 @@ const updateNavHeight = () => {
   const nav = document.querySelector(".blurNavdiv");
   document.documentElement.style.setProperty("--nav-height", (nav?.offsetHeight || 0) + "px");
 };
-
 
 function startSavesWidthResizePointer(e) {
   e.preventDefault();
@@ -1287,10 +1285,12 @@ const createNewBlank = async () => {
     await idbStorage.setItem(contentKey(item.id), EMPTY_CONTENT);
 
     isDirty = false;
+    expandedActionItemId.value = item.id;
 
     nextTick(() => {
       skipWatchSave = false;
     });
+ 
   } catch (e) {
     console.log(e);
     showToast("新建失败");
@@ -3391,7 +3391,7 @@ onBeforeUnmount(() => {
     left: 0;
     width: var(--saves-width, 400px) !important;
     margin: 0 !important;
-    padding: 20px 16px 22px  18px !important; /* 底部 22px 边距 */
+    padding: 20px 16px 22px 18px !important; /* 底部 22px 边距 */
     box-sizing: border-box;
     z-index: 1002;
     display: flex;
