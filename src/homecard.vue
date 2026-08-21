@@ -506,13 +506,7 @@ const handleDragEnd = () => {
   object-fit: cover;
 }
 
-.homecarda--icon .kcardimg-built-in {
-  /* svg 图标形状 */
-  width: 28px;
-  height: 28px;
-  border-radius: 0;
-  /* max(0px, calc(var(--icon-radius) - 4px)); */
-}
+
 
 .homecarda--icon .kcardimg-emoji {
   align-items: center;
@@ -573,5 +567,13 @@ const handleDragEnd = () => {
 
 .kcard-icon-slot .kcardimg {
   margin-bottom: 0;
+}
+
+.homecarda--icon .kcardimg-built-in {
+  /* svg 图标形状 */
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  /* max(0px, calc(var(--icon-radius) - 4px)); */
 }
 </style>
