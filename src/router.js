@@ -74,7 +74,7 @@ const routes = [
     meta: {
       title: "Edit Code",
       needTabBar: false,
-      isNavBack: true,
+      isNavBack: false,
       isNavTop: false,
     },
   },
