@@ -122,7 +122,10 @@ const specialTiles = [
 ];
 const displayCards = ref([]);
 const isImageIcon = (icon) => icon.startsWith("/") || icon.startsWith("data:") || /^https?:\/\//.test(icon);
-const isBuiltInSvgIcon = (icon) => (icon.startsWith("/") && /\.svg(?:[?#]|$)/i.test(icon)) || icon.startsWith("data:image/svg+xml");
+const isBuiltInSvgIcon = (icon) => {
+  if (!icon) return false;
+  return /^data:image\/svg\+xml(?:[;,]|$)/i.test(icon) || (icon.startsWith("/") && /\.svg(?:[?#]|$)/i.test(icon));
+};
 const isCustomUrlIcon = (card) => /^https?:\/\//.test(card.img) && typeof card.iconSize === "number";
 const getIconSizeStyle = (card) => (isCustomUrlIcon(card) ? { "--custom-icon-size": `${card.iconSize}px` } : undefined);
 
