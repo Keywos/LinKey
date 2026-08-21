@@ -122,7 +122,7 @@ const specialTiles = [
 ];
 const displayCards = ref([]);
 const isImageIcon = (icon) => icon.startsWith("/") || icon.startsWith("data:") || /^https?:\/\//.test(icon);
-const isBuiltInSvgIcon = (icon) => icon.startsWith("/") && /\.svg(?:[?#]|$)/i.test(icon);
+const isBuiltInSvgIcon = (icon) => (icon.startsWith("/") && /\.svg(?:[?#]|$)/i.test(icon)) || icon.startsWith("data:image/svg+xml");
 const isCustomUrlIcon = (card) => /^https?:\/\//.test(card.img) && typeof card.iconSize === "number";
 const getIconSizeStyle = (card) => (isCustomUrlIcon(card) ? { "--custom-icon-size": `${card.iconSize}px` } : undefined);
 
@@ -505,8 +505,6 @@ const handleDragEnd = () => {
   border-radius: 15px;
   object-fit: cover;
 }
-
-
 
 .homecarda--icon .kcardimg-emoji {
   align-items: center;

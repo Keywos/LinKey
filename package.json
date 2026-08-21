@@ -1,7 +1,7 @@
 {
   "name": "linkey",
   "private": true,
-  "version": "2.01",
+  "version": "2.02",
   "type": "module",
   "packageManager": "pnpm@10.11.1",
   "scripts": {
