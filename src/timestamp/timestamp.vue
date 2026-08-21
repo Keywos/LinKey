@@ -257,7 +257,7 @@ const copyText = async (t) => {
   /* 选择时间 */
 }
 .van-badge__wrapper {
-  padding: 0px 0;
+  padding: 0px 4px;
 }
 /* .van-slider__button {
 } */

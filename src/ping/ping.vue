@@ -1158,7 +1158,7 @@ const runCardPing = async (item, index) => {
       downsampleCache.delete(0);
     }
     for (let c = 0; c < Number(Pcs.value) && cardRunning.value.has(index); c++) {
-      const x = await fetchPing(item.url, item.name, 0, timeout);
+      const x = await fetchPing(item.url, item.name, 0, Timeouts.value);
       if (!cardRunning.value.has(index)) {
         break;
       }

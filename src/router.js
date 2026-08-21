@@ -33,9 +33,7 @@ const routes = [
     name: "home",
     meta: {
       title: "Home",
-      needTabBar: true,
       isNavBack: false,
-      isNavTop: true,
     },
   },
   {
@@ -44,9 +42,7 @@ const routes = [
     name: "homes",
     meta: {
       title: "Home",
-      needTabBar: true,
       isNavBack: false,
-      isNavTop: true,
     },
   },
   {
@@ -55,9 +51,7 @@ const routes = [
     name: "search",
     meta: {
       title: "",
-      needTabBar: true,
       isNavBack: false,
-      isNavTop: true,
     },
   },
 
@@ -91,7 +85,7 @@ const routes = [
     meta: {
       title: "Edit Code",
       needTabBar: false,
-      isNavBack: true,
+      isNavBack: false,
       isNavTop: false,
     },
   },

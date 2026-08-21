@@ -2,13 +2,9 @@
   <van-config-provider :theme="theme">
     <div>
       <div v-if="isbgc" class="jbsss" />
-      <div v-if="isNeedNav" class="blurNavdiv" :class="{ 'blurNavdiv-hidden': hideTopBarTitle }">
-        <van-nav-bar :title="hideTopBarTitle ? '' : metatittleRef" left-text="" :left-arrow="isNavBackRef" :placeholder="true" :border="false" :class="{ 'pwa-nav-bar': isPWA && !isLandscape }" @click-left="onClickLeft" @click-right="" />
-      </div>
-      <div class="tabzw"></div>
     </div>
 
-    <main class="page-body" @scroll="handleScroll">
+    <main class="page-body" :class="{ 'page-body-with-back': isNavBackRef }" @scroll="handleScroll">
       <router-view v-slot="{ Component, route: currentRoute }">
         <keep-alive>
           <component :is="Component" v-if="currentRoute.meta.keepAlive" />
@@ -17,23 +13,18 @@
       </router-view>
     </main>
     <van-dialog />
+    <button v-if="isNavBackRef && !hideBackButton" class="settings-fab" aria-label="返回" @click="onClickLeft">
+      <van-icon name="arrow-left" />
+    </button>
   </van-config-provider>
-  <div v-show="isNeedTabBarRef" style="margin-bottom: 90px">
-    <van-tabbar route :z-index="1024" :border="false" :placeholder="false" :safe-area-inset-bottom="false"
-      :class="tabbaring === 'space-evenly' ? 'tb-evenly' : 'tb-center'">
-      <van-tabbar-item replace to="/" icon="apps-o"></van-tabbar-item>
-      <van-tabbar-item replace to="/search" icon="link-o"></van-tabbar-item>
-      <van-tabbar-item replace to="/setting" icon="sign"></van-tabbar-item>
-    </van-tabbar>
-  </div>
 </template>
 
 <script setup>
-import { ref, watchEffect, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, watchEffect, computed, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useTheme } from "@/hooks/theme";
 import { onWidth } from "@/hooks/winWidth";
-const { isLandscape, notSmall, isPWA, screenWidth } = onWidth();
+const { screenWidth } = onWidth();
 
 import { sendReq } from "./http/http";
 
@@ -54,28 +45,6 @@ const fetchData = async () => {
     console.error("Error fetching data:", error);
   }
 };
-const topHeights = () => (notSmall.value ? 10 : 59);
-
-const tabHeight = computed(() => {
-  if (isPWA.value && !isLandscape.value) {
-    return topHeights() + 30 + "px";
-  }
-  return "46px";
-});
-
-const tabbar_height = computed(() => {
-  if (isPWA.value) {
-    if (!notSmall.value) return "76px";
-    if (isLandscape.value) return "46px";
-  }
-  return "60px";
-});
-
-const tabbaring = computed(() => {
-  if (isPWA.value && !notSmall.value) return "space-evenly";
-  return "center";
-});
-
 const { theme } = useTheme();
 
 const breakpoints = [
@@ -91,18 +60,11 @@ const noWmargin = computed(() => {
   return bp ? bp.value : "18px";
 });
 
-const showElement = ref(false);
-
-const handleScroll = () => {
-  const scrollTop = window.scrollY;
-  showElement.value = scrollTop > 50;
-};
 onMounted(() => {
   if (store.iscount) {
     fetchData();
     store.setIsCount();
   }
-  window.addEventListener("scroll", handleScroll, { passive: true });
 });
 
 const router = useRouter();
@@ -117,41 +79,20 @@ const onClickLeft = () => {
   }
 };
 
-const isNeedTabBarRef = ref(true);
 const isNavBackRef = ref(false);
-const isNeedNav = ref(false);
+const hideBackButton = ref(localStorage.getItem("HideBackButton") === "1");
 
 const isbgc = ref(localStorage.getItem("ISBGC") == "1" || false);
-const hideTopBarTitle = ref(localStorage.getItem("HideTopBarTitle") !== "0");
-const updateTopBarVisibility = (event) => {
-  hideTopBarTitle.value = event.detail.hidden;
-};
-
 const route = useRoute();
 
-const metatittleRef = ref("");
 watchEffect(() => {
   const meta = route.meta || {};
-  const titleElement = document.querySelector(".blurNavdiv");
-
-  if (showElement.value) {
-    titleElement?.classList.add("blurNavdiv_border");
-    metatittleRef.value = meta.title ?? "";
-  } else {
-    titleElement?.classList.remove("blurNavdiv_border");
-    metatittleRef.value = "";
-  }
   isNavBackRef.value = !!meta.isNavBack;
-  isNeedNav.value = !!meta.isNavTop;
-  isNeedTabBarRef.value = !!meta.needTabBar;
 });
-
 onMounted(() => {
-  window.addEventListener("top-bar-visibility-change", updateTopBarVisibility);
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener("top-bar-visibility-change", updateTopBarVisibility);
+  window.addEventListener("back-button-visibility-change", (event) => {
+    hideBackButton.value = event.detail.hidden;
+  });
 });
 </script>
 
@@ -210,7 +151,7 @@ onBeforeUnmount(() => {
 //   pointer-events: none;
 // }
 
-.pwa-nav-bar .van-nav-bar__left {
+.pwa-standalone .pwa-nav-bar .van-nav-bar__left {
   transform: translate(20px, calc(26px + env(safe-area-inset-top)));
 }
 
@@ -257,6 +198,80 @@ onBeforeUnmount(() => {
   height: v-bind(tabbar_height) !important;
   /* margin-bottom: -10px; */
 }
+
+.settings-fab {
+  position: fixed;
+  left: 16px;
+  top: calc(100svh - 60px - env(safe-area-inset-bottom));
+  bottom: auto;
+  z-index: 1024;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 5px 18px rgba(70, 90, 130, 0.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+}
+
+.settings-fab .van-icon {
+  font-size: 21px;
+}
+
+.page-body {
+  padding-top: 0;
+}
+
+.page-body-with-back {
+  padding-top: 0;
+}
+
+.pwa-standalone .page-body {
+  padding-top: calc(10px + env(safe-area-inset-top));
+}
+
+.pwa-standalone .page-body-with-back {
+  padding-top: calc(10px + env(safe-area-inset-top));
+}
+
+.global-back-button {
+  position: fixed;
+  left: 18px;
+  top: calc(100svh - 132px - env(safe-area-inset-bottom));
+  bottom: auto;
+  z-index: 1024;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 5px 18px rgba(70, 90, 130, 0.15);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+}
+
+.global-back-button .van-icon {
+  font-size: 20px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-fab,
+  .global-back-button {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(45, 49, 58, 0.72);
+  }
+}
 /* 底部导航栏 */
 .tb-evenly .van-tabbar-item { justify-content: space-evenly !important; }
 .tb-center .van-tabbar-item { justify-content: center !important; }
@@ -296,7 +311,7 @@ h3 {
 
 .homept {
   font-size: 13px;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .plengclass {

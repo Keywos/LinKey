@@ -18,7 +18,7 @@
 
     <van-field name="slider" label="滑块选择">
       <template #input>
-        <van-slider v-model="rems" bar-height="24px" :step="1" :min="1" max="100" />
+        <van-slider v-model="rems" bar-height="24px" :step="1" :min="1" :max="100" />
       </template>
     </van-field>
 
@@ -28,7 +28,7 @@
 
     <van-field v-if="!autobm" name="slider" label="滑块选择">
       <template #input>
-        <van-slider v-model="yl" bar-height="24px" :step="1" :min="1" max="1024" />
+        <van-slider v-model="yl" bar-height="24px" :step="1" :min="1" :max="1024" />
       </template>
     </van-field>
 
@@ -66,7 +66,7 @@
 
     <van-field v-if="autobm" name="slider" label="滑块选择">
       <template #input>
-        <van-slider v-model="bmsize" bar-height="24px" :step="0.1" :min="0.1" max="99.9" />
+        <van-slider v-model="bmsize" bar-height="24px" :step="0.1" :min="0.1" :max="99.9" />
       </template>
     </van-field>
     <van-cell v-if="autobm" center :title="sizemb">
@@ -178,13 +178,13 @@ const setGistauto = (i) => {
 const setGistautos = (i) => {
   localStorage.setItem("BMS", i);
 };
-const rems = ref(localStorage.getItem("NTC") || 1);
+const rems = ref(Number(localStorage.getItem("NTC")) || 1);
 const overt = ref("");
 let totalDuration = 0;
 let completedRequests = 0;
 let b = "";
 
-let bmsizes = localStorage.getItem("BMSIZE") || 2;
+const bmsizes = Number(localStorage.getItem("BMSIZE")) || 2;
 const bmsize = ref(bmsizes);
 const sliceUrl = ref([]);
 const testAverageRows = ref([]);
@@ -194,7 +194,7 @@ const app = ref("");
 let io = 0;
 let ios = 0;
 let isapp = false;
-const yl = ref(localStorage.getItem("NTY") || 4);
+const yl = ref(Number(localStorage.getItem("NTY")) || 4);
 let isCancelled = false;
 let requestSession = 0;
 const isloding = ref(false);

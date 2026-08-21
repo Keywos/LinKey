@@ -15,10 +15,22 @@
       </van-popup>
     </van-cell-group>
 
-    <van-cell-group inset title="界面设置">
-      <van-cell class="van-cell-sw" center title="隐藏顶部状态栏" label="隐藏标题，保留左上角返回按钮">
+    <van-cell-group inset title="搜索引擎快捷切换">
+      <van-cell title="选择搜索框下方显示的引擎" label="可在首页搜索框下方点击切换，也可以拖动排序" />
+      <van-cell v-for="item in searchEngines" :key="item" :title="item" center>
         <template #right-icon>
-          <van-switch v-model="hideTopBarTitle" @change="setHideTopBarTitle" />
+          <van-switch
+            :model-value="searchTabs.includes(item)"
+            @update:model-value="(enabled) => toggleSearchEngine(item, enabled)"
+          />
+        </template>
+      </van-cell>
+    </van-cell-group>
+
+    <van-cell-group inset title="界面设置">
+      <van-cell class="van-cell-sw" center title="隐藏页面返回按钮" label="关闭后，带返回功能的页面左下角不显示返回按钮">
+        <template #right-icon>
+          <van-switch v-model="hideBackButton" @change="setHideBackButton" />
         </template>
       </van-cell>
     </van-cell-group>
@@ -233,6 +245,34 @@ const onBuiltInIconConfirm = ({ selectedOptions }) => {
   showBuiltInIconPicker.value = false;
 };
 const saveCardSettings = () => saveHomeCards(homeCards.value);
+const hideBackButton = ref(localStorage.getItem("HideBackButton") === "1");
+const setHideBackButton = (value) => {
+  localStorage.setItem("HideBackButton", value ? "1" : "0");
+  window.dispatchEvent(new CustomEvent("back-button-visibility-change", { detail: { hidden: value } }));
+};
+const searchEngines = ["Bing", "Google", "Baidu", "GitHub", "BiliBili"];
+const getSearchTabs = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem("SearchTabSort") || "null");
+    return Array.isArray(saved) ? saved.filter((item) => searchEngines.includes(item)) : searchEngines.slice(0, 3);
+  } catch {
+    return searchEngines.slice(0, 3);
+  }
+};
+const searchTabs = ref(getSearchTabs());
+const saveSearchTabs = (tabs) => {
+  searchTabs.value = tabs;
+  localStorage.setItem("SearchTabSort", JSON.stringify(tabs));
+  window.dispatchEvent(new Event("search-tabs-change"));
+};
+const toggleSearchEngine = (item, enabled) => {
+  if (enabled && !searchTabs.value.includes(item)) {
+    searchTabs.value = [...searchTabs.value, item];
+  } else if (!enabled) {
+    searchTabs.value = searchTabs.value.filter((tab) => tab !== item);
+  }
+  saveSearchTabs(searchTabs.value);
+};
 const getCardDescription = (card) => {
   if (card.r.startsWith("itms-appss://")) return "App Store 地区切换";
   if (/^https?:\/\//.test(card.r)) return "外部快捷方式";
@@ -321,11 +361,6 @@ const getStoredBoolean = (key, defaultValue = false) => {
 };
 const setStoredBoolean = (key, value) => {
   localStorage.setItem(key, value ? "1" : "0");
-};
-const hideTopBarTitle = ref(getStoredBoolean("HideTopBarTitle", true));
-const setHideTopBarTitle = (value) => {
-  setStoredBoolean("HideTopBarTitle", value);
-  window.dispatchEvent(new CustomEvent("top-bar-visibility-change", { detail: { hidden: value } }));
 };
 const EDITOR_DARK_BACKGROUNDS = ["#282c34", "#141414", "#000000"];
 const storedEditorBackground = localStorage.getItem("EditorDarkBackground");
