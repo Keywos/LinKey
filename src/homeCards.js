@@ -34,18 +34,20 @@ export const defaultHomeCards = [
 ];
 
 export function getHomeCards() {
-  // 读取保存的卡片状态（仅用于获取 enabled 状态）
+  // 读取保存的卡片数据
   const savedMap = new Map();
+  const savedCards = [];
   try {
-    const savedCards = JSON.parse(localStorage.getItem(HOME_CARDS_KEY));
-    if (Array.isArray(savedCards)) {
-      for (const card of savedCards) {
+    const parsed = JSON.parse(localStorage.getItem(HOME_CARDS_KEY));
+    if (Array.isArray(parsed)) {
+      savedCards.push(...parsed);
+      for (const card of parsed) {
         savedMap.set(card.id, card);
       }
     }
   } catch {}
 
-  // 始终以 defaultHomeCards 为基准，只从缓存继承 enabled 状态
+  // 以 defaultHomeCards 为基准，从缓存继承 enabled 状态
   const cards = defaultHomeCards.map((defaultCard) => {
     const saved = savedMap.get(defaultCard.id);
     return {
@@ -53,6 +55,14 @@ export function getHomeCards() {
       enabled: saved ? saved.enabled !== false : true,
     };
   });
+
+  // 添加自定义卡片（不在 defaultHomeCards 中的）
+  for (const saved of savedCards) {
+    const isDefault = defaultHomeCards.some((dc) => dc.id === saved.id && dc.r === saved.r);
+    if (!isDefault) {
+      cards.push({ ...saved });
+    }
+  }
 
   // 应用排序
   try {
