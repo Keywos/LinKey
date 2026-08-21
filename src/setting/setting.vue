@@ -19,10 +19,7 @@
       <van-cell title="选择搜索框下方显示的引擎" label="可在首页搜索框下方点击切换，也可以拖动排序" />
       <van-cell v-for="item in searchEngines" :key="item" :title="item" center>
         <template #right-icon>
-          <van-switch
-            :model-value="searchTabs.includes(item)"
-            @update:model-value="(enabled) => toggleSearchEngine(item, enabled)"
-          />
+          <van-switch :model-value="searchTabs.includes(item)" @update:model-value="(enabled) => toggleSearchEngine(item, enabled)" />
         </template>
       </van-cell>
     </van-cell-group>
@@ -174,6 +171,7 @@
         <template #right>
           <van-button square type="danger" text="删除" />
         </template>
+        <van-cell title="重置 快捷方式缓存" @click="reHome()" is-link />
       </van-swipe-cell>
     </van-cell-group>
     <br />
@@ -513,6 +511,20 @@ const rePwa = async () => {
   }
 };
 
+const reHome = async () => {
+  const resetHomeData = () => {
+    const keys = ["HomePageSort", "HomePageCards", "HomeIconTileOrder"];
+
+    if (!confirm("确定要清空首页卡片排序和配置吗？")) {
+      return;
+    }
+
+    keys.forEach((key) => localStorage.removeItem(key));
+    location.reload();
+  };
+
+  resetHomeData();
+};
 const cleargist = async () => {
   await codehubStorage.removeItem(GIST_LIST_KEY);
   useGStore.setGistRes([]);
