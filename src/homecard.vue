@@ -62,7 +62,9 @@
             <template v-if="layout === 'icon'">
               <div class="kcard-font_size">
                 <span class="kcard-icon-background" :class="{ 'kcard-icon-background-special': element.special }">
-                  <van-icon v-if="element.special" :name="element.icon" class="kcard-special-icon" />
+                  <template v-if="element.special">
+                    <img class="kcardimg kcardimg-built-in" :src="element.img" alt="" />
+                  </template>
                   <template v-else>
                     <span v-if="isCustomUrlIcon(element)" class="kcard-icon-slot">
                       <img class="kcardimg kcardimg-custom" :style="getIconSizeStyle(element)" :src="element.img" alt="" />
@@ -76,7 +78,7 @@
             </template>
             <template v-else>
               <div class="kcard-font_size">
-                <van-icon v-if="element.special" :name="element.icon" class="kcardimg kcard-special-card-icon" />
+                <img v-if="element.special" class="kcardimg kcard-special-card-icon" :src="element.img" alt="" />
                 <template v-else>
                   <span v-if="isCustomUrlIcon(element)" class="kcard-icon-slot">
                     <img class="kcardimg kcardimg-custom" :style="getIconSizeStyle(element)" :src="element.img" alt="" />
@@ -91,6 +93,8 @@
         </div>
       </template>
     </draggable>
+
+    <AddShortcut v-model:show="showAddShortcut" @saved="onShortcutSaved" />
   </div>
 </template>
 
@@ -101,6 +105,10 @@ import { useRouter } from "vue-router";
 import draggable from "vuedraggable";
 import myArray from "./arr.js";
 import { getHomeCards, saveHomeCards } from "./homeCards.js";
+import AddShortcut from "./AddShortcut.vue";
+import editIcon from "./img/svg/edit.svg";
+import moreIcon from "./img/svg/more.svg";
+import yjurlIcon from "./img/svg/yjurl.svg";
 
 const router = useRouter();
 const hcard = ref(getHomeCards().filter((card) => card.enabled));
@@ -117,10 +125,12 @@ const iconLayoutStyle = computed(() => ({
   "--icon-spacing": `${iconSpacing.value}px`,
 }));
 const specialTiles = [
-  { id: "__icon-settings__", label: "图标设置", icon: "apps-o", special: "icon-settings" },
-  { id: "__settings__", label: "设置", icon: "setting-o", special: "settings" },
+  { id: "__icon-settings__", label: "图标设置", img: editIcon, special: "icon-settings" },
+  { id: "__add__", label: "添加", img: yjurlIcon, special: "add" },
+  { id: "__settings__", label: "设置", img: moreIcon, special: "settings" },
 ];
 const displayCards = ref([]);
+const showAddShortcut = ref(false);
 const isImageIcon = (icon) => icon.startsWith("/") || icon.startsWith("data:") || /^https?:\/\//.test(icon);
 const isBuiltInSvgIcon = (icon) => {
   if (!icon) return false;
@@ -235,11 +245,19 @@ const activateCard = (card) => {
     showIconLayoutSettings.value = true;
     return;
   }
+  if (card.special === "add") {
+    showAddShortcut.value = true;
+    return;
+  }
   if (card.special === "settings") {
     router.push("/setting");
     return;
   }
   navigateToRoute(card.r);
+};
+const onShortcutSaved = () => {
+  hcard.value = getHomeCards().filter((card) => card.enabled);
+  rebuildDisplayCards();
 };
 const handleDragStart = () => {
   isDragging.value = true;
@@ -412,10 +430,9 @@ const handleDragEnd = () => {
 }
 
 .homecarda--card .kcard-special-card-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 .homecarda--icon .kcard-one {
@@ -434,7 +451,9 @@ const handleDragEnd = () => {
 }
 
 .homecarda--icon .kcard-special-icon {
-  font-size: 25px;
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
 }
 
 .homecarda--icon .kcard-homea {
@@ -493,11 +512,6 @@ const handleDragEnd = () => {
 .homecarda--icon .kcard-icon-slot {
   width: auto;
   height: auto;
-}
-
-.van-icon-setting-o,
-.van-icon-apps-o {
-  opacity: 0.6;
 }
 
 .kcardimg-emoji {
@@ -570,7 +584,10 @@ const handleDragEnd = () => {
   margin-bottom: 0;
 }
 
-.homecarda--icon .kcardimg-built-in {
+/* kcardimg-special？ */
+
+
+.homecarda--icon .kcardimg-built-in  {
   /* svg 图标形状 */
   width: 28px;
   height: 28px;
