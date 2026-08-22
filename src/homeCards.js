@@ -54,6 +54,8 @@ export function getHomeCards() {
       ...defaultCard,
       builtIn: true,
       enabled: saved ? saved.enabled !== false : true,
+      ...(saved?.img ? { img: saved.img } : {}),
+      ...(saved?.iconSize ? { iconSize: saved.iconSize } : {}),
     };
   });
 
