@@ -154,6 +154,9 @@ import sf from "@/img/svg/sf.svg";
 import safa from "@/img/svg/safa.svg";
 import hgithub from "@/img/svg/hgithub.svg";
 import w from "@/img/svg/w.svg";
+import editIcon from "@/img/svg/edit.svg";
+import moreIcon from "@/img/svg/more.svg";
+import yjurlIcon from "@/img/svg/yjurl.svg";
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -205,6 +208,9 @@ const iconSizeOptions = [
   { text: "大（66px）", value: 66 },
 ];
 const builtInIconOptions = [
+  { text: "编辑", value: editIcon },
+  { text: "更多", value: moreIcon },
+  { text: "添加", value: yjurlIcon },
   { text: "Time", value: ts },
   { text: "Success", value: success },
   { text: "Ping", value: carry },
