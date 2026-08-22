@@ -1,5 +1,11 @@
 <template>
-  <div class="homecarda" :class="`homecarda--${layout}`" :style="iconLayoutStyle" style="-webkit-user-select: none; user-select: none">
+  <div
+    class="homecarda"
+    :class="`homecarda--${layout}`"
+    :style="iconLayoutStyle"
+    style="-webkit-user-select: none; user-select: none"
+    @click="handleHomeClick"
+  >
     <div v-if="showIconLayoutSettings" class="icon-layout-settings" @click.self="showIconLayoutSettings = false">
       <section class="icon-layout-settings__panel" role="dialog" aria-modal="true" aria-label="图标布局设置">
         <div class="icon-layout-settings__header">
@@ -50,18 +56,29 @@
         disabled: false,
         delay: 200,
         chosenClass: 'kcard-bkcss',
-        handle: '.kcard-homea',
+         handle: '.kcard-homea',
+         disabled: false,
       }"
       @start="handleDragStart"
       @end="handleDragEnd"
       @change="changeSort"
     >
       <template #item="{ element }">
-        <div class="kcard-one" @click="activateCard(element)">
+          <div
+            class="kcard-one"
+            :class="{ 'kcard-one--editing': isEditMode && layout !== 'icon' && !element.special }"
+            @click="activateCard(element)"
+          >
           <div :key="element.id" class="kcard-homea">
             <template v-if="layout === 'icon'">
               <div class="kcard-font_size">
-                <span class="kcard-icon-background" :class="{ 'kcard-icon-background-special': element.special }">
+                <span
+                  class="kcard-icon-background"
+                  :class="{
+                    'kcard-icon-background-special': element.special,
+                    'kcard-icon-background--editing': isEditMode && !element.special,
+                  }"
+                >
                   <template v-if="element.special">
                     <img class="kcardimg kcardimg-built-in" :src="element.img" alt="" />
                   </template>
@@ -73,7 +90,7 @@
                     <span v-else class="kcardimg-emoji">{{ element.img }}</span>
                   </template>
                 </span>
-                <span class="kcard-onepan">{{ element.label || element.id }}</span>
+                 <span class="kcard-onepan">{{ element.special === "edit" && isEditMode ? "完成" : (element.label || element.id) }}</span>
               </div>
             </template>
             <template v-else>
@@ -86,7 +103,7 @@
                   <img v-else-if="isImageIcon(element.img)" class="kcardimg" :src="element.img" alt="" />
                   <span v-else class="kcardimg-emoji">{{ element.img }}</span>
                 </template>
-                <span class="kcard-onepan">{{ element.label || element.id }}</span>
+                 <span class="kcard-onepan">{{ element.special === "edit" && isEditMode ? "完成" : (element.label || element.id) }}</span>
               </div>
             </template>
           </div>
@@ -94,12 +111,34 @@
       </template>
     </draggable>
 
-    <AddShortcut v-model:show="showAddShortcut" @saved="onShortcutSaved" />
+    <div v-if="isEditMode && hiddenCards.length" class="hidden-shortcuts">
+      <span class="hidden-shortcuts__title">已隐藏</span>
+      <button
+        v-for="card in hiddenCards"
+        :key="`hidden-${card.id}`"
+        type="button"
+        class="hidden-shortcut"
+        @click="editCard(card)"
+      >
+        <span class="hidden-shortcut__icon">
+          <img v-if="isImageIcon(card.img)" :src="card.img" alt="" />
+          <span v-else>{{ card.img }}</span>
+        </span>
+        <span>{{ card.label || card.id }}</span>
+      </button>
+    </div>
+
+    <AddShortcut
+      v-model:show="showAddShortcut"
+      :card="editingCard"
+      @update:show="handleShortcutVisibility"
+      @saved="onShortcutSaved"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { showToast } from "vant";
 import { useRouter } from "vue-router";
 import draggable from "vuedraggable";
@@ -111,6 +150,7 @@ import moreIcon from "./img/svg/more.svg";
 import yjurlIcon from "./img/svg/yjurl.svg";
 
 const router = useRouter();
+const emit = defineEmits(["edit-mode-change"]);
 const hcard = ref(getHomeCards().filter((card) => card.enabled));
 const layout = ref(localStorage.getItem("HomeCardLayout") === "icon" ? "icon" : "card");
 const storedIconRadius = localStorage.getItem("HomeIconRadius");
@@ -118,6 +158,8 @@ const storedIconSpacing = localStorage.getItem("HomeIconSpacing");
 const iconRadius = ref(storedIconRadius === null ? 15 : Number(storedIconRadius));
 const iconSpacing = ref(storedIconSpacing === null ? 4 : Number(storedIconSpacing));
 const showIconLayoutSettings = ref(false);
+const isEditMode = ref(false);
+const editingCard = ref(null);
 const isDragging = ref(false);
 let ignoreClickUntil = 0;
 const iconLayoutStyle = computed(() => ({
@@ -127,9 +169,15 @@ const iconLayoutStyle = computed(() => ({
 const specialTiles = [
   { id: "__icon-settings__", label: "图标设置", img: editIcon, special: "icon-settings" },
   { id: "__add__", label: "添加", img: yjurlIcon, special: "add" },
+  { id: "__edit__", label: "编辑", img: editIcon, special: "edit" },
   { id: "__settings__", label: "设置", img: moreIcon, special: "settings" },
 ];
 const displayCards = ref([]);
+const cardsVersion = ref(0);
+const hiddenCards = computed(() => {
+  cardsVersion.value;
+  return getHomeCards().filter((card) => !card.enabled);
+});
 const showAddShortcut = ref(false);
 const isImageIcon = (icon) => icon.startsWith("/") || icon.startsWith("data:") || /^https?:\/\//.test(icon);
 const isBuiltInSvgIcon = (icon) => {
@@ -155,6 +203,7 @@ function sethomes(i) {
 
 const refreshHomeCards = () => {
   if (isDragging.value) return;
+  cardsVersion.value++;
   hcard.value = getHomeCards().filter((card) => card.enabled);
   rebuildDisplayCards();
 };
@@ -241,6 +290,35 @@ const navigateToRoute = (route) => {
 };
 const activateCard = (card) => {
   if (isDragging.value || Date.now() < ignoreClickUntil) return;
+  if (isEditMode.value && !card.special) {
+    editCard(card);
+    return;
+  }
+  if (card.special === "edit") {
+    const pageBody = document.querySelector(".page-body");
+    const usesPageBodyScroll = Boolean(pageBody && pageBody.scrollHeight > pageBody.clientHeight);
+    const pageScrollTop = pageBody?.scrollTop ?? 0;
+    const pageDistanceBottom = usesPageBodyScroll ? pageBody.scrollHeight - pageBody.clientHeight - pageScrollTop : 0;
+    const windowScrollTop = window.scrollY;
+    const windowDistanceBottom = document.documentElement.scrollHeight - window.innerHeight - windowScrollTop;
+    const keepPageBottom = usesPageBodyScroll && pageDistanceBottom < 24;
+    const keepWindowBottom = !usesPageBodyScroll && windowDistanceBottom < 24;
+    isEditMode.value = !isEditMode.value;
+    emit("edit-mode-change", isEditMode.value);
+    nextTick(() => {
+      if (usesPageBodyScroll) {
+        pageBody.scrollTop = keepPageBottom
+          ? Math.max(0, pageBody.scrollHeight - pageBody.clientHeight - pageDistanceBottom)
+          : pageScrollTop;
+      }
+      if (!usesPageBodyScroll) {
+        window.scrollTo(0, keepWindowBottom
+          ? Math.max(0, document.documentElement.scrollHeight - window.innerHeight - windowDistanceBottom)
+          : windowScrollTop);
+      }
+    });
+    return;
+  }
   if (card.special === "icon-settings") {
     showIconLayoutSettings.value = true;
     return;
@@ -255,7 +333,23 @@ const activateCard = (card) => {
   }
   navigateToRoute(card.r);
 };
+const handleHomeClick = (event) => {
+  if (!isEditMode.value) return;
+  if (event.target.closest(".kcard-one, .hidden-shortcut, .icon-layout-settings, .shortcut-overlay")) return;
+  isEditMode.value = false;
+  emit("edit-mode-change", false);
+};
+const editCard = (card) => {
+  editingCard.value = card;
+  showAddShortcut.value = true;
+};
+const handleShortcutVisibility = (visible) => {
+  showAddShortcut.value = visible;
+  if (!visible) editingCard.value = null;
+};
 const onShortcutSaved = () => {
+  editingCard.value = null;
+  cardsVersion.value++;
   hcard.value = getHomeCards().filter((card) => card.enabled);
   rebuildDisplayCards();
 };
@@ -446,6 +540,61 @@ const handleDragEnd = () => {
   justify-self: center;
 }
 
+.kcard-icon-background--editing {
+  cursor: pointer;
+  outline: 1px dashed rgba(110, 149, 255, 0.55);
+  outline-offset: 3px;
+}
+
+.kcard-one--editing {
+  cursor: pointer;
+  outline: 1px dashed rgba(110, 149, 255, 0.55);
+  outline-offset: 3px;
+}
+
+.hidden-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 22px var(--icon-spacing) 0;
+  padding: 14px 12px 12px;
+  border-top: 1px solid rgba(100, 110, 140, 0.16);
+}
+
+.hidden-shortcuts__title {
+  width: 100%;
+  font-size: 12px;
+  opacity: 0.55;
+}
+
+.hidden-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid rgba(100, 110, 140, 0.16);
+  border-radius: 999px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.34);
+  font: inherit;
+  font-size: 12px;
+}
+
+.hidden-shortcut__icon {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  overflow: hidden;
+}
+
+.hidden-shortcut__icon img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
 .homecarda--icon .kcard-icon-background-special {
   flex-shrink: 0;
 }
@@ -507,6 +656,10 @@ const handleDragEnd = () => {
     0 1px 2px rgba(56, 73, 112, 0.14),
     0 5px 12px rgba(94, 117, 177, 0.16),
     inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+.homecarda--icon .kcard-icon-background:has(.kcardimg-custom) {
+  overflow: visible;
 }
 
 .homecarda--icon .kcard-icon-slot {

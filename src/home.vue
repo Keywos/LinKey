@@ -6,12 +6,15 @@
       <!-- <h1 class="LINKEY__name">LINKEY</h1> -->
     </header>
     <search compact />
-    <section class="home-shortcuts">
-      <p class="homept">
-        <span class="home-version">VER Visits {{ version }} - {{ count }}</span>
-      </p>
-      <homecard />
-    </section>
+    <div class="home-content" :class="{ 'home-content--meta-after': homeMetaAfter }" :style="homeContentStyle">
+      <section class="home-shortcuts">
+        <p class="homept" :class="{ 'homept--dragging': isDraggingHomeMeta }" :style="homeptStyle" @pointerdown="onHomeptPointerDown">
+          <span v-if="!isEditingHome" class="home-version">VER Visits {{ version }} - {{ count }}</span>
+          <span v-else class="home-edit-hint">此文字可上下拖动调整布局 / 下方图标可以拖动调整位置</span>
+        </p>
+        <homecard @edit-mode-change="isEditingHome = $event" />
+      </section>
+    </div>
   </div>
 </template>
 
@@ -38,11 +41,51 @@
 <script setup>
 import homecard from "@/homecard.vue";
 import search from "@/search/search.vue";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useStore } from "./store/store";
 const store = useStore();
 const count = ref(store.count);
 const version = import.meta.env.PACKAGE_VERSION;
+const isEditingHome = ref(false);
+const homeMetaAfter = ref(localStorage.getItem("HomeMetaAfter") === "1");
+const homeGap = ref(Number(localStorage.getItem("HomeGap")) || 66);
+const isDraggingHomeMeta = ref(false);
+const homeptDragStartY = ref(0);
+const homeptDragStartGap = ref(0);
+const homeptDragOffset = ref(0);
+const homeContentStyle = computed(() => ({
+  marginTop: `${homeGap.value}px`,
+}));
+const homeptStyle = computed(() => {
+  if (!isDraggingHomeMeta.value) return {};
+  return { transform: `translateY(${homeptDragOffset.value}px)` };
+});
+const onHomeptPointerDown = (event) => {
+  if (!isEditingHome.value) return;
+  isDraggingHomeMeta.value = true;
+  homeptDragStartY.value = event.clientY;
+  homeptDragStartGap.value = homeGap.value;
+  homeptDragOffset.value = 0;
+  window.addEventListener("pointermove", onHomeptPointerMove);
+  window.addEventListener("pointerup", onHomeptPointerUp);
+  window.addEventListener("pointercancel", onHomeptPointerUp);
+  event.preventDefault();
+};
+const onHomeptPointerMove = (event) => {
+  if (!isDraggingHomeMeta.value) return;
+  const delta = event.clientY - homeptDragStartY.value;
+  homeptDragOffset.value = Math.max(-homeptDragStartGap.value, Math.min(520 - homeptDragStartGap.value, delta));
+};
+const onHomeptPointerUp = () => {
+  if (!isDraggingHomeMeta.value) return;
+  isDraggingHomeMeta.value = false;
+  homeGap.value = Math.max(0, Math.min(520, homeptDragStartGap.value + homeptDragOffset.value));
+  homeptDragOffset.value = 0;
+  localStorage.setItem("HomeGap", String(homeGap.value));
+  window.removeEventListener("pointermove", onHomeptPointerMove);
+  window.removeEventListener("pointerup", onHomeptPointerUp);
+  window.removeEventListener("pointercancel", onHomeptPointerUp);
+};
 </script>
 
 <style scoped>
@@ -53,6 +96,27 @@ const version = import.meta.env.PACKAGE_VERSION;
 
 .home-shortcuts {
   margin-top: 0;
+}
+
+.home-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.home-content .homept {
+  order: 1;
+}
+
+.home-content .home-shortcuts {
+  order: 2;
+}
+
+.home-content--meta-after .homept {
+  order: 2;
+}
+
+.home-content--meta-after .home-shortcuts {
+  order: 1;
 }
 
 .home-header {
@@ -70,6 +134,13 @@ const version = import.meta.env.PACKAGE_VERSION;
   margin-left: 8px;
   opacity: 0.7;
 }
+
+.home-edit-hint {
+  margin-left: 6px;
+  color: #7187dc;
+  opacity: 0.9;
+}
+
 .LINKEY__name {
   letter-spacing: 0.18em;
   transform: translateY(6px);
@@ -97,5 +168,24 @@ const version = import.meta.env.PACKAGE_VERSION;
  */
 .homept {
   padding-left: 20px;
+}
+
+.homept[draggable="true"] {
+  cursor: grab;
+}
+
+.homept[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.homept {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.homept--dragging {
+  cursor: grabbing;
+  opacity: 0.85;
 }
 </style>

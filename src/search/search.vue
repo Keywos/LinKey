@@ -406,7 +406,7 @@ window.addEventListener("search-tabs-change", () => {
 
 #searchk.search--compact {
   padding-top: 12vh;
-  height: 50vh;
+  height: 40vh;
   min-height: 270px;
   box-sizing: border-box;
   display: flex;
@@ -415,7 +415,7 @@ window.addEventListener("search-tabs-change", () => {
 }
 
 #searchk .search-content {
-  height: 28vh;
+  height: 20vh;
 }
 
 /* #searchk.search--compact .search-content {

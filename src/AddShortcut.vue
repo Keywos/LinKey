@@ -8,11 +8,20 @@
         </button>
       </div>
 
-      <label class="shortcut-panel__control">
+       <div v-if="isBuiltInShortcut" class="shortcut-panel__builtin">
+         <div>
+           <strong>{{ shortcutName }}</strong>
+           <span>首页内置图标</span>
+         </div>
+         <van-switch v-model="shortcutEnabled" size="22px" />
+       </div>
+
+       <template v-else>
+       <label class="shortcut-panel__control">
         <span>
           <span>名称</span>
         </span>
-        <input v-model.trim="shortcutName" type="text" placeholder="例如：Bing" />
+         <input v-model.trim="shortcutName" type="text" placeholder="例如：Bing" :readonly="Boolean(editingShortcut)" />
       </label>
 
       <label class="shortcut-panel__control">
@@ -53,10 +62,13 @@
           </span>
           <input v-model.trim="shortcutIcon" type="url" placeholder="https://example.com/icon.png" />
         </label>
-        <button type="button" class="shortcut-panel__picker" @click="showIconSizePicker = true">
-          <span>图标大小</span>
-          <b>{{ shortcutIconSize }}</b>
-        </button>
+         <label class="shortcut-panel__control shortcut-panel__range">
+           <span>
+             <span>图标大小</span>
+             <b>{{ selectedIconSize }}px</b>
+           </span>
+           <input v-model.number="selectedIconSize" type="range" min="18" max="66" step="1" />
+         </label>
       </template>
 
       <button v-else type="button" class="shortcut-panel__picker" @click="showBuiltInIconPicker = true">
@@ -70,6 +82,11 @@
           {{ editingShortcut ? "保存" : "添加" }}
         </button>
       </div>
+       </template>
+       <div v-if="isBuiltInShortcut" class="shortcut-panel__actions">
+         <button type="button" class="shortcut-panel__btn shortcut-panel__btn--ghost" @click="show = false">取消</button>
+         <button type="button" class="shortcut-panel__btn shortcut-panel__btn--primary" @click="saveShortcut">保存</button>
+       </div>
     </section>
   </div>
 
@@ -83,7 +100,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { showToast } from "vant";
 import { getHomeCards, saveHomeCards } from "@/homeCards.js";
 import ts from "@/img/svg/ts.svg";
@@ -122,6 +139,7 @@ watch(
         shortcutBuiltInIcon.value = builtInIcon?.text || "";
         selectedIconSize.value = props.card.iconSize || 20;
         shortcutIconSize.value = iconSizeOptions.find((option) => option.value === selectedIconSize.value)?.text || "默认（20px）";
+         shortcutEnabled.value = props.card.enabled !== false;
       } else {
         resetShortcutForm();
       }
@@ -141,7 +159,7 @@ const showBuiltInIconPicker = ref(false);
 const iconSizeOptions = [
   { text: "小（24px）", value: 24 },
   { text: "默认（34px）", value: 34 },
-  { text: "大（45px）", value: 45 },
+  { text: "大（66px）", value: 66 },
 ];
 const builtInIconOptions = [
   { text: "Time", value: ts },
@@ -154,6 +172,8 @@ const builtInIconOptions = [
   { text: "Code", value: w },
 ];
 const selectedIconSize = ref(20);
+const shortcutEnabled = ref(true);
+const isBuiltInShortcut = computed(() => Boolean(editingShortcut.value?.builtIn));
 const shortcutBuiltInIcon = ref("");
 const onIconSizeConfirm = ({ selectedOptions }) => {
   const option = selectedOptions[0];
@@ -180,9 +200,20 @@ const resetShortcutForm = () => {
   shortcutBuiltInIcon.value = "";
   selectedIconSize.value = 20;
   shortcutIconSize.value = "默认（20px）";
+  shortcutEnabled.value = true;
 };
 const addShortcut = () => {
   try {
+    if (isBuiltInShortcut.value) {
+      const homeCards = getHomeCards();
+      const storedCard = homeCards.find((card) => card.id === editingShortcut.value.id);
+      if (storedCard) storedCard.enabled = shortcutEnabled.value;
+      saveHomeCards(homeCards);
+      show.value = false;
+      showToast(shortcutEnabled.value ? "图标已显示" : "图标已隐藏");
+      emit("saved", storedCard);
+      return;
+    }
     if (!shortcutName.value || !shortcutUrl.value || !shortcutIcon.value) {
       throw new Error("请填写名称、跳转地址和图标");
     }
@@ -190,7 +221,7 @@ const addShortcut = () => {
       throw new Error("请填写有效的图标网址");
     }
     const homeCards = getHomeCards();
-    if (homeCards.some((card) => card !== editingShortcut.value && card.id === shortcutName.value)) {
+     if (homeCards.some((card) => card.id === shortcutName.value && card.id !== editingShortcut.value?.id)) {
       throw new Error("快捷方式名称已存在");
     }
     const shortcut = {
@@ -202,7 +233,8 @@ const addShortcut = () => {
     };
     const isEditing = Boolean(editingShortcut.value);
     if (isEditing) {
-      Object.assign(editingShortcut.value, shortcut);
+       const storedCard = homeCards.find((card) => card.id === editingShortcut.value.id);
+       if (storedCard) Object.assign(storedCard, shortcut);
       saveHomeCards(homeCards);
     } else {
       homeCards.push(shortcut);
@@ -294,6 +326,34 @@ const saveShortcut = () => addShortcut();
 
 .shortcut-panel__control input:focus {
   border-color: rgba(113, 135, 220, 0.6);
+}
+
+.shortcut-panel__builtin {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0 22px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.36);
+}
+
+.shortcut-panel__builtin div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shortcut-panel__builtin span {
+  font-size: 12px;
+  opacity: 0.55;
+}
+
+.shortcut-panel__range input[type="range"] {
+  padding: 0;
+  border: 0;
+  accent-color: #7187dc;
+  background: transparent;
 }
 
 .shortcut-panel__segmented {
@@ -391,7 +451,8 @@ const saveShortcut = () => addShortcut();
   }
 
   .shortcut-panel__control input,
-  .shortcut-panel__picker {
+  .shortcut-panel__picker,
+  .shortcut-panel__builtin {
     border-color: rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.06);
   }

@@ -52,6 +52,7 @@ export function getHomeCards() {
     const saved = savedMap.get(defaultCard.id);
     return {
       ...defaultCard,
+      builtIn: true,
       enabled: saved ? saved.enabled !== false : true,
     };
   });
@@ -60,7 +61,7 @@ export function getHomeCards() {
   for (const saved of savedCards) {
     const isDefault = defaultHomeCards.some((dc) => dc.id === saved.id && dc.r === saved.r);
     if (!isDefault) {
-      cards.push({ ...saved });
+       cards.push({ ...saved, builtIn: false });
     }
   }
 
