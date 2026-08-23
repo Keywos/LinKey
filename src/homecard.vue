@@ -4,15 +4,15 @@
       <section class="icon-layout-settings__panel" role="dialog" aria-modal="true" aria-label="图标布局设置">
         <div class="icon-layout-settings__header">
           <strong>图标布局</strong>
-          <button type="button" aria-label="关闭设置" @click="showIconLayoutSettings = false">
+          <button style="padding-right: 4px;" type="button" aria-label="关闭设置" @click="showIconLayoutSettings = false">
             <van-icon name="cross" />
           </button>
         </div>
 
         <label v-if="layout === 'icon'" class="icon-layout-settings__control">
           <span>
-            <span>图标左右间距</span>
-            <b>{{ iconSpacing }}px</b>
+            <span style="padding-left: 4px;">图标左右间距</span>
+            <b style="padding-right: 4px;">{{ iconSpacing }}px</b>
           </span>
             <div style="height: 12px;"/>
           <van-slider v-model="iconSpacing" bar-height="20px" :step="1" :min="0" :max="20" />
@@ -21,15 +21,15 @@
 
         <label v-if="layout === 'icon'" class="icon-layout-settings__control">
           <span>
-            <span>图标圆角</span>
-            <b>{{ iconRadius }}px</b>
+            <span style="padding-left: 4px;">图标圆角</span>
+            <b style="padding-right: 4px;">{{ iconRadius }}px</b>
           </span>
           <div style="height: 12px;"/>
           <van-slider v-model="iconRadius" bar-height="20px" :step="1" :min="0" :max="26" />
           <!-- <input v-model.number="iconRadius" type="range" min="0" max="26" step="1" /> -->
         </label>
         <div class="icon-layout-settings__switch">
-          <span>卡片样式 / 图标</span>
+          <span style="padding-left: 4px;">卡片样式 / 图标</span>
           <van-switch :model-value="layout === 'icon'" size="20px" @update:model-value="setLayoutMode" />
         </div>
         <!-- <div class="icon-layout-settings__preview">
@@ -482,6 +482,7 @@ const handleDragEnd = () => {
 .icon-layout-settings__header {
   margin-bottom: 18px;
   font-size: 16px;
+  padding-left: 4px;
 }
 
 .icon-layout-settings__switch {

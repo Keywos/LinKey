@@ -2,8 +2,8 @@
   <div v-if="show" class="shortcut-overlay" @click.self="show = false">
     <section class="shortcut-panel" role="dialog" aria-modal="true" :aria-label="panelTitle">
       <div class="shortcut-panel__header">
-        <strong>{{ panelTitle }}</strong>
-        <button type="button" aria-label="关闭" @click="show = false">
+        <strong style="padding-left: 4px">{{ panelTitle }}</strong>
+        <button style="padding-right: 4px" type="button" aria-label="关闭" @click="show = false">
           <van-icon name="cross" />
         </button>
       </div>
@@ -18,14 +18,14 @@
 
       <label v-if="!isSpecialShortcut" class="shortcut-panel__control">
         <span>
-          <span>名称{{ isBuiltInShortcut ? " (只读)" : "" }}</span>
+          <span style="padding-left: 4px">名称{{ isBuiltInShortcut ? " (只读)" : "" }}</span>
         </span>
         <input v-model.trim="shortcutName" type="text" placeholder="例如：Bing" :readonly="isBuiltInShortcut" :tabindex="isBuiltInShortcut ? -1 : 0" @mousedown="onReadonlyMousedown" />
       </label>
 
       <label v-if="!isSpecialShortcut" class="shortcut-panel__control">
         <span>
-          <span>跳转地址{{ isBuiltInShortcut ? " (只读)" : "" }}</span>
+          <span style="padding-left: 4px">跳转地址{{ isBuiltInShortcut ? " (只读)" : "" }}</span>
         </span>
         <input
           v-model.trim="shortcutUrl"
@@ -39,7 +39,7 @@
 
       <div class="shortcut-panel__control">
         <span>
-          <span>图标</span>
+          <span style="padding-left: 4px">图标</span>
         </span>
         <div class="shortcut-panel__segmented">
           <button v-for="option in iconTypeOptions" :key="option.value" type="button" :class="{ 'is-active': shortcutIconType === option.value }" @click="selectIconType(option.value)">
@@ -96,8 +96,8 @@
   <div v-if="showBuiltInIconPicker" class="icon-picker-overlay" @click.self="showBuiltInIconPicker = false">
     <section class="icon-picker" role="dialog" aria-modal="true" aria-label="选择内置图标">
       <div class="icon-picker__header">
-        <strong>选择内置图标</strong>
-        <button type="button" aria-label="关闭" @click="showBuiltInIconPicker = false">
+        <strong>&nbsp;选择内置图标</strong>
+        <button style="padding-right: 4px" type="button" aria-label="关闭" @click="showBuiltInIconPicker = false">
           <van-icon name="cross" />
         </button>
       </div>
@@ -468,7 +468,7 @@ const deleteShortcut = () => {
   align-items: center;
   justify-content: space-between;
   margin-top: 18px;
-  padding: 12px;
+  padding: 10px 13px;
   box-sizing: border-box;
   border: 1px solid rgba(100, 110, 140, 0.18);
   border-radius: 22px;
@@ -586,7 +586,7 @@ const deleteShortcut = () => {
   gap: 8px;
   padding: 14px 6px 12px;
   border: 1px solid rgba(100, 110, 140, 0.16);
-  border-radius: 14px;
+  border-radius: 22px;
   color: inherit;
   background: rgba(255, 255, 255, 0.5);
   font: inherit;
