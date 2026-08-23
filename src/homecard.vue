@@ -14,7 +14,9 @@
             <span>图标左右间距</span>
             <b>{{ iconSpacing }}px</b>
           </span>
-          <input v-model.number="iconSpacing" type="range" min="0" max="20" step="1" />
+            <div style="height: 12px;"/>
+          <van-slider v-model="iconSpacing" bar-height="20px" :step="1" :min="0" :max="20" />
+          <!-- <input v-model.number="iconSpacing" type="range" min="0" max="20" step="1" /> -->
         </label>
 
         <label v-if="layout === 'icon'" class="icon-layout-settings__control">
@@ -22,7 +24,9 @@
             <span>图标圆角</span>
             <b>{{ iconRadius }}px</b>
           </span>
-          <input v-model.number="iconRadius" type="range" min="0" max="26" step="1" />
+          <div style="height: 12px;"/>
+          <van-slider v-model="iconRadius" bar-height="20px" :step="1" :min="0" :max="26" />
+          <!-- <input v-model.number="iconRadius" type="range" min="0" max="26" step="1" /> -->
         </label>
         <div class="icon-layout-settings__switch">
           <span>卡片样式 / 图标</span>
@@ -424,7 +428,7 @@ const handleDragEnd = () => {
   width: min(360px, 100%);
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.42);
-  border-radius: 24px;
+  border-radius: 29px;
   color: inherit;
   background: rgba(255, 255, 255, 0.58);
   box-shadow: 0 18px 55px rgba(62, 77, 126, 0.22);
@@ -766,20 +770,16 @@ const handleDragEnd = () => {
   position: fixed;
   z-index: 9999;
   left: 50%;
-  bottom: max(16px, env(safe-area-inset-bottom));
+  bottom: max(6px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 27px;
-  animation: edit-bar-in 0.25s ease-out;
-  color: #fff;
-  background: linear-gradient(145deg, #6e95ff, #8a6dff);
+  background: transparent;
 }
 
 .edit-mode-bar__done {
-  height: 44px;
+  height: 39px;
   min-width: 100px;
 
   display: flex;
@@ -790,7 +790,7 @@ const handleDragEnd = () => {
   padding: 0 20px;
 
   border: 0;
-  border-radius: 24px;
+  border-radius: 27px;
   color: #fff;
   font-size: 15px;
   font-weight: 600;
@@ -803,7 +803,7 @@ const handleDragEnd = () => {
     opacity 0.15s ease;
 
   background: linear-gradient(145deg, #6e95ff, #8a6dff);
-  box-shadow: 0 6px 16px rgba(110, 149, 255, 0.35);
+  /* box-shadow: 0 6px 16px rgba(110, 149, 255, 0.35); */
 }
 
 .edit-mode-bar__done:active {
@@ -837,7 +837,7 @@ const handleDragEnd = () => {
   margin-top: 18px;
   padding: 0 16px;
   border: 0;
-  border-radius: 14px;
+  border-radius: 22px;
   color: #fff;
   background: linear-gradient(145deg, #6e95ff, #8a6dff);
   box-shadow: 0 6px 16px rgba(110, 149, 255, 0.25);
@@ -884,18 +884,9 @@ const handleDragEnd = () => {
       inset 0 0 0 1px rgba(255, 255, 255, 0.01);
   }
 
-  .edit-mode-bar {
-    background: rgba(35, 35, 35, 0.78);
-    border-color: rgba(255, 255, 255, 0.1);
-
-    box-shadow:
-      0 8px 30px rgba(0, 0, 0, 0.4),
-      0 2px 8px rgba(0, 0, 0, 0.2);
-  }
-
   .edit-mode-bar__done {
     background: linear-gradient(145deg, #6e95ff, #8a6dff);
-    box-shadow: 0 6px 16px rgba(110, 149, 255, 0.35);
+    /* box-shadow: 0 2px 2px rgba(110, 149, 255, 0.35); */
   }
 }
 </style>
