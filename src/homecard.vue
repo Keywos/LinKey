@@ -428,7 +428,7 @@ const handleDragEnd = () => {
   width: min(360px, 100%);
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.42);
-  border-radius: 29px;
+  border-radius: 40px;
   color: inherit;
   background: rgba(255, 255, 255, 0.58);
   box-shadow: 0 18px 55px rgba(62, 77, 126, 0.22);
@@ -780,7 +780,7 @@ const handleDragEnd = () => {
 }
 
 .edit-mode-bar__done {
-  height: 39px;
+  height: 36px;
   min-width: 100px;
 
   display: flex;

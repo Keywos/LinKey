@@ -257,7 +257,7 @@ const setActiveTab = (i, o) => {
   localStorage.setItem("SearchTabKey", i);
 };
 
-const backgroundNew = ref("#8fa8cd");
+const backgroundNew = ref("#8fa8cdc9");
 
 const changeSortStart = () => {
   console.log("开始");
@@ -478,7 +478,7 @@ window.addEventListener("search-tabs-change", () => {
   font-weight: 500;
   border-radius: 14px;
 
-  color: #707070bc;
+  color: #454f65de;
   z-index: 2;
   width: 50px;
   height: 26px;
@@ -496,7 +496,7 @@ window.addEventListener("search-tabs-change", () => {
 }
 
 .active-taba {
-  background-color: #8fa8cd;
+  background-color: #8fa8cdc9;
 }
 
 .indicatora {
@@ -519,7 +519,7 @@ window.addEventListener("search-tabs-change", () => {
 }
 
 .searchkeys {
-  background: #8fa8cd;
+  background: #8fa8cdc9;
 }
 
 .linekey {
