@@ -25,7 +25,7 @@
             <b style="padding-right: 4px;">{{ iconRadius }}px</b>
           </span>
           <div style="height: 12px;"/>
-          <van-slider v-model="iconRadius" bar-height="20px" :step="1" :min="0" :max="26" />
+          <van-slider v-model="iconRadius" bar-height="20px" :step="1" :min="0" :max="30" />
           <!-- <input v-model.number="iconRadius" type="range" min="0" max="26" step="1" /> -->
         </label>
         <div class="icon-layout-settings__switch">
