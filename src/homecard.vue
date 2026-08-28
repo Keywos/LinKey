@@ -15,7 +15,7 @@
             <b style="padding-right: 4px;">{{ iconSpacing }}px</b>
           </span>
             <div style="height: 12px;"/>
-          <van-slider v-model="iconSpacing" bar-height="20px" :step="1" :min="0" :max="20" />
+          <van-slider v-model="iconSpacing" bar-height="20px" :step="1" :min="0" :max="66" />
           <!-- <input v-model.number="iconSpacing" type="range" min="0" max="20" step="1" /> -->
         </label>
 
