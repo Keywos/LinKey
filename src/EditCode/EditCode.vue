@@ -183,12 +183,12 @@
                         <button class="saves-sync-btn" @click.stop="editItemTags(child)">+ 标签</button>
                       </div>
                       <div class="saves-item-action-group saves-item-action-group-right">
-                        <button v-if="child.url" class="saves-sync-btn" @click.stop="copyUrl(child, 'Raw')">
+                        <button v-if="child.url" class="saves-sync-btn" @click.stop="copyUrl(child, 'raw')">
                           {{ child.blobUrl ? "Raw" : "Url" }}
                         </button>
-                        <button v-if="child.blobUrl" title="复制 Blob URL" class="saves-sync-btn" @click.stop="copyUrl(child, 'Blob')">Blob</button>
-                        <button v-if="child.gist?.rawUrl" class="saves-sync-btn" title="复制 Gist URL" @click.stop="copyUrl(child, 'Gist')">Gist</button>
-                        <button v-if="child.gist?.htmlUrl" class="saves-sync-btn" title="复制 Html URL" @click.stop="copyUrl(child, 'Html')">Html</button>
+                        <button v-if="child.blobUrl" title="复制 Blob URL" class="saves-sync-btn" @click.stop="copyUrl(child, 'blob')">Blob</button>
+                        <button v-if="child.gist?.rawUrl" class="saves-sync-btn" title="复制 Gist URL" @click.stop="copyUrl(child, 'gist')">Gist</button>
+                        <button v-if="child.gist?.htmlUrl" class="saves-sync-btn" title="复制 Html URL" @click.stop="copyUrl(child, 'html')">Html</button>
                         <button
                           v-if="child.url"
                           class="saves-sync-btn"
