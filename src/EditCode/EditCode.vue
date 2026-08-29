@@ -1292,7 +1292,6 @@ const createNewBlank = async () => {
     nextTick(() => {
       skipWatchSave = false;
     });
- 
   } catch (e) {
     console.log(e);
     showToast("新建失败");
@@ -3160,10 +3159,11 @@ onBeforeUnmount(() => {
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  z-index: 1000;
-  padding: 123px 8% 0;
+  /* ★ 需高于宽屏文件列表面板(1001/1002)，避免弹窗被左侧列表覆盖 */
+  z-index: 1100;
+  padding: 0 8%;
 }
 
 .modal-box {
@@ -3302,7 +3302,7 @@ onBeforeUnmount(() => {
 
 @media (prefers-color-scheme: dark) {
   .modal-box {
-    background: #16181c0c;
+    background: #9495a812;
   }
   .log-panel {
     background: #1c1e234c;
