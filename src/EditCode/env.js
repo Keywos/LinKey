@@ -220,6 +220,7 @@ if (typeof $httpClient === "undefined" && typeof self !== "undefined") {
         if (body != null) {
           pu += "&linkeybody=" + encodeURIComponent(typeof body === "string" ? body : JSON.stringify(body));
         }
+        pu += "&linkeymethod=" + encodeURIComponent(method);
         return pu;
       }
 
