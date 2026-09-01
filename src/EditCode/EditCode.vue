@@ -2620,8 +2620,10 @@ const updateEditorPageBackground = () => {
   if (isDarkModeEnabled.value) {
     const background = localStorage.getItem("EditorDarkBackground");
     document.body.style.backgroundColor = ["#282c34", "#141414", "#000000"].includes(background) ? background : "#282c34";
+    // document.documentElement.style.backgroundColor = "#282c34";
   } else {
     document.body.style.backgroundColor = "#f3f3f3";
+    // document.documentElement.style.backgroundColor = "#f3f3f3";
   }
 };
 
