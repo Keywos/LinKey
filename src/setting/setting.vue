@@ -3,18 +3,24 @@
     <h1>Setting Page</h1>
 
     <van-cell-group inset title="重置排序顺序">
-      <van-cell title="清除主页拖动排序缓存" @click="clearh()" is-link />
-      <van-cell title="清除搜索页拖动排序缓存" @click="clearhs()" is-link />
+      <van-cell title="清除 搜索页 拖动排序缓存" @click="clearhs()" is-link />
       <van-cell title="重置 PWA 缓存" @click="rePwa()" is-link />
+      <van-cell title="重置 首页 快捷方式缓存" @click="reHome()" is-link />
     </van-cell-group>
 
-    <van-cell-group inset title="启动页设置">
+    <van-cell-group inset title="默认启动页设置">
       <van-field v-model="fieldValue" is-link readonly label="首页" placeholder="选择启动页" @click="showPicker = true" />
       <van-popup v-model:show="showPicker" round position="bottom">
         <van-picker :columns="columns" @cancel="showPicker = false" @confirm="onConfirm" />
       </van-popup>
+    <!-- </van-cell-group>
+    <van-cell-group inset title="界面设置"> -->
+      <van-cell class="van-cell-sw" center title="隐藏页面返回按钮" label="关闭后，带返回功能的页面左下角不显示返回按钮">
+        <template #right-icon>
+          <van-switch v-model="hideBackButton" @change="setHideBackButton" />
+        </template>
+      </van-cell>
     </van-cell-group>
-
     <van-cell-group inset title="搜索引擎快捷切换">
       <van-cell title="选择搜索框下方显示的引擎" label="可在首页搜索框下方点击切换，也可以拖动排序" />
       <van-cell v-for="item in searchEngines" :key="item" :title="item" center>
@@ -24,15 +30,7 @@
       </van-cell>
     </van-cell-group>
 
-    <van-cell-group inset title="界面设置">
-      <van-cell class="van-cell-sw" center title="隐藏页面返回按钮" label="关闭后，带返回功能的页面左下角不显示返回按钮">
-        <template #right-icon>
-          <van-switch v-model="hideBackButton" @change="setHideBackButton" />
-        </template>
-      </van-cell>
-    </van-cell-group>
-
-    <van-cell-group inset title="主页卡片">
+    <!-- <van-cell-group inset title="主页卡片">
       <van-cell title="整理主页卡片" label="关闭后将不会显示在主页" />
       <van-cell
         v-for="card in homeCards"
@@ -52,11 +50,11 @@
         </template>
       </van-cell>
       <van-cell title="添加快捷方式" is-link @click="openAddShortcut" />
-    </van-cell-group>
+    </van-cell-group> -->
 
     <AddShortcut v-model:show="showShortcutPopup" :card="editingShortcut" @saved="onShortcutSaved" />
 
-    <van-cell-group inset title="编辑器主题">
+    <!-- <van-cell-group inset title="编辑器主题">
       <van-field class="editor-theme-field" label="背景颜色">
         <template #input>
           <van-radio-group v-model="editorDarkBackground" class="editor-theme-options" @change="setEditorDarkBackground">
@@ -66,7 +64,7 @@
           </van-radio-group>
         </template>
       </van-field>
-    </van-cell-group>
+    </van-cell-group> -->
 
     <van-cell-group inset title="Gist 相关设置" id="Gistsetting">
       <van-field v-model="username" type="textarea" rows="1" label="" :readonly="isreadonlysName" :autosize="{ maxHeight: 50, minHeight: 10 }" placeholder="请输入 Name" id="keyfroms">
@@ -118,7 +116,7 @@
       </van-cell>
     </van-cell-group>
 
-    <van-cell-group inset title="Swipe">
+    <!-- <van-cell-group inset title="Swipe">
       <van-swipe-cell>
         <template #left>
           <van-button square type="primary" text="选择" />
@@ -140,7 +138,11 @@
         </template>
         <van-cell title="重置 快捷方式缓存" @click="reHome()" is-link />
       </van-swipe-cell>
-    </van-cell-group>
+    </van-cell-group> -->
+    <br />
+    <br />
+    <br />
+    <br />
     <br />
     <br />
     <br />
@@ -155,14 +157,14 @@ import { sendReq } from "@/http/http.js";
 import { showConfirmDialog, showToast } from "vant";
 import { useGistStore } from "@/store/gistStore";
 import { codehubStorage, GIST_LIST_KEY } from "@/storage/codehubStorage.js";
-import { defaultHomeCards, getHomeCards, saveHomeCards } from "@/homeCards.js";
+// import { defaultHomeCards, getHomeCards, saveHomeCards } from "@/homeCards.js";
 import AddShortcut from "@/AddShortcut.vue";
 
 const useGStore = useGistStore();
-const homeCards = ref(getHomeCards());
+// const homeCards = ref(getHomeCards());
 const showShortcutPopup = ref(false);
 const editingShortcut = ref(null);
-const saveCardSettings = () => saveHomeCards(homeCards.value);
+// const saveCardSettings = () => saveHomeCards(homeCards.value);
 const hideBackButton = ref(localStorage.getItem("HideBackButton") === "1");
 const setHideBackButton = (value) => {
   localStorage.setItem("HideBackButton", value ? "1" : "0");
@@ -196,32 +198,32 @@ const getCardDescription = (card) => {
   if (/^https?:\/\//.test(card.r)) return "外部快捷方式";
   return card.r;
 };
-const isCustomCard = (card) => !defaultHomeCards.some((defaultCard) => defaultCard.id === card.id && defaultCard.r === card.r);
-const removeShortcut = async (card) => {
-  const scrollY = window.scrollY;
-  try {
-    await showConfirmDialog({ title: "确认删除", message: `确定删除「${card.id}」快捷方式吗？`, lockScroll: false });
-    homeCards.value = homeCards.value.filter((currentCard) => currentCard !== card);
-    saveCardSettings();
-    showToast("快捷方式已删除");
-  } catch {
-    // 用户取消
-  }
-  window.scrollTo(0, scrollY);
-};
-const editShortcut = (card) => {
-  if (!isCustomCard(card)) return;
-  editingShortcut.value = card;
-  showShortcutPopup.value = true;
-};
-const openAddShortcut = () => {
-  editingShortcut.value = null;
-  showShortcutPopup.value = true;
-};
-const onShortcutSaved = () => {
-  homeCards.value = getHomeCards();
-  editingShortcut.value = null;
-};
+// const isCustomCard = (card) => !defaultHomeCards.some((defaultCard) => defaultCard.id === card.id && defaultCard.r === card.r);
+// const removeShortcut = async (card) => {
+//   const scrollY = window.scrollY;
+//   try {
+//     await showConfirmDialog({ title: "确认删除", message: `确定删除「${card.id}」快捷方式吗？`, lockScroll: false });
+//     homeCards.value = homeCards.value.filter((currentCard) => currentCard !== card);
+//     saveCardSettings();
+//     showToast("快捷方式已删除");
+//   } catch {
+//     // 用户取消
+//   }
+//   window.scrollTo(0, scrollY);
+// };
+// const editShortcut = (card) => {
+//   if (!isCustomCard(card)) return;
+//   editingShortcut.value = card;
+//   showShortcutPopup.value = true;
+// };
+// const openAddShortcut = () => {
+//   editingShortcut.value = null;
+//   showShortcutPopup.value = true;
+// };
+// const onShortcutSaved = () => {
+//   homeCards.value = getHomeCards();
+//   editingShortcut.value = null;
+// };
 const beforeClose = () => {
   // showToast("");
 };
@@ -233,13 +235,13 @@ const getStoredBoolean = (key, defaultValue = false) => {
 const setStoredBoolean = (key, value) => {
   localStorage.setItem(key, value ? "1" : "0");
 };
-const EDITOR_DARK_BACKGROUNDS = ["#282c34", "#141414", "#000000"];
-const storedEditorBackground = localStorage.getItem("EditorDarkBackground");
-const editorDarkBackground = ref(EDITOR_DARK_BACKGROUNDS.includes(storedEditorBackground) ? storedEditorBackground : "#282c34");
-const setEditorDarkBackground = (value) => {
-  localStorage.setItem("EditorDarkBackground", value);
-  window.dispatchEvent(new Event("editor-theme-change"));
-};
+// const EDITOR_DARK_BACKGROUNDS = ["#282c34", "#141414", "#000000"];
+// const storedEditorBackground = localStorage.getItem("EditorDarkBackground");
+// const editorDarkBackground = ref(EDITOR_DARK_BACKGROUNDS.includes(storedEditorBackground) ? storedEditorBackground : "#282c34");
+// const setEditorDarkBackground = (value) => {
+//   localStorage.setItem("EditorDarkBackground", value);
+//   window.dispatchEvent(new Event("editor-theme-change"));
+// };
 const getStoredToken = () => {
   try {
     return JSON.parse(localStorage.getItem("GistUserT") || "null");
@@ -346,15 +348,31 @@ const autoISBGC = ref(getStoredBoolean("ISBGC"));
 const autoGistlocala = ref(getStoredBoolean("LocalGistResTure", true));
 const setGistautolocala = (value) => setStoredBoolean("LocalGistResTure", value);
 
-const clearh = () => {
-  localStorage.removeItem("HomePageSort");
-  showToast("清除主页排序缓存成功");
+const reHome = async () => {
+  const resetHomeData = () => {
+    const keys = ["HomePageSort", "HomePageCards", "HomeIconTileOrder","HomeSpecialIcons"];
+
+    if (!confirm("确定要清空首页卡片排序和配置吗？")) {
+      return;
+    }
+
+    keys.forEach((key) => localStorage.removeItem(key));
+    location.reload();
+  };
+
+  resetHomeData();
 };
 
-const clearhs = () => {
-  localStorage.removeItem("SearchTabSort");
-  localStorage.removeItem("SearchTabKey");
-  showToast("清除搜索页排序缓存成功");
+const clearhs = async () => {
+  const a = async () => {
+    if (!confirm("清除 搜索页排序 缓存吗？")) {
+      return;
+    }
+    localStorage.removeItem("SearchTabSort");
+    localStorage.removeItem("SearchTabKey");
+    showToast("清除搜索页排序缓存成功");
+  };
+  a();
 };
 
 const rePwa = async () => {
@@ -384,26 +402,17 @@ const rePwa = async () => {
   }
 };
 
-const reHome = async () => {
-  const resetHomeData = () => {
-    const keys = ["HomePageSort", "HomePageCards", "HomeIconTileOrder"];
-
-    if (!confirm("确定要清空首页卡片排序和配置吗？")) {
+const cleargist = async () => {
+  const a = async () => {
+    if (!confirm("清除 Gist 本地缓存吗？")) {
       return;
     }
-
-    keys.forEach((key) => localStorage.removeItem(key));
-    location.reload();
+    await codehubStorage.removeItem(GIST_LIST_KEY);
+    useGStore.setGistRes([]);
+    showToast("清除 Gist 本地缓存成功");
   };
-
-  resetHomeData();
+  a();
 };
-const cleargist = async () => {
-  await codehubStorage.removeItem(GIST_LIST_KEY);
-  useGStore.setGistRes([]);
-  showToast("清除 Gist 本地缓存成功");
-};
-
 const columns = ref([
   { text: "默认主页", value: "/" },
   { text: "极简搜索", value: "/search" },

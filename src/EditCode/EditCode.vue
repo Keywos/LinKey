@@ -165,51 +165,53 @@
                   </div>
 
                   <div v-if="isItemActionsExpanded(child)" class="saves-item-sync-actions">
-                    <div class="saves-item-action-group">
-                      <button class="saves-sync-btn" @click.stop="toggleItemExpansion(child)">
-                        {{ isItemExpanded(child) ? "收起" : getItemChildrenCount(child) > 0 ? `展开 (${getItemChildrenCount(child)})` : "展开" }}
-                      </button>
-                      <button
-                        class="saves-sync-btn"
-                        :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'upload' }"
-                        :disabled="syncingItemId === child.id && syncingAction === 'upload'"
-                        title="上传到 Gist"
-                        @click.stop="confirmUploadToGist(child)"
-                      >
-                        上传
-                      </button>
-                      <button class="saves-sync-btn" @click.stop="deleteSingleItem(child)">删除</button>
-                      <button class="saves-sync-btn" @click.stop="editItemTags(child)">+ 标签</button>
-                    </div>
-                    <div class="saves-item-action-group saves-item-action-group-right">
-                      <button v-if="child.url" class="saves-sync-btn" @click.stop="copyUrl(child, 'Raw')">
-                        {{ child.blobUrl ? "Raw" : "Url" }}
-                      </button>
-                      <button v-if="child.blobUrl" title="复制 Blob URL" class="saves-sync-btn" @click.stop="copyUrl(child, 'Blob')">Blob</button>
-                      <button v-if="child.gist?.rawUrl" class="saves-sync-btn" title="复制 Gist URL" @click.stop="copyUrl(child, 'Gist')">Gist</button>
-                      <button v-if="child.gist?.htmlUrl" class="saves-sync-btn" title="复制 Html URL" @click.stop="copyUrl(child, 'Html')">Html</button>
-                      <button
-                        v-if="child.url"
-                        class="saves-sync-btn"
-                        :class="{ 'is-syncing': refreshingUrlItemId === child.id }"
-                        :disabled="refreshingUrlItemId === child.id"
-                        title="从原始 URL 重新拉取"
-                        @click.stop="confirmRefreshFromUrl(child)"
-                      >
-                        从 URL 拉取
-                      </button>
-                      <button
-                        v-if="child.gist?.rawUrl"
-                        class="saves-sync-btn"
-                        :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'gist' }"
-                        :disabled="syncingItemId === child.id && syncingAction === 'gist'"
-                        title="从 Gist 拉取最新内容"
-                        @click.stop="confirmDownloadFromGist(child)"
-                      >
-                        从 Gist 拉取
-                      </button>
-                      <button class="saves-sync-btn" @click.stop="renameItem(child)">重命名</button>
-                      <button class="saves-sync-btn" :class="{ 'is-current': child.id === currentItemId }" :disabled="loadingItemId === child.id" @click.stop="loadItemForList(child)">加载</button>
+                    <div class="saves-item-sync-actions-content">
+                      <div class="saves-item-action-group">
+                        <button class="saves-sync-btn" @click.stop="toggleItemExpansion(child)">
+                          {{ isItemExpanded(child) ? "收起" : getItemChildrenCount(child) > 0 ? `展开 (${getItemChildrenCount(child)})` : "展开" }}
+                        </button>
+                        <button
+                          class="saves-sync-btn"
+                          :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'upload' }"
+                          :disabled="syncingItemId === child.id && syncingAction === 'upload'"
+                          title="上传到 Gist"
+                          @click.stop="confirmUploadToGist(child)"
+                        >
+                          上传
+                        </button>
+                        <button class="saves-sync-btn" @click.stop="deleteSingleItem(child)">删除</button>
+                        <button class="saves-sync-btn" @click.stop="editItemTags(child)">+ 标签</button>
+                      </div>
+                      <div class="saves-item-action-group saves-item-action-group-right">
+                        <button v-if="child.url" class="saves-sync-btn" @click.stop="copyUrl(child, 'raw')">
+                          {{ child.blobUrl ? "Raw" : "Url" }}
+                        </button>
+                        <button v-if="child.blobUrl" title="复制 Blob URL" class="saves-sync-btn" @click.stop="copyUrl(child, 'blob')">Blob</button>
+                        <button v-if="child.gist?.rawUrl" class="saves-sync-btn" title="复制 Gist URL" @click.stop="copyUrl(child, 'gist')">Gist</button>
+                        <button v-if="child.gist?.htmlUrl" class="saves-sync-btn" title="复制 Html URL" @click.stop="copyUrl(child, 'html')">Html</button>
+                        <button
+                          v-if="child.url"
+                          class="saves-sync-btn"
+                          :class="{ 'is-syncing': refreshingUrlItemId === child.id }"
+                          :disabled="refreshingUrlItemId === child.id"
+                          title="从原始 URL 重新拉取"
+                          @click.stop="confirmRefreshFromUrl(child)"
+                        >
+                          从 URL 拉取
+                        </button>
+                        <button
+                          v-if="child.gist?.rawUrl"
+                          class="saves-sync-btn"
+                          :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'gist' }"
+                          :disabled="syncingItemId === child.id && syncingAction === 'gist'"
+                          title="从 Gist 拉取最新内容"
+                          @click.stop="confirmDownloadFromGist(child)"
+                        >
+                          从 Gist 拉取
+                        </button>
+                        <button class="saves-sync-btn" @click.stop="renameItem(child)">重命名</button>
+                        <button class="saves-sync-btn" :class="{ 'is-current': child.id === currentItemId }" :disabled="loadingItemId === child.id" @click.stop="loadItemForList(child)">加载</button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1290,7 +1292,6 @@ const createNewBlank = async () => {
     nextTick(() => {
       skipWatchSave = false;
     });
- 
   } catch (e) {
     console.log(e);
     showToast("新建失败");
@@ -2619,8 +2620,10 @@ const updateEditorPageBackground = () => {
   if (isDarkModeEnabled.value) {
     const background = localStorage.getItem("EditorDarkBackground");
     document.body.style.backgroundColor = ["#282c34", "#141414", "#000000"].includes(background) ? background : "#282c34";
+    // document.documentElement.style.backgroundColor = "#282c34";
   } else {
     document.body.style.backgroundColor = "#f3f3f3";
+    // document.documentElement.style.backgroundColor = "#f3f3f3";
   }
 };
 
@@ -2795,6 +2798,8 @@ onBeforeUnmount(() => {
 
 .saves-list {
   overflow-y: auto;
+  /* ★ 横向溢出一律隐藏，避免子列/按钮把列表撑出屏幕 */
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding: 4px 0;
   flex: 1;
@@ -2863,6 +2868,10 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 12px;
   position: relative;
+  /* ★ 作为子列(gist child)/flex 项时允许收缩，不被内容撑破 */
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* 底部横线：左右各留 10px 边距 */
@@ -2896,6 +2905,12 @@ onBeforeUnmount(() => {
   color: var(--van-cell-text-color);
 }
 
+/* ★ 所有子元素禁止把容器撑破，允许收缩并按容器宽度约束 */
+.saves-item-info > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .saves-item-name {
   margin-top: -2px;
   padding-bottom: 4px;
@@ -2911,6 +2926,8 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: normal;
+  /* ★ 超长文件名/标签允许断行，避免撑出屏幕 */
+  overflow-wrap: anywhere;
 }
 
 .saves-item-source {
@@ -2943,6 +2960,9 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* ★ 长内容一律在容器内截断，防止超出屏幕 */
+  max-width: 100%;
+  min-width: 0;
 }
 
 .saves-item-preview:has(.saves-url-line) {
@@ -2959,6 +2979,8 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* ★ URL 文本超长时截断，不撑破容器 */
+  max-width: 100%;
 }
 
 .saves-url-line:hover {
@@ -2985,13 +3007,26 @@ onBeforeUnmount(() => {
   grid-template-rows: 1fr;
   align-items: center;
   overflow: hidden;
+  /* ★ grid 内按钮行同样允许收缩 */
+  min-width: 0;
+  max-width: 100%;
+  /* ★ grid 行列间距兜底：即使子层结构变化，两行按钮之间也有间距 */
+  row-gap: 10px;
+  column-gap: 7px;
 }
 
 .saves-item-sync-actions-content {
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
+  /* ★ 允许左右按钮组整体换行，避免按钮过多时整行溢出屏幕 */
+  flex-wrap: wrap;
+  gap: 7px;
+  /* ★ 左右两组换行时的上下间距也加大 */
+  row-gap: 10px;
 }
 
 .saves-actions-enter-active,
@@ -3020,11 +3055,17 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+  /* ★ 上下（行）间距加大，按钮换行后不至于挤在一起 */
+  row-gap: 10px;
   align-items: center;
+  /* ★ 允许组收缩，避免与另一组挤在一起时溢出屏幕 */
+  min-width: 0;
 }
 
 .saves-item-action-group-right {
   justify-content: flex-end;
+  /* ★ 右侧组空间不足时整体换到下一行 */
+  flex: 1 1 auto;
 }
 
 .saves-sync-btn {
@@ -3035,6 +3076,8 @@ onBeforeUnmount(() => {
   background: rgba(92, 125, 190, 0.12);
   color: var(--text);
   font-size: 10px;
+  /* ★ 按钮文字紧凑时避免折行显示 */
+  white-space: nowrap;
 }
 
 .saves-sync-btn:disabled {
@@ -3060,10 +3103,16 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   background: transparent;
   overflow: hidden;
+  /* ★ grid 容器自身允许收缩，避免内容撑破父级 */
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .saves-gist-children-content {
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -3112,10 +3161,11 @@ onBeforeUnmount(() => {
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  z-index: 1000;
-  padding: 123px 8% 0;
+  /* ★ 需高于宽屏文件列表面板(1001/1002)，避免弹窗被左侧列表覆盖 */
+  z-index: 1100;
+  padding: 0 8%;
 }
 
 .modal-box {
@@ -3254,7 +3304,7 @@ onBeforeUnmount(() => {
 
 @media (prefers-color-scheme: dark) {
   .modal-box {
-    background: #16181c0c;
+    background: #9495a812;
   }
   .log-panel {
     background: #1c1e234c;

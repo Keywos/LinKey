@@ -92,6 +92,7 @@ const onHomeptPointerUp = () => {
 .home-page {
   min-height: calc(100vh - 60px);
   margin-top: 10px;
+  margin-bottom: 100px;
 }
 
 .home-shortcuts {

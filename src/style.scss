@@ -1,5 +1,11 @@
 #app {
-  font-family: -apple-system, PingFang SC, system-ui, Microsoft Sans Serif, Menlo, sans-serif;
+  font-family:
+    -apple-system,
+    PingFang SC,
+    system-ui,
+    Microsoft Sans Serif,
+    Menlo,
+    sans-serif;
   /* font-weight: 440; */
   /* display: flex; */
   flex-direction: column;
@@ -228,7 +234,14 @@
   /* filter: brightness(0) invert(1); */
   /* filter: grayscale(50%); */
 }
-
+.shortcut-panel__picker img,
+.icon-picker__item img {
+  /*  图标 反转 */
+  /* opacity: ; */
+  filter: invert(1);
+  /* filter: brightness(0) invert(1); */
+  /* filter: grayscale(50%); */
+}
 #searchForm .van-search__content--round {
   background-color: #fdffff13;
 }

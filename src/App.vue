@@ -125,9 +125,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   border: 0.5px solid rgba(255, 255, 255, 0.066);
-  background:
-    radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.017), transparent 34%),
-    rgba(255, 255, 255, 0.06);
+  background: radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.017), transparent 34%), rgba(255, 255, 255, 0.06);
   box-shadow:
     inset 0 0.5px 0.5px rgba(255, 255, 255, 0.05),
     inset 0 -0.5px 1px rgba(255, 255, 255, 0.05),
@@ -273,8 +271,12 @@ onMounted(() => {
   }
 }
 /* 底部导航栏 */
-.tb-evenly .van-tabbar-item { justify-content: space-evenly !important; }
-.tb-center .van-tabbar-item { justify-content: center !important; }
+.tb-evenly .van-tabbar-item {
+  justify-content: space-evenly !important;
+}
+.tb-center .van-tabbar-item {
+  justify-content: center !important;
+}
 
 .kcard-font_size {
   font-size: 14px;
@@ -373,6 +375,10 @@ h3 {
   .kcard-imggit,
   .kcardimg {
     /*  图标 反转 */
+    filter: none;
+  }
+  .shortcut-panel__picker img,
+  .icon-picker__item img {
     filter: none;
   }
   .kcard-one {

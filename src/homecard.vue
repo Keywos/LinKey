@@ -1,45 +1,46 @@
 <template>
-  <div
-    class="homecarda"
-    :class="`homecarda--${layout}`"
-    :style="iconLayoutStyle"
-    style="-webkit-user-select: none; user-select: none"
-    @click="handleHomeClick"
-  >
+  <div class="homecarda" :class="`homecarda--${layout}`" :style="iconLayoutStyle" style="-webkit-user-select: none; user-select: none" @click="handleHomeClick">
     <div v-if="showIconLayoutSettings" class="icon-layout-settings" @click.self="showIconLayoutSettings = false">
       <section class="icon-layout-settings__panel" role="dialog" aria-modal="true" aria-label="图标布局设置">
         <div class="icon-layout-settings__header">
           <strong>图标布局</strong>
-          <button type="button" aria-label="关闭设置" @click="showIconLayoutSettings = false">
+          <button style="padding-right: 4px;" type="button" aria-label="关闭设置" @click="showIconLayoutSettings = false">
             <van-icon name="cross" />
           </button>
         </div>
 
+        <label v-if="layout === 'icon'" class="icon-layout-settings__control">
+          <span>
+            <span style="padding-left: 4px;">图标左右间距</span>
+            <b style="padding-right: 4px;">{{ iconSpacing }}px</b>
+          </span>
+            <div style="height: 12px;"/>
+          <van-slider v-model="iconSpacing" bar-height="20px" :step="1" :min="0" :max="66" />
+          <!-- <input v-model.number="iconSpacing" type="range" min="0" max="20" step="1" /> -->
+        </label>
+
+        <label v-if="layout === 'icon'" class="icon-layout-settings__control">
+          <span>
+            <span style="padding-left: 4px;">图标圆角</span>
+            <b style="padding-right: 4px;">{{ iconRadius }}px</b>
+          </span>
+          <div style="height: 12px;"/>
+          <van-slider v-model="iconRadius" bar-height="20px" :step="1" :min="0" :max="30" />
+          <!-- <input v-model.number="iconRadius" type="range" min="0" max="26" step="1" /> -->
+        </label>
         <div class="icon-layout-settings__switch">
-          <span>卡片样式 / 图标</span>
+          <span style="padding-left: 4px;">卡片样式 / 图标</span>
           <van-switch :model-value="layout === 'icon'" size="20px" @update:model-value="setLayoutMode" />
         </div>
-
-        <label v-if="layout === 'icon'" class="icon-layout-settings__control">
-          <span>
-            <span>图标左右间距</span>
-            <b>{{ iconSpacing }}px</b>
-          </span>
-          <input v-model.number="iconSpacing" type="range" min="0" max="20" step="1" />
-        </label>
-
-        <label v-if="layout === 'icon'" class="icon-layout-settings__control">
-          <span>
-            <span>图标圆角</span>
-            <b>{{ iconRadius }}px</b>
-          </span>
-          <input v-model.number="iconRadius" type="range" min="0" max="26" step="1" />
-        </label>
-
-        <div class="icon-layout-settings__preview">
+        <!-- <div class="icon-layout-settings__preview">
           <span class="icon-layout-settings__preview-icon">✦</span>
           <span>实时预览</span>
-        </div>
+        </div> -->
+
+        <button type="button" class="icon-layout-settings__edit" @click="startEditMode">
+          <van-icon name="edit" />
+          <span>编辑首页快捷方式</span>
+        </button>
       </section>
     </div>
 
@@ -56,19 +57,16 @@
         disabled: false,
         delay: 200,
         chosenClass: 'kcard-bkcss',
-         handle: '.kcard-homea',
-         disabled: false,
+        handle: '.kcard-homea',
+        disabled: false,
       }"
       @start="handleDragStart"
       @end="handleDragEnd"
       @change="changeSort"
     >
       <template #item="{ element }">
-          <div
-            class="kcard-one"
-            :class="{ 'kcard-one--editing': isEditMode && layout !== 'icon' && !element.special }"
-            @click="activateCard(element)"
-          >
+        <div class="kcard-one" :class="{ 'kcard-one--editing': isEditMode && layout !== 'icon' }" @click="activateCard(element)">
+          <!-- && !element.special -->
           <div :key="element.id" class="kcard-homea">
             <template v-if="layout === 'icon'">
               <div class="kcard-font_size">
@@ -76,11 +74,22 @@
                   class="kcard-icon-background"
                   :class="{
                     'kcard-icon-background-special': element.special,
-                    'kcard-icon-background--editing': isEditMode && !element.special,
+                    'kcard-icon-background--editing': isEditMode,
+                    // && !element.special
                   }"
                 >
                   <template v-if="element.special">
-                    <img class="kcardimg kcardimg-built-in" :src="element.img" alt="" />
+                    <span v-if="isCustomUrlIcon({ img: getSpecialIcon(element), iconSize: getSpecialIconSize(element) ? 1 : undefined })" class="kcard-icon-slot">
+                      <img class="kcardimg kcardimg-custom" :style="getSpecialIconSize(element)" :src="getSpecialIcon(element)" alt="" />
+                    </span>
+                    <img
+                      v-else-if="isImageIcon(getSpecialIcon(element))"
+                      class="kcardimg"
+                      :class="{ 'kcardimg-built-in': isBuiltInSvgIcon(getSpecialIcon(element)) }"
+                      :src="getSpecialIcon(element)"
+                      alt=""
+                    />
+                    <span v-else class="kcardimg-emoji">{{ getSpecialIcon(element) }}</span>
                   </template>
                   <template v-else>
                     <span v-if="isCustomUrlIcon(element)" class="kcard-icon-slot">
@@ -90,12 +99,19 @@
                     <span v-else class="kcardimg-emoji">{{ element.img }}</span>
                   </template>
                 </span>
-                 <span class="kcard-onepan">{{ element.special === "edit" && isEditMode ? "完成" : (element.label || element.id) }}</span>
+                <span class="kcard-onepan">{{ element.label || element.id }}</span>
+                <!--  element.special === "edit" && isEditMode ? "完成" :  -->
               </div>
             </template>
             <template v-else>
               <div class="kcard-font_size">
-                <img v-if="element.special" class="kcardimg kcard-special-card-icon" :src="element.img" alt="" />
+                <template v-if="element.special">
+                  <span v-if="isCustomUrlIcon({ img: getSpecialIcon(element), iconSize: getSpecialIconSize(element) ? 1 : undefined })" class="kcard-icon-slot">
+                    <img class="kcardimg kcardimg-custom" :style="getSpecialIconSize(element)" :src="getSpecialIcon(element)" alt="" />
+                  </span>
+                  <img v-else-if="isImageIcon(getSpecialIcon(element))" class="kcardimg kcard-special-card-icon" :src="getSpecialIcon(element)" alt="" />
+                  <span v-else class="kcardimg-emoji">{{ getSpecialIcon(element) }}</span>
+                </template>
                 <template v-else>
                   <span v-if="isCustomUrlIcon(element)" class="kcard-icon-slot">
                     <img class="kcardimg kcardimg-custom" :style="getIconSizeStyle(element)" :src="element.img" alt="" />
@@ -103,7 +119,8 @@
                   <img v-else-if="isImageIcon(element.img)" class="kcardimg" :src="element.img" alt="" />
                   <span v-else class="kcardimg-emoji">{{ element.img }}</span>
                 </template>
-                 <span class="kcard-onepan">{{ element.special === "edit" && isEditMode ? "完成" : (element.label || element.id) }}</span>
+                <span class="kcard-onepan">{{ element.label || element.id }}</span>
+                <!-- element.special === "edit" && isEditMode ? "完成" : -->
               </div>
             </template>
           </div>
@@ -113,13 +130,7 @@
 
     <div v-if="isEditMode && hiddenCards.length" class="hidden-shortcuts">
       <span class="hidden-shortcuts__title">已隐藏</span>
-      <button
-        v-for="card in hiddenCards"
-        :key="`hidden-${card.id}`"
-        type="button"
-        class="hidden-shortcut"
-        @click="editCard(card)"
-      >
+      <button v-for="card in hiddenCards" :key="`hidden-${card.id}`" type="button" class="hidden-shortcut" @click="editCard(card)">
         <span class="hidden-shortcut__icon">
           <img v-if="isImageIcon(card.img)" :src="card.img" alt="" />
           <span v-else>{{ card.img }}</span>
@@ -128,12 +139,14 @@
       </button>
     </div>
 
-    <AddShortcut
-      v-model:show="showAddShortcut"
-      :card="editingCard"
-      @update:show="handleShortcutVisibility"
-      @saved="onShortcutSaved"
-    />
+    <AddShortcut v-model:show="showAddShortcut" :card="editingCard" @update:show="handleShortcutVisibility" @saved="onShortcutSaved" />
+
+    <div v-if="isEditMode" class="edit-mode-bar">
+      <button type="button" class="edit-mode-bar__done" @click="exitEditMode">
+        <van-icon name="success" />
+        <span>完成</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -155,8 +168,8 @@ const hcard = ref(getHomeCards().filter((card) => card.enabled));
 const layout = ref(localStorage.getItem("HomeCardLayout") === "icon" ? "icon" : "card");
 const storedIconRadius = localStorage.getItem("HomeIconRadius");
 const storedIconSpacing = localStorage.getItem("HomeIconSpacing");
-const iconRadius = ref(storedIconRadius === null ? 15 : Number(storedIconRadius));
-const iconSpacing = ref(storedIconSpacing === null ? 4 : Number(storedIconSpacing));
+const iconRadius = ref(storedIconRadius === null ? 18 : Number(storedIconRadius));
+const iconSpacing = ref(storedIconSpacing === null ? 18 : Number(storedIconSpacing));
 const showIconLayoutSettings = ref(false);
 const isEditMode = ref(false);
 const editingCard = ref(null);
@@ -169,7 +182,7 @@ const iconLayoutStyle = computed(() => ({
 const specialTiles = [
   { id: "__icon-settings__", label: "图标设置", img: editIcon, special: "icon-settings" },
   { id: "__add__", label: "添加", img: yjurlIcon, special: "add" },
-  { id: "__edit__", label: "编辑", img: editIcon, special: "edit" },
+  // { id: "__edit__", label: "编辑", img: editIcon, special: "edit" },
   { id: "__settings__", label: "设置", img: moreIcon, special: "settings" },
 ];
 const displayCards = ref([]);
@@ -179,6 +192,29 @@ const hiddenCards = computed(() => {
   return getHomeCards().filter((card) => !card.enabled);
 });
 const showAddShortcut = ref(false);
+const specialIconsVersion = ref(0);
+const getSpecialIcon = (element) => {
+  if (!element.special) return element.img;
+  specialIconsVersion.value;
+  try {
+    const specialIcons = JSON.parse(localStorage.getItem("HomeSpecialIcons") || "{}");
+    const custom = specialIcons[element.id];
+    return custom?.img || element.img;
+  } catch {
+    return element.img;
+  }
+};
+const getSpecialIconSize = (element) => {
+  if (!element.special) return undefined;
+  specialIconsVersion.value;
+  try {
+    const specialIcons = JSON.parse(localStorage.getItem("HomeSpecialIcons") || "{}");
+    const custom = specialIcons[element.id];
+    return typeof custom?.iconSize === "number" ? { "--custom-icon-size": `${custom.iconSize}px` } : undefined;
+  } catch {
+    return undefined;
+  }
+};
 const isImageIcon = (icon) => icon.startsWith("/") || icon.startsWith("data:") || /^https?:\/\//.test(icon);
 const isBuiltInSvgIcon = (icon) => {
   if (!icon) return false;
@@ -277,6 +313,36 @@ function getRandARR(array) {
   const randomIndex = Math.floor(Math.random() * array.length);
   return array[randomIndex];
 }
+
+const startEditMode = () => {
+  showIconLayoutSettings.value = false;
+
+  const pageBody = document.querySelector(".page-body");
+  const usesPageBodyScroll = Boolean(pageBody && pageBody.scrollHeight > pageBody.clientHeight);
+
+  const pageScrollTop = pageBody?.scrollTop ?? 0;
+  const pageDistanceBottom = usesPageBodyScroll ? pageBody.scrollHeight - pageBody.clientHeight - pageScrollTop : 0;
+
+  const windowScrollTop = window.scrollY;
+  const windowDistanceBottom = document.documentElement.scrollHeight - window.innerHeight - windowScrollTop;
+
+  const keepPageBottom = usesPageBodyScroll && pageDistanceBottom < 24;
+  const keepWindowBottom = !usesPageBodyScroll && windowDistanceBottom < 24;
+
+  isEditMode.value = true;
+  emit("edit-mode-change", true);
+
+  nextTick(() => {
+    if (usesPageBodyScroll) {
+      pageBody.scrollTop = keepPageBottom ? Math.max(0, pageBody.scrollHeight - pageBody.clientHeight - pageDistanceBottom) : pageScrollTop;
+    }
+
+    if (!usesPageBodyScroll) {
+      window.scrollTo(0, keepWindowBottom ? Math.max(0, document.documentElement.scrollHeight - window.innerHeight - windowDistanceBottom) : windowScrollTop);
+    }
+  });
+};
+
 const navigateToRoute = (route) => {
   if (route === "/") {
     showToast(getRandARR(myArray));
@@ -290,33 +356,12 @@ const navigateToRoute = (route) => {
 };
 const activateCard = (card) => {
   if (isDragging.value || Date.now() < ignoreClickUntil) return;
-  if (isEditMode.value && !card.special) {
+  if (isEditMode.value) {
     editCard(card);
     return;
   }
   if (card.special === "edit") {
-    const pageBody = document.querySelector(".page-body");
-    const usesPageBodyScroll = Boolean(pageBody && pageBody.scrollHeight > pageBody.clientHeight);
-    const pageScrollTop = pageBody?.scrollTop ?? 0;
-    const pageDistanceBottom = usesPageBodyScroll ? pageBody.scrollHeight - pageBody.clientHeight - pageScrollTop : 0;
-    const windowScrollTop = window.scrollY;
-    const windowDistanceBottom = document.documentElement.scrollHeight - window.innerHeight - windowScrollTop;
-    const keepPageBottom = usesPageBodyScroll && pageDistanceBottom < 24;
-    const keepWindowBottom = !usesPageBodyScroll && windowDistanceBottom < 24;
-    isEditMode.value = !isEditMode.value;
-    emit("edit-mode-change", isEditMode.value);
-    nextTick(() => {
-      if (usesPageBodyScroll) {
-        pageBody.scrollTop = keepPageBottom
-          ? Math.max(0, pageBody.scrollHeight - pageBody.clientHeight - pageDistanceBottom)
-          : pageScrollTop;
-      }
-      if (!usesPageBodyScroll) {
-        window.scrollTo(0, keepWindowBottom
-          ? Math.max(0, document.documentElement.scrollHeight - window.innerHeight - windowDistanceBottom)
-          : windowScrollTop);
-      }
-    });
+    startEditMode();
     return;
   }
   if (card.special === "icon-settings") {
@@ -383,7 +428,7 @@ const handleDragEnd = () => {
   width: min(360px, 100%);
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.42);
-  border-radius: 24px;
+  border-radius: 40px;
   color: inherit;
   background: rgba(255, 255, 255, 0.58);
   box-shadow: 0 18px 55px rgba(62, 77, 126, 0.22);
@@ -437,6 +482,7 @@ const handleDragEnd = () => {
 .icon-layout-settings__header {
   margin-bottom: 18px;
   font-size: 16px;
+  padding-left: 4px;
 }
 
 .icon-layout-settings__switch {
@@ -495,24 +541,6 @@ const handleDragEnd = () => {
   border-radius: var(--icon-radius);
   color: #fff;
   background: linear-gradient(145deg, #6e95ff, #8a6dff);
-}
-
-@media (prefers-color-scheme: dark) {
-  .icon-layout-settings__header button,
-  .kcard-special__icon {
-    border-color: rgba(255, 255, 255, 0.12);
-    background: rgba(45, 49, 58, 0.72);
-  }
-
-  .icon-layout-settings {
-    background: rgba(0, 0, 0, 0.22);
-  }
-
-  .icon-layout-settings__panel {
-    border-color: rgba(255, 255, 255, 0.12);
-    background: rgba(35, 39, 48, 0.78);
-    box-shadow: 0 18px 55px rgba(0, 0, 0, 0.32);
-  }
 }
 
 .homecarda--icon .kcard-all {
@@ -693,15 +721,6 @@ const handleDragEnd = () => {
   pointer-events: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  .homecarda--icon .kcard-icon-background {
-    background: linear-gradient(145deg, rgba(70, 76, 92, 0.4), rgba(47, 53, 68, 0.1));
-    box-shadow:
-      0 4px 12px rgba(0, 0, 0, 0.22),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.01);
-  }
-}
-
 .kcard-homea {
   padding: 10px 6px 6px 18px;
 }
@@ -739,12 +758,136 @@ const handleDragEnd = () => {
 
 /* kcardimg-special？ */
 
-
-.homecarda--icon .kcardimg-built-in  {
+.homecarda--icon .kcardimg-built-in {
   /* svg 图标形状 */
   width: 28px;
   height: 28px;
   border-radius: 0;
   /* max(0px, calc(var(--icon-radius) - 4px)); */
+}
+
+/* 编辑模式：底部悬浮完成按钮 */
+.edit-mode-bar {
+  position: fixed;
+  z-index: 9999;
+  left: 50%;
+  bottom: max(6px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.edit-mode-bar__done {
+  height: 36px;
+  min-width: 100px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+
+  padding: 0 20px;
+
+  border: 0;
+  border-radius: 27px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+
+  background: linear-gradient(145deg, #6e95ff, #8a6dff);
+  /* box-shadow: 0 6px 16px rgba(110, 149, 255, 0.35); */
+}
+
+.edit-mode-bar__done:active {
+  transform: scale(0.94);
+  opacity: 0.85;
+}
+
+.edit-mode-bar__done .van-icon {
+  font-size: 18px;
+}
+
+@keyframes edit-bar-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.icon-layout-settings__edit {
+  display: flex;
+  width: 100%;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 18px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 22px;
+  color: #fff;
+  background: linear-gradient(145deg, #6e95ff, #8a6dff);
+  box-shadow: 0 6px 16px rgba(110, 149, 255, 0.25);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.icon-layout-settings__edit:active {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+
+.icon-layout-settings__edit .van-icon {
+  font-size: 17px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .icon-layout-settings__header button,
+  .kcard-special__icon {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(45, 49, 58, 0.72);
+  }
+
+  .icon-layout-settings {
+    background: rgba(0, 0, 0, 0.22);
+  }
+
+  .icon-layout-settings__panel {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(35, 39, 48, 0.78);
+    box-shadow: 0 18px 55px rgba(0, 0, 0, 0.32);
+  }
+
+  .homecarda--icon .kcard-icon-background {
+    background: linear-gradient(145deg, rgba(70, 76, 92, 0.4), rgba(47, 53, 68, 0.1));
+    box-shadow:
+      0 4px 12px rgba(0, 0, 0, 0.22),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.01);
+  }
+
+  .edit-mode-bar__done {
+    background: linear-gradient(145deg, #6e95ff, #8a6dff);
+    /* box-shadow: 0 2px 2px rgba(110, 149, 255, 0.35); */
+  }
 }
 </style>

@@ -119,6 +119,7 @@ if (typeof $httpClient === "undefined" && typeof self !== "undefined") {
       self.__surge_pending++;
       var method = (params.method || m).toUpperCase();
       var timeout = params.timeout != null ? params.timeout : 5000;
+      if (timeout < 10) timeout = timeout * 1000;
       var headers = params.headers || {};
       var binaryMode = params["binary-mode"] === true;
 
@@ -166,7 +167,7 @@ if (typeof $httpClient === "undefined" && typeof self !== "undefined") {
         if (!settled) {
           finish("Request timeout (" + timeout + "ms)", null, null);
         }
-      }, timeout + 1000);
+      }, timeout + 100);
 
       function done(err, resp, data) {
         // console.log("[done]", err ? err : 'Success', !resp? "No response" : "", data ? (binaryMode ? "[binary data]" : data) : "No data");
@@ -220,6 +221,8 @@ if (typeof $httpClient === "undefined" && typeof self !== "undefined") {
         if (body != null) {
           pu += "&linkeybody=" + encodeURIComponent(typeof body === "string" ? body : JSON.stringify(body));
         }
+        pu += "&linkeymethod=" + encodeURIComponent(method);
+        pu += "&linkeytimeout=" + encodeURIComponent(timeout);
         return pu;
       }
 
@@ -254,7 +257,7 @@ if (typeof $httpClient === "undefined" && typeof self !== "undefined") {
 
       // ★ 跨域 URL 跳过直接 fetch（必败），直接走代理；同域才先试直接 fetch
       if (isCrossOrigin) {
-        doFetch(makeProxyUrl(url), { method: "GET" }, timeout)
+        doFetch(makeProxyUrl(url), { method: "GET" })
           .then(function (resp) {
             return resp.text().then(function (text) {
               done(null, makeResp(resp, text), text);
@@ -264,7 +267,7 @@ if (typeof $httpClient === "undefined" && typeof self !== "undefined") {
             done((err2 && err2.message) || String(err2), null, null);
           });
       } else {
-        doFetch(url, fetchOpts, timeout)
+        doFetch(url, fetchOpts)
           .then(function (resp) {
             if (binaryMode) {
               return resp.arrayBuffer().then(function (buf) {
@@ -276,7 +279,7 @@ if (typeof $httpClient === "undefined" && typeof self !== "undefined") {
             });
           })
           .catch(function () {
-            doFetch(makeProxyUrl(url), { method: "GET" }, timeout)
+            doFetch(makeProxyUrl(url), { method: "GET" })
               .then(function (resp) {
                 return resp.text().then(function (text) {
                   done(null, makeResp(resp, text), text);
