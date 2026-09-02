@@ -200,7 +200,7 @@ const copyModuleUrl = async () => {
   showToast("已拷贝模块地址");
 };
 const copyRuleUrl = async () => {
-  await toClipboard("https://raw.githubusercontent.com/Keywos/rule/main/Scipting/r.list");
+  await toClipboard("https://raw.githubusercontent.com/Keywos/rule/main/Scripting/r.list");
   showToast("已拷贝 RULE 地址");
 };
 const chartCount = ref(Math.min(Number(localStorage.getItem("chartCount")) || 4, MAX_CHARTS));
