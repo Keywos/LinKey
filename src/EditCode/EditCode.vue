@@ -56,9 +56,9 @@
         <Transition name="saves-empty">
           <div v-if="!isLoadingSaves && savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
         </Transition>
-        <template v-for="item in sortedSavedItems" :key="item.id">
+        <template v-for="item in primarySavedItems" :key="item.id">
           <Transition name="saves-item" appear>
-            <div @click.stop="toggleItemActions(item)" v-if="shouldShowSavedItem(item)" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
+            <div @click.stop="toggleItemActions(item)" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
               <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" @click.stop />
 
               <div class="saves-item-info">
@@ -137,7 +137,7 @@
             </div>
           </Transition>
           <Transition name="saves-children">
-            <div v-if="shouldShowSavedItem(item) && isItemExpanded(item)" class="saves-gist-children">
+            <div v-if="isItemExpanded(item)" class="saves-gist-children">
               <div class="saves-gist-children-content">
                 <div
                   @click.stop="toggleItemActions(child)"
@@ -413,6 +413,12 @@ function endDrag() {
   document.removeEventListener("pointermove", onDrag);
   document.removeEventListener("pointerup", endDrag);
 }
+
+function cleanupDragListeners() {
+  _dragData = null;
+  document.removeEventListener("pointermove", onDrag);
+  document.removeEventListener("pointerup", endDrag);
+}
 function onClickLogo() {
   if (_dragData?.moved) return; // 拖拽不关闭
   showlog.value = false;
@@ -434,6 +440,12 @@ function endResize() {
   if (_resizeData) {
     localStorage.setItem("logSize", JSON.stringify(logSize.value));
   }
+  _resizeData = null;
+  document.removeEventListener("pointermove", onResize);
+  document.removeEventListener("pointerup", endResize);
+}
+
+function cleanupResizeListeners() {
   _resizeData = null;
   document.removeEventListener("pointermove", onResize);
   document.removeEventListener("pointerup", endResize);
@@ -654,11 +666,17 @@ function endSavesResizePointer(e) {
   document.removeEventListener("pointerup", endSavesResizePointer);
   document.body.style.cursor = "";
   localStorage.setItem(SAVES_HEIGHT_KEY, savesPanelHeight.value.toString());
-  if (e.target) {
+  if (e?.target) {
     try {
       e.target.releasePointerCapture(e.pointerId);
     } catch {}
   }
+}
+
+function cleanupSavesResizeListeners() {
+  document.removeEventListener("pointermove", onSavesResizePointer);
+  document.removeEventListener("pointerup", endSavesResizePointer);
+  document.body.style.cursor = "";
 }
 
 // ===== 保存面板拖拽调整宽度（宽屏：面板固定在左侧） =====
@@ -701,11 +719,17 @@ function endSavesWidthResizePointer(e) {
   document.removeEventListener("pointerup", endSavesWidthResizePointer);
   document.body.style.cursor = "";
   localStorage.setItem(SAVES_WIDTH_KEY, savesWidth.value.toString());
-  if (e.target) {
+  if (e?.target) {
     try {
       e.target.releasePointerCapture(e.pointerId);
     } catch {}
   }
+}
+
+function cleanupSavesWidthResizeListeners() {
+  document.removeEventListener("pointermove", onSavesWidthResizePointer);
+  document.removeEventListener("pointerup", endSavesWidthResizePointer);
+  document.body.style.cursor = "";
 }
 const toggleSaves = async () => {
   showSaves.value = !showSaves.value;
@@ -794,15 +818,20 @@ const loadSaves = async () => {
   try {
     const list = await idbStorage.getItem(SAVES_INDEX_KEY);
     const ids = Array.isArray(list) ? list : [];
-    const items = [];
-    for (const id of ids) {
-      try {
-        const meta = await idbStorage.getItem(metaKey(id));
-        if (meta) {
-          items.push({ id, ...meta, tags: normalizeTags(meta.tags?.length ? meta.tags : meta.gist ? ["Gist"] : meta.url ? ["Url"] : ["CH"]) });
+    const metaEntries = await Promise.all(
+      ids.map(async (id) => {
+        try {
+          const meta = await idbStorage.getItem(metaKey(id));
+          if (meta) {
+            return { id, ...meta, tags: normalizeTags(meta.tags?.length ? meta.tags : meta.gist ? ["Gist"] : meta.url ? ["Url"] : ["CH"]) };
+          }
+          return null;
+        } catch {
+          return null;
         }
-      } catch {}
-    }
+      })
+    );
+    const items = metaEntries.filter(Boolean);
 
     // ★ 索引恢复：仅当列表为空时扫描 IDB 中的 meta/content 键，找回索引丢失的项
     if (items.length === 0) {
@@ -946,6 +975,7 @@ const childrenIndex = computed(() => {
 const gistChildItems = (item) => childrenIndex.value.get(item.id) || [];
 const getItemChildrenCount = (item) => gistChildItems(item).length;
 const shouldShowSavedItem = (item) => isGistPrimary(item);
+const primarySavedItems = computed(() => sortedSavedItems.value.filter(isGistPrimary));
 const localExpansionId = (item) => item.localGroupId || item.id;
 const isItemExpanded = (item) => (item.gist?.id ? expandedGistIds.value.has(item.gist.id) : expandedItemIds.value.has(localExpansionId(item)));
 
@@ -1614,15 +1644,22 @@ function formatBytes(length) {
   return (length / (1024 * 1024)).toFixed(2) + " MB";
 }
 
+const timeFormatter = new Intl.DateTimeFormat("zh-CN", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
 function formatTime(ts) {
   if (!ts) return "";
-  return new Date(ts).toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  try {
+    return timeFormatter.format(ts);
+  } catch {
+    return "";
+  }
 }
 // ===== 保存列表 end =====
 
@@ -2632,6 +2669,10 @@ watchEffect(() => {
 });
 
 onBeforeUnmount(() => {
+  cleanupDragListeners();
+  cleanupResizeListeners();
+  cleanupSavesResizeListeners();
+  cleanupSavesWidthResizeListeners();
   cmViewRef.value?.flushStoreSync?.(); // ★ 确保最后编辑内容同步到 store
   flushCurrentSave();
   document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -2644,6 +2685,12 @@ onBeforeUnmount(() => {
   if (savesListObserver) {
     savesListObserver.disconnect();
     savesListObserver = null;
+  }
+  if (_sandboxWorker?.worker) {
+    try {
+      _sandboxWorker.worker.terminate();
+    } catch {}
+    _sandboxWorker = null;
   }
 });
 </script>
