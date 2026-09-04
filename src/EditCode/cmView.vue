@@ -388,12 +388,19 @@ const activeLanguage = ref("plaintext");
 
 // ★ 从设置中动态获取配置
 let cmConfig = getCmSettings();
-const getHighlightThresholdBytes = () =>
-  cmConfig.highlightThreshold * 1024 * 1024;
-const getLinewrapThresholdBytes = () =>
-  cmConfig.linewrapThreshold * 1024 * 1024;
-const getFoldIndentThresholdBytes = () =>
-  cmConfig.foldIndentThreshold * 1024 * 1024;
+let highlightThresholdBytes = cmConfig.highlightThreshold * 1024 * 1024;
+let linewrapThresholdBytes = cmConfig.linewrapThreshold * 1024 * 1024;
+let foldIndentThresholdBytes = cmConfig.foldIndentThreshold * 1024 * 1024;
+
+const updateConfigThresholds = () => {
+  highlightThresholdBytes = cmConfig.highlightThreshold * 1024 * 1024;
+  linewrapThresholdBytes = cmConfig.linewrapThreshold * 1024 * 1024;
+  foldIndentThresholdBytes = cmConfig.foldIndentThreshold * 1024 * 1024;
+};
+
+const getHighlightThresholdBytes = () => highlightThresholdBytes;
+const getLinewrapThresholdBytes = () => linewrapThresholdBytes;
+const getFoldIndentThresholdBytes = () => foldIndentThresholdBytes;
 
 const SYNC_DEBOUNCE_MS = 900; // 防抖延长到 900ms，避免每次按键频繁重算语言
 
@@ -425,7 +432,7 @@ function ensureParseLoop(targetView) {
 
   const docLen = targetView.state.doc.length;
   // 超大文件直接放弃强制追赶，防爆内存（CM6 本身有按需惰性解析机制）
-  if (docLen > getHighlightThresholdBytes()) return;
+  if (docLen > highlightThresholdBytes) return;
 
   let lastParsedLen = -1;
   let stagnantCount = 0; // 记录连续无进展的次数
@@ -444,7 +451,7 @@ function ensureParseLoop(targetView) {
 
     const target = Math.min(
       targetView.viewport.to,
-      getHighlightThresholdBytes(),
+      highlightThresholdBytes,
     );
     const parsedLen = syntaxTree(targetView.state).length;
 
@@ -661,10 +668,11 @@ const finishLanguageDetection = (requestId, status = "idle") => {
 const emit = defineEmits(["update:editorLanguage"]);
 const onLanguageChange = () => {
   const next = normalizeEditorLanguage(selectedLanguage.value, "auto");
+  const docLen = view?.state.doc.length || 0;
+  const isLarge = docLen > highlightThresholdBytes;
 
   // ★ 超过高亮阈值不允许切换复杂语言，强制纯文本以防卡死
-  const docLen = view?.state.doc.length || 0;
-  if (docLen > getHighlightThresholdBytes() && next !== "plaintext") {
+  if (isLarge && next !== "plaintext") {
     selectedLanguage.value = "plaintext";
     showToast("大文件仅支持纯文本模式以保证流畅");
     return;
@@ -676,11 +684,7 @@ const onLanguageChange = () => {
   // ★ 手动选择非 auto 时保存到 store，选 auto 时清除
   cmStore.setManualLanguage(next !== "auto" ? next : "");
 
-  syncLanguageForDocument(
-    docLen > getHighlightThresholdBytes()
-      ? ""
-      : view?.state.doc.toString() || "",
-  );
+  syncLanguageForDocument();
 };
 
 const languageOptions = computed(() =>
@@ -717,7 +721,7 @@ const applyLanguage = async (
   if (!view || requestId !== languageRequestId) return;
 
   // ★ 大文件（超过高亮阈值）避免加载任何解析器或 shiki 高亮导致主线程崩溃，降级为纯文本
-  if (nextLanguage !== "plaintext" && docLen > getHighlightThresholdBytes()) {
+  if (nextLanguage !== "plaintext" && docLen > highlightThresholdBytes) {
     activeLanguage.value = "plaintext";
     cmStore.setActiveLanguage("plaintext");
     view.dispatch({
@@ -780,14 +784,17 @@ const applyLanguage = async (
 
 const syncLanguageForDocument = async (docContent, force = false) => {
   const requestId = ++languageRequestId;
-  const docSnapshot = docContent || "";
+  const docLen =
+    typeof docContent === "string"
+      ? docContent.length
+      : view?.state.doc.length || 0;
 
   // ★ 超过阈值强制纯文本，不做语言检测、不高亮
-  if (docSnapshot.length > getHighlightThresholdBytes()) {
+  if (docLen > highlightThresholdBytes) {
     clearLanguageDetectionTimer();
     languageDetectionStatus.value = "idle";
     autoDetectedLanguage.value = null;
-    await applyLanguage("plaintext", requestId, force);
+    await applyLanguage("plaintext", requestId, force, docLen);
     return;
   }
 
@@ -801,23 +808,24 @@ const syncLanguageForDocument = async (docContent, force = false) => {
     scheduleLanguageDetectionBusy(requestId);
     try {
       // 头部 32KB 采样，避免对巨大文档做全量正则检测
-      const sample =
-        docSnapshot.length > 32 * 1024
-          ? docSnapshot.slice(0, 32 * 1024)
-          : docSnapshot;
+      let sample = "";
+      if (typeof docContent === "string") {
+        sample = docContent.length > 32 * 1024 ? docContent.slice(0, 32 * 1024) : docContent;
+      } else if (view) {
+        sample = view.state.doc.sliceString(0, 32 * 1024);
+      }
       const detectedLanguage = await detectEditorLanguage(
         sample,
         cmStore.currentFileName,
       );
       if (
         requestId !== languageRequestId ||
-        normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto" ||
-        (view && view.state.doc.length !== docSnapshot.length)
+        normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto"
       ) {
         return;
       }
       autoDetectedLanguage.value = detectedLanguage;
-      await applyLanguage(detectedLanguage, requestId, force);
+      await applyLanguage(detectedLanguage, requestId, force, docLen);
       finishLanguageDetection(requestId);
     } catch (error) {
       console.log("Editor language detection failed", error);
@@ -834,7 +842,7 @@ const syncLanguageForDocument = async (docContent, force = false) => {
   ) {
     return;
   }
-  await applyLanguage(manualLanguage, requestId, force);
+  await applyLanguage(manualLanguage, requestId, force, docLen);
 };
 
 /** 根据文件名扩展名映射语言，无匹配返回 null */
@@ -876,35 +884,32 @@ const createEditorPlaceholder = () =>
 let syncTimer = null;
 let syncIdleId = null; // requestIdleCallback ID
 
-const debouncedSyncLanguage = (docContentGetter) => {
+const debouncedSyncLanguage = (docContent) => {
   clearTimeout(syncTimer);
   if (syncIdleId != null && typeof cancelIdleCallback !== "undefined") {
     cancelIdleCallback(syncIdleId);
     syncIdleId = null;
   }
 
-  const getContent = () => {
-    if (typeof docContentGetter === "function") return docContentGetter();
-    if (typeof docContentGetter === "string") return docContentGetter;
-    return view?.state?.doc?.sliceString(0, 32 * 1024) || "";
-  };
-
   // 获取文档长度快速判断是否为大文件
-  const docLen = view?.state?.doc?.length || 0;
-  const isLarge = docLen > getHighlightThresholdBytes();
+  const docLen =
+    typeof docContent === "string"
+      ? docContent.length
+      : view?.state?.doc?.length || 0;
+  const isLarge = docLen > highlightThresholdBytes;
 
   if (isLarge && typeof requestIdleCallback !== "undefined") {
     // ★ 大文件使用 requestIdleCallback，让浏览器在空闲时再做语言检测
     syncIdleId = requestIdleCallback(
       () => {
         syncIdleId = null;
-        syncLanguageForDocument(getContent());
+        syncLanguageForDocument(docContent);
       },
       { timeout: 2000 },
     );
   } else {
     syncTimer = setTimeout(() => {
-      syncLanguageForDocument(getContent());
+      syncLanguageForDocument(docContent);
     }, SYNC_DEBOUNCE_MS);
   }
 };
@@ -1041,11 +1046,10 @@ const CreateView = () => {
             docLen < 4096 || autoDetectedLanguage.value === null;
           if (
             selectedLanguage.value === "auto" &&
-            !(docLen > getHighlightThresholdBytes()) &&
+            !(docLen > highlightThresholdBytes) &&
             !_skipNextLangSync &&
             needDetect
           ) {
-            // 直接由 debouncedSyncLanguage 从 view.state.doc 读取头部切片，不闭包持有 update 对象
             debouncedSyncLanguage();
           }
         }),
@@ -1066,9 +1070,8 @@ const CreateView = () => {
     const currentId = ++applyContentId;
     editorLoading.value = true;
     try {
-      const isLargeFile = nextValue.length > getHighlightThresholdBytes();
+      const isLargeFile = nextValue.length > highlightThresholdBytes;
       const needChunked = nextValue.length > CHUNKED_LOAD_THRESHOLD;
-      const overHighlight = nextValue.length > getHighlightThresholdBytes();
 
       // ★ 1. 只决定目标语言，不在这里 applyLanguage（此时 view 里还是旧文档）
       let lockedLang = null;
@@ -1192,20 +1195,19 @@ const CreateView = () => {
       // ★ 3. 文档已经是新内容，此时 view.state.doc.length 正确，再应用语言
       if (lockedLang) {
         await applyLanguage(
-          overHighlight ? "plaintext" : lockedLang,
+          isLargeFile ? "plaintext" : lockedLang,
           ++languageRequestId,
           true,
           nextValue.length,
         );
-      } else if (overHighlight) {
+      } else if (isLargeFile) {
+        // 超过高亮阈值直接置为纯文本
         syncLanguageForDocument(nextValue);
       } else if (_skipNextLangSync) {
         _skipNextLangSync = false;
         nextTick(() => {
           debouncedSyncLanguage(nextValue);
         });
-      } else if (isLargeFile) {
-        debouncedSyncLanguage(nextValue);
       } else {
         syncLanguageForDocument(nextValue);
       }
@@ -1249,13 +1251,7 @@ const CreateView = () => {
         cmStore.manualLanguage || shouldLockLanguageFromFilename(newVal);
       selectedLanguage.value = locked || "auto";
       autoDetectedLanguage.value = locked;
-      const len = view.state.doc.length;
-      syncLanguageForDocument(
-        len > getHighlightThresholdBytes()
-          ? ""
-          : view.state.doc.sliceString(0, 32 * 1024),
-        true,
-      );
+      syncLanguageForDocument(undefined, true);
     },
   );
 
@@ -1289,12 +1285,7 @@ watch(
     const nextLanguage = normalizeEditorLanguage(language, "auto");
     if (selectedLanguage.value === nextLanguage) return;
     selectedLanguage.value = nextLanguage;
-    const docLen = view?.state.doc.length || 0;
-    syncLanguageForDocument(
-      docLen > getHighlightThresholdBytes()
-        ? ""
-        : view?.state.doc.toString() || "",
-    );
+    syncLanguageForDocument();
   },
 );
 
@@ -1915,10 +1906,11 @@ const handleSettingsChange = (e) => {
   } else {
     cmConfig = getCmSettings();
   }
+  updateConfigThresholds();
   if (!view) return;
 
   const docLen = view.state.doc.length;
-  const isLargeFile = docLen > getHighlightThresholdBytes();
+  const isLargeFile = docLen > highlightThresholdBytes;
   const editAssistEnabled = !isLargeFile;
 
   view.dispatch({
@@ -1931,18 +1923,15 @@ const handleSettingsChange = (e) => {
   });
 
   // 如果当前是高亮状态但文档超过了新的高亮阈值，降级纯文本；反之若在阈值内且为 auto 则重新同步高亮
-  if (docLen > getHighlightThresholdBytes()) {
+  if (isLargeFile) {
     if (activeLanguage.value !== "plaintext") {
-      applyLanguage("plaintext");
+      applyLanguage("plaintext", undefined, false, docLen);
     }
-  } else if (
-    docLen <= getHighlightThresholdBytes() &&
-    activeLanguage.value === "plaintext"
-  ) {
+  } else if (activeLanguage.value === "plaintext") {
     if (selectedLanguage.value === "auto") {
-      syncLanguageForDocument(view.state.doc.toString());
+      syncLanguageForDocument();
     } else {
-      applyLanguage(selectedLanguage.value);
+      applyLanguage(selectedLanguage.value, undefined, false, docLen);
     }
   }
 };
