@@ -219,6 +219,7 @@ import {
 } from "@/EditCode/search";
 import { lineNumbers, EditorView, highlightActiveLine, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
 import { foldGutter, bracketMatching } from "@codemirror/language";
+
 import { undo, redo, history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { closeBrackets, autocompletion } from "@codemirror/autocomplete";
 import { Compartment, EditorState, Transaction } from "@codemirror/state";
@@ -1706,7 +1707,7 @@ onBeforeUnmount(() => {
   align-items: center;
   flex: 0 0 48px;
   // width: 40px;
-  height: 34px;
+  min-height: 30px;
   touch-action: manipulation;
 }
 
