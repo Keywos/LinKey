@@ -116,6 +116,65 @@
       </van-cell>
     </van-cell-group>
 
+    <van-cell-group inset title="编辑器设置">
+      <van-field
+        v-model="highlightThreshold"
+        type="number"
+        label="启用高亮"
+        placeholder="默认小于 2 启用"
+        @blur="onHighlightThresholdChange"
+        @change="onHighlightThresholdChange"
+      >
+        <template #extra>MB</template>
+      </van-field>
+
+      <van-field
+        v-model="linewrapThreshold"
+        type="number"
+        label="启用换行"
+        placeholder="默认小于 2 启用"
+        @blur="onLinewrapThresholdChange"
+        @change="onLinewrapThresholdChange"
+      >
+        <template #extra>MB</template>
+      </van-field>
+
+      <van-field
+        v-model="foldIndentThreshold"
+        type="number"
+        label="折叠槽/缩进"
+        placeholder="默认小于 1 启用"
+        @blur="onFoldIndentThresholdChange"
+        @change="onFoldIndentThresholdChange"
+      >
+        <template #extra>MB</template>
+      </van-field>
+
+      <van-cell class="van-cell-sw" center title="启用链接装饰" inset>
+        <template #right-icon>
+          <van-switch v-model="enableHyperlink" @change="onEnableHyperlinkChange" />
+        </template>
+      </van-cell>
+
+      <van-cell class="van-cell-sw" center title="启用自动补全" inset>
+        <template #right-icon>
+          <van-switch v-model="enableAutocomplete" @change="onEnableAutocompleteChange" />
+        </template>
+      </van-cell>
+
+      <van-cell class="van-cell-sw" center title="启用括号匹配" inset>
+        <template #right-icon>
+          <van-switch v-model="enableBracketMatching" @change="onEnableBracketMatchingChange" />
+        </template>
+      </van-cell>
+
+      <van-cell class="van-cell-sw" center title="启用自动闭合" inset>
+        <template #right-icon>
+          <van-switch v-model="enableCloseBrackets" @change="onEnableCloseBracketsChange" />
+        </template>
+      </van-cell>
+    </van-cell-group>
+
     <!-- <van-cell-group inset title="Swipe">
       <van-swipe-cell>
         <template #left>
@@ -159,6 +218,12 @@ import { useGistStore } from "@/store/gistStore";
 import { codehubStorage, GIST_LIST_KEY } from "@/storage/codehubStorage.js";
 // import { defaultHomeCards, getHomeCards, saveHomeCards } from "@/homeCards.js";
 import AddShortcut from "@/AddShortcut.vue";
+import {
+  CM_SETTINGS_KEYS,
+  CM_SETTINGS_DEFAULTS,
+  getCmSettings,
+  setCmSetting,
+} from "@/EditCode/editorSettings.js";
 
 const useGStore = useGistStore();
 // const homeCards = ref(getHomeCards());
@@ -347,6 +412,53 @@ const setGistautolocal = (value) => {
 const autoISBGC = ref(getStoredBoolean("ISBGC"));
 const autoGistlocala = ref(getStoredBoolean("LocalGistResTure", true));
 const setGistautolocala = (value) => setStoredBoolean("LocalGistResTure", value);
+
+// 编辑器自定义设置
+const initialCmSettings = getCmSettings();
+const highlightThreshold = ref(initialCmSettings.highlightThreshold);
+const linewrapThreshold = ref(initialCmSettings.linewrapThreshold);
+const foldIndentThreshold = ref(initialCmSettings.foldIndentThreshold);
+const enableHyperlink = ref(initialCmSettings.enableHyperlink);
+const enableAutocomplete = ref(initialCmSettings.enableAutocomplete);
+const enableBracketMatching = ref(initialCmSettings.enableBracketMatching);
+const enableCloseBrackets = ref(initialCmSettings.enableCloseBrackets);
+
+const onHighlightThresholdChange = () => {
+  const val = parseFloat(highlightThreshold.value);
+  const finalVal = isNaN(val) || val <= 0 ? CM_SETTINGS_DEFAULTS[CM_SETTINGS_KEYS.HIGHLIGHT_THRESHOLD] : val;
+  highlightThreshold.value = finalVal;
+  setCmSetting(CM_SETTINGS_KEYS.HIGHLIGHT_THRESHOLD, finalVal);
+};
+
+const onLinewrapThresholdChange = () => {
+  const val = parseFloat(linewrapThreshold.value);
+  const finalVal = isNaN(val) || val <= 0 ? CM_SETTINGS_DEFAULTS[CM_SETTINGS_KEYS.LINEWRAP_THRESHOLD] : val;
+  linewrapThreshold.value = finalVal;
+  setCmSetting(CM_SETTINGS_KEYS.LINEWRAP_THRESHOLD, finalVal);
+};
+
+const onFoldIndentThresholdChange = () => {
+  const val = parseFloat(foldIndentThreshold.value);
+  const finalVal = isNaN(val) || val <= 0 ? CM_SETTINGS_DEFAULTS[CM_SETTINGS_KEYS.FOLD_INDENT_THRESHOLD] : val;
+  foldIndentThreshold.value = finalVal;
+  setCmSetting(CM_SETTINGS_KEYS.FOLD_INDENT_THRESHOLD, finalVal);
+};
+
+const onEnableHyperlinkChange = (val) => {
+  setCmSetting(CM_SETTINGS_KEYS.ENABLE_HYPERLINK, val);
+};
+
+const onEnableAutocompleteChange = (val) => {
+  setCmSetting(CM_SETTINGS_KEYS.ENABLE_AUTOCOMPLETE, val);
+};
+
+const onEnableBracketMatchingChange = (val) => {
+  setCmSetting(CM_SETTINGS_KEYS.ENABLE_BRACKET_MATCHING, val);
+};
+
+const onEnableCloseBracketsChange = (val) => {
+  setCmSetting(CM_SETTINGS_KEYS.ENABLE_CLOSE_BRACKETS, val);
+};
 
 const reHome = async () => {
   const resetHomeData = () => {

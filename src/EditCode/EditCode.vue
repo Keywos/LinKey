@@ -889,8 +889,8 @@ const persistIndex = async () => {
 };
 
 const buildMeta = (content) => ({
-  length: content.length,
-  preview: content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100),
+  length: typeof content === "string" ? content.length : (content ? String(content).length : 0),
+  preview: typeof content === "string" ? content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100) : "",
   updatedAt: Date.now(),
   language: cmStore.activeLanguage,
   manualLanguage: cmStore.manualLanguage || "",

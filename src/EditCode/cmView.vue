@@ -234,9 +234,17 @@ import redoimg from "@/img/svg/redo.svg";
 import undoimg from "@/img/svg/undo.svg";
 import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
+import { getCmSettings, CM_SETTINGS_EVENT } from "@/EditCode/editorSettings.js";
+
+// ★ 从设置中动态获取配置
+let cmConfig = getCmSettings();
+const getHighlightThresholdBytes = () => cmConfig.highlightThreshold * 1024 * 1024;
+const getLinewrapThresholdBytes = () => cmConfig.linewrapThreshold * 1024 * 1024;
+const getFoldIndentThresholdBytes = () => cmConfig.foldIndentThreshold * 1024 * 1024;
 
 const LARGE_FILE_PLAINTEXT_THRESHOLD_1 = 1.4 * 1024 * 1024;
-const LARGE_FILE_PLAINTEXT_THRESHOLD = 10 * 1024 * 1024; // 超过 5MB 强制纯文本，不做语言检测和高亮
+const LARGE_FILE_PLAINTEXT_THRESHOLD = 2 * 1024 * 1024; // 超过 2MB 强制纯文本，不做复杂语法高亮和重度扩展
+const HEAVY_SYNTAX_HIGHLIGHT_THRESHOLD = 1.4 * 1024 * 1024; // 语法高亮上限（超过降级为纯文本，防止主线程/Worker卡死崩溃）
 const SYNC_DEBOUNCE_MS = 50;
 
 // ★ iOS 检测 — iOS Safari 内存限制更严格，大文件需要分块加载防闪退
@@ -317,27 +325,41 @@ const langs = new Compartment();
 const editorTheme = new Compartment();
 const shikiSyntax = new Compartment();
 const editorPlaceholder = new Compartment();
-
 const heavyDecorations = new Compartment();
-const FOLD_GUTTER_THRESHOLD = 1 * 1024 * 1024; // ★ 1MB+ 关闭折叠槽
-const INDENT_MARKER_THRESHOLD = 500 * 1024; // ★ 500KB+ 关闭缩进标记
+
+const lineWrappingCompartment = new Compartment();
+const createLineWrappingExt = (docLen = 0) => {
+  return docLen < getLinewrapThresholdBytes() ? [EditorView.lineWrapping] : [];
+};
+
 const createHeavyDecorations = (docLen = 0) => {
   const deco = [];
-  if (docLen < FOLD_GUTTER_THRESHOLD) deco.push(foldGutter({ closedText: "▸", openText: "▾" }));
-  if (docLen < INDENT_MARKER_THRESHOLD) deco.push(indentationMarkers());
+  const threshold = getFoldIndentThresholdBytes();
+  if (docLen < threshold) deco.push(foldGutter({ closedText: "▸", openText: "▾" }));
+  // 缩进标记默认阈值也可以跟随设定值（或折半）
+  if (docLen < Math.min(threshold, 500 * 1024)) deco.push(indentationMarkers());
   return deco;
 };
 
-// ★ 大文件时可关闭的编辑辅助扩展（自动补全、括号匹配、选区高亮、自动闭合）
+// ★ 编辑辅助扩展（自动补全、括号匹配、选区高亮、自动闭合）根据用户设置和文件大小动态启用
 const editAssist = new Compartment();
-const createEditAssist = (enabled) => (enabled ? [autocompletion(), bracketMatching(), highlightSelectionMatches(), closeBrackets()] : []);
+const createEditAssist = (enabled) => {
+  if (!enabled) return [];
+  const exts = [];
+  if (cmConfig.enableAutocomplete) exts.push(autocompletion());
+  if (cmConfig.enableBracketMatching) exts.push(bracketMatching());
+  if (cmConfig.enableCloseBrackets) exts.push(closeBrackets());
+  exts.push(highlightSelectionMatches());
+  return exts;
+};
 
 // ★ 历史记录深度限制 — 大文件减少撤销步数以节省内存
 const historyCompartment = new Compartment();
 const createHistoryExt = (isLarge) => history({ minDepth: isLarge ? 50 : 200 });
 
-// ★ 超链接装饰 — 大文件时禁用避免每次按键全文正则扫描
+// ★ 超链接装饰 — 大文件或用户关闭时禁用避免每次按键全文正则扫描
 const hyperLinkCompartment = new Compartment();
+const createHyperLinkExt = (enabled) => (enabled && cmConfig.enableHyperlink ? [hyperLink] : []);
 const selectedLanguage = ref(normalizeEditorLanguage(props.editorLanguage, "auto"));
 const activeLanguage = ref("plaintext");
 
@@ -398,11 +420,11 @@ const emit = defineEmits(["update:editorLanguage"]);
 const onLanguageChange = () => {
   const next = normalizeEditorLanguage(selectedLanguage.value, "auto");
 
-  // ★ 超过 5MB 不允许切换语言，强制纯文本
+  // ★ 超过高亮阈值不允许切换复杂语言，强制纯文本以防卡死
   const docLen = view?.state.doc.length || 0;
-  if (docLen > LARGE_FILE_PLAINTEXT_THRESHOLD && next !== "plaintext") {
-    selectedLanguage.value = "auto";
-    showToast("文件超过 5MB，仅支持纯文本");
+  if (docLen > getHighlightThresholdBytes() && next !== "plaintext") {
+    selectedLanguage.value = "plaintext";
+    showToast("大文件仅支持纯文本模式以保证流畅");
     return;
   }
 
@@ -412,7 +434,7 @@ const onLanguageChange = () => {
   // ★ 手动选择非 auto 时保存到 store，选 auto 时清除
   cmStore.setManualLanguage(next !== "auto" ? next : "");
 
-  syncLanguageForDocument(view?.state.doc.toString() || "");
+  syncLanguageForDocument(docLen > getHighlightThresholdBytes() ? "" : (view?.state.doc.toString() || ""));
 };
 
 const languageOptions = computed(() =>
@@ -434,11 +456,21 @@ const createShikiHighlight = (language = activeLanguage.value) =>
     dark: isDarkModeEnabled.value,
   });
 
-const applyLanguage = async (language, requestId = ++languageRequestId) => {
+const applyLanguage = async (language, requestId = ++languageRequestId, force = false, docLen = view?.state.doc.length ?? 0) => {
   const nextLanguage = normalizeEditorLanguage(language, "plaintext");
   if (!view || requestId !== languageRequestId) return;
 
-  if (nextLanguage === activeLanguage.value) return;
+  // ★ 大文件（超过高亮阈值）避免加载任何解析器或 shiki 高亮导致主线程崩溃，降级为纯文本
+  if (nextLanguage !== "plaintext" && docLen > getHighlightThresholdBytes()) {
+    activeLanguage.value = "plaintext";
+    cmStore.setActiveLanguage("plaintext");
+    view.dispatch({
+      effects: [langs.reconfigure([]), shikiSyntax.reconfigure([])],
+    });
+    return;
+  }
+
+  if (!force && nextLanguage === activeLanguage.value) return;
 
   activeLanguage.value = nextLanguage;
   cmStore.setActiveLanguage(nextLanguage);
@@ -450,7 +482,6 @@ const applyLanguage = async (language, requestId = ++languageRequestId) => {
   if (nextLanguage === "plaintext") {
     return;
   }
-
   if (nextLanguage === "javascript") {
     console.log("启用 JavaScript 语法高亮 2  - 使用 codemirror");
     view.dispatch({
@@ -489,16 +520,16 @@ const applyLanguage = async (language, requestId = ++languageRequestId) => {
   view.dispatch({ effects });
 };
 
-const syncLanguageForDocument = async (docContent) => {
+const syncLanguageForDocument = async (docContent, force = false) => {
   const requestId = ++languageRequestId;
   const docSnapshot = docContent || "";
 
-  // ★ 超过 5MB 强制纯文本，不做语言检测、不高亮
-  if (docSnapshot.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
+  // ★ 超过阈值强制纯文本，不做语言检测、不高亮
+  if (docSnapshot.length > getHighlightThresholdBytes()) {
     clearLanguageDetectionTimer();
     languageDetectionStatus.value = "idle";
     autoDetectedLanguage.value = null;
-    await applyLanguage("plaintext", requestId);
+    await applyLanguage("plaintext", requestId, force);
     return;
   }
 
@@ -509,11 +540,11 @@ const syncLanguageForDocument = async (docContent) => {
     scheduleLanguageDetectionBusy(requestId);
     try {
       const detectedLanguage = await detectEditorLanguage(docSnapshot, cmStore.currentFileName);
-      if (requestId !== languageRequestId || normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto" || (view && view.state.doc.toString() !== docSnapshot)) {
+      if (requestId !== languageRequestId || normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto" || (view && view.state.doc.length !== docSnapshot.length)) {
         return;
       }
       autoDetectedLanguage.value = detectedLanguage;
-      await applyLanguage(detectedLanguage, requestId);
+      await applyLanguage(detectedLanguage, requestId, force);
       finishLanguageDetection(requestId);
     } catch (error) {
       console.log("Editor language detection failed", error);
@@ -527,7 +558,7 @@ const syncLanguageForDocument = async (docContent) => {
   if (requestId !== languageRequestId || normalizeEditorLanguage(selectedLanguage.value, "auto") !== manualLanguage) {
     return;
   }
-  await applyLanguage(manualLanguage, requestId);
+  await applyLanguage(manualLanguage, requestId, force);
 };
 
 /** 根据文件名扩展名映射语言，无匹配返回 null */
@@ -568,27 +599,31 @@ const createEditorPlaceholder = () => (props.placeholder ? cmPlaceholder(props.p
 let syncTimer = null;
 let syncIdleId = null; // requestIdleCallback ID
 
-const debouncedSyncLanguage = (docContent) => {
+const debouncedSyncLanguage = (docContentGetter) => {
   clearTimeout(syncTimer);
   if (syncIdleId != null && typeof cancelIdleCallback !== "undefined") {
     cancelIdleCallback(syncIdleId);
     syncIdleId = null;
   }
 
-  const isLarge = docContent.length > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
+  const getContent = typeof docContentGetter === "function" ? docContentGetter : () => docContentGetter;
+
+  // 获取文档长度快速判断是否为大文件
+  const docLen = view?.state?.doc?.length || 0;
+  const isLarge = docLen > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
 
   if (isLarge && typeof requestIdleCallback !== "undefined") {
     // ★ 大文件使用 requestIdleCallback，让浏览器在空闲时再做语言检测
     syncIdleId = requestIdleCallback(
       () => {
         syncIdleId = null;
-        syncLanguageForDocument(docContent);
+        syncLanguageForDocument(getContent());
       },
       { timeout: 2000 },
     );
   } else {
     syncTimer = setTimeout(() => {
-      syncLanguageForDocument(docContent);
+      syncLanguageForDocument(getContent());
     }, SYNC_DEBOUNCE_MS);
   }
 };
@@ -636,7 +671,8 @@ const flushStoreSync = () => {
   }
   if (_pendingStoreContent != null) {
     docUpdate = true;
-    cmStore.setCmCode(_pendingStoreContent);
+    const content = typeof _pendingStoreContent === "function" ? _pendingStoreContent() : _pendingStoreContent;
+    cmStore.setCmCode(content);
     docUpdate = false;
     _pendingStoreContent = null;
   }
@@ -670,137 +706,160 @@ const CreateView = () => {
         editorPlaceholder.of(createEditorPlaceholder()),
         editorTheme.of(getEditorTheme()),
         EditorState.readOnly.of(props.isReadOnly ? true : false),
-        EditorView.lineWrapping, // 换行
+        lineWrappingCompartment.of(createLineWrappingExt(0)), // 换行
         lineNumbers(),
         highlightActiveLine(),
         editAssist.of(createEditAssist(true)), // ★ 初始启用，大文件时动态关闭
         EditorView.updateListener.of((update) => {
           if (!update.docChanged || _chunkedLoading) return; // ★ 分块加载时跳过
-          const docContent = update.state.doc.toString();
-          const docLen = docContent.length;
+          const docLen = update.state.doc.length;
 
-          // ★ 统一防抖同步到 store — 避免每次按键都 toString + 同步
-          debouncedStoreSync(docContent);
+          // ★ 大文件避免每次按键无条件 toString()，防抖同步到 store
+          debouncedStoreSync(() => update.state.doc.toString());
 
-          if (selectedLanguage.value === "auto" && !(docLen > LARGE_FILE_PLAINTEXT_THRESHOLD) && !_skipNextLangSync) {
-            debouncedSyncLanguage(docContent);
+          if (selectedLanguage.value === "auto" && !(docLen > getHighlightThresholdBytes()) && !_skipNextLangSync) {
+            debouncedSyncLanguage(() => update.state.doc.toString());
           }
         }),
-        hyperLinkCompartment.of(hyperLink),
-        heavyDecorations.of(createHeavyDecorations()),
+        hyperLinkCompartment.of(createHyperLinkExt(true)),
+        heavyDecorations.of(createHeavyDecorations(0)),
       ],
       doc: "", // ★ 初始空文档，首次内容由 isFirstLoad 延迟注入
     }),
     parent: viewRef.value,
   });
 
+  let lastAppliedFileName = "";
+  let applyContentId = 0;
+
   const applyContentToEditor = async (nextValue) => {
     console.log("Code更新到文档");
+    if (!view) return;
+    const currentId = ++applyContentId;
     editorLoading.value = true;
     try {
       const isLargeFile = nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
       const needChunked = nextValue.length > CHUNKED_LOAD_THRESHOLD;
+      const overHighlight = nextValue.length > getHighlightThresholdBytes();
 
-      // ★ 用户手动选过语言 → 始终用它覆盖
+      // ★ 1. 只决定目标语言，不在这里 applyLanguage（此时 view 里还是旧文档）
+      let lockedLang = null;
       const manualLang = cmStore.manualLanguage;
       if (manualLang) {
-      selectedLanguage.value = manualLang;
-      autoDetectedLanguage.value = manualLang;
-      await applyLanguage(manualLang);
+        lockedLang = manualLang;
       } else {
-      // ★ 没有手动语言 → 重置 selectedLanguage 为 auto，
-      //    避免上一个文件的语言残留导致扩展名检测/自动检测被跳过
-      selectedLanguage.value = "auto";
-      autoDetectedLanguage.value = null;
-
-      // ★ 根据文件名扩展名锁定语言
-      const extLang = shouldLockLanguageFromFilename(cmStore.currentFileName);
-      if (extLang) {
-        selectedLanguage.value = extLang;
-        autoDetectedLanguage.value = extLang;
-        await applyLanguage(extLang);
+        selectedLanguage.value = "auto";
+        autoDetectedLanguage.value = null;
+        lockedLang = shouldLockLanguageFromFilename(cmStore.currentFileName);
       }
-    }
+      if (lockedLang) {
+        selectedLanguage.value = lockedLang;
+        autoDetectedLanguage.value = lockedLang;
+      }
+
+      // ★ 作废进行中的语言请求，并把状态重置为纯文本；旧扩展在下面的 dispatch 里一并卸载
+      languageRequestId++;
+      clearLanguageDetectionTimer();
+      activeLanguage.value = "plaintext";
+      cmStore.setActiveLanguage("plaintext");
+      const unloadLangEffects = [langs.reconfigure([]), shikiSyntax.reconfigure([])];
 
       const skipHist = _skipNextHistory;
       _skipNextHistory = false; // 用完即重置
 
-    // ★ 根据文件大小动态调整编辑辅助和历史深度
+      // ★ 根据文件大小动态调整编辑辅助和历史深度
       const editAssistEnabled = !isLargeFile;
       const historyLimited = isLargeFile;
 
       if (!needChunked) {
-      // ★ 小文件：单次 dispatch 直接替换
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: nextValue },
-        effects: [
-          heavyDecorations.reconfigure(createHeavyDecorations(nextValue.length)),
-          editAssist.reconfigure(createEditAssist(editAssistEnabled)),
-          historyCompartment.reconfigure(createHistoryExt(historyLimited)),
-          hyperLinkCompartment.reconfigure(isLargeFile ? [] : hyperLink),
-        ],
-        annotations: Transaction.addToHistory.of(!skipHist),
-      });
-      } else {
-      // ★ 大文件分块加载 — 防止 iOS 闪退
-      _chunkedLoading = true; // 暂停 updateListener 的 store 同步
-      try {
-        // Phase 1: 先清空文档、关闭重型装饰，释放旧文档内存
+        // ★ 小文件：单次 dispatch 直接替换
         view.dispatch({
-          changes: { from: 0, to: view.state.doc.length, insert: "" },
-          effects: [heavyDecorations.reconfigure([]), editAssist.reconfigure(createEditAssist(false)), historyCompartment.reconfigure(createHistoryExt(true)), hyperLinkCompartment.reconfigure([])],
-          annotations: Transaction.addToHistory.of(false),
+          changes: { from: 0, to: view.state.doc.length, insert: nextValue },
+          effects: [
+            ...unloadLangEffects,
+            lineWrappingCompartment.reconfigure(createLineWrappingExt(nextValue.length)),
+            heavyDecorations.reconfigure(createHeavyDecorations(nextValue.length)),
+            editAssist.reconfigure(createEditAssist(editAssistEnabled)),
+            historyCompartment.reconfigure(createHistoryExt(historyLimited)),
+            hyperLinkCompartment.reconfigure(createHyperLinkExt(!isLargeFile)),
+          ],
+          annotations: Transaction.addToHistory.of(!skipHist),
         });
-        // 让出主线程，等待 GC 回收旧文档 + 浏览器绘制
-        await new Promise((r) => setTimeout(r, 0));
-
-        // Phase 2: 分块插入内容
-        for (let offset = 0; offset < nextValue.length; offset += CHUNK_SIZE) {
-          const chunk = nextValue.slice(offset, Math.min(offset + CHUNK_SIZE, nextValue.length));
-          const pos = view.state.doc.length;
-          const isFirstChunk = offset === 0;
+      } else {
+        // ★ 大文件分块加载 — 防止 iOS 闪退
+        _chunkedLoading = true; // 暂停 updateListener 的 store 同步
+        try {
+          // Phase 1: 先清空文档、关闭重型装饰，释放旧文档内存
           view.dispatch({
-            changes: { from: pos, insert: chunk },
-            // 仅第一块记录历史（整个内容算一步撤销）
-            annotations: isFirstChunk ? Transaction.addToHistory.of(!skipHist) : Transaction.addToHistory.of(false),
+            changes: { from: 0, to: view.state.doc.length, insert: "" },
+            effects: [
+              ...unloadLangEffects,
+              lineWrappingCompartment.reconfigure(createLineWrappingExt(nextValue.length)),
+              heavyDecorations.reconfigure([]),
+              editAssist.reconfigure(createEditAssist(false)),
+              historyCompartment.reconfigure(createHistoryExt(true)),
+              hyperLinkCompartment.reconfigure([]),
+            ],
+            annotations: Transaction.addToHistory.of(false),
           });
-          // 每块之间让出主线程，防止 iOS watchdog 超时
-          if (offset + CHUNK_SIZE < nextValue.length) {
-            await new Promise((r) => setTimeout(r, 0));
+          // 让出主线程，等待 GC 回收旧文档 + 浏览器绘制
+          await new Promise((r) => setTimeout(r, 0));
+          if (currentId !== applyContentId) return;
+
+          // Phase 2: 分块插入内容
+          for (let offset = 0; offset < nextValue.length; offset += CHUNK_SIZE) {
+            const chunk = nextValue.slice(offset, Math.min(offset + CHUNK_SIZE, nextValue.length));
+            const pos = view.state.doc.length;
+            const isFirstChunk = offset === 0;
+            view.dispatch({
+              changes: { from: pos, insert: chunk },
+              // 仅第一块记录历史（整个内容算一步撤销）
+              annotations: isFirstChunk ? Transaction.addToHistory.of(!skipHist) : Transaction.addToHistory.of(false),
+            });
+            // 每块之间让出主线程，防止 iOS watchdog 超时
+            if (offset + CHUNK_SIZE < nextValue.length) {
+              await new Promise((r) => setTimeout(r, 0));
+              if (currentId !== applyContentId) return;
+            }
           }
+        } finally {
+          _chunkedLoading = false;
         }
-      } finally {
-        _chunkedLoading = false;
+
+        // 分块完成，同步最终内容到 store
+        if (currentId !== applyContentId) return; // 如果有新的 applyContentToEditor 调用，则放弃当前更新
+        docUpdate = true;
+        cmStore.setCmCode(nextValue);
+        docUpdate = false;
+
+        console.log(`分块加载完成: ${(nextValue.length / 1024).toFixed(0)}KB, ${Math.ceil(nextValue.length / CHUNK_SIZE)} 块`);
       }
 
-      // 分块完成，同步最终内容到 store
-      docUpdate = true;
-      cmStore.setCmCode(nextValue);
-      docUpdate = false;
-
-      console.log(`分块加载完成: ${(nextValue.length / 1024).toFixed(0)}KB, ${Math.ceil(nextValue.length / CHUNK_SIZE)} 块`);
-    }
-
       await nextTick();
+      if (currentId !== applyContentId) return; // 如果有新的 applyContentToEditor 调用，则放弃当前更新
 
-    // 外部加载新文件时重置格式化状态
+      // 外部加载新文件时重置格式化状态
       isFormatted.value = false;
 
-    // ★ 如果语言已由 manualLang / extLang 锁定，无需再走 syncLanguageForDocument
-      if (normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto") {
-      // 语言已在上方 applyLanguage，跳过后续同步
-      } else if (nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD) {
+      // ★ 3. 文档已经是新内容，此时 view.state.doc.length 正确，再应用语言
+      if (lockedLang) {
+        await applyLanguage(overHighlight ? "plaintext" : lockedLang, ++languageRequestId, true, nextValue.length);
+      } else if (overHighlight) {
         syncLanguageForDocument(nextValue);
       } else if (_skipNextLangSync) {
         _skipNextLangSync = false;
         nextTick(() => {
           debouncedSyncLanguage(nextValue);
         });
+      } else if (isLargeFile) {
+        debouncedSyncLanguage(nextValue);
       } else {
         syncLanguageForDocument(nextValue);
       }
     } finally {
-      editorLoading.value = false;
+      if (currentId === applyContentId) {
+        editorLoading.value = false;
+      }
     }
   };
 
@@ -813,13 +872,30 @@ const CreateView = () => {
       // ★ 大文件优化：先比较长度（O(1)），长度不同直接替换，避免 toString() 复制整个文档
       const docLen = view.state.doc.length;
       if (nextValue.length !== docLen) {
+        lastAppliedFileName = cmStore.currentFileName;
         applyContentToEditor(nextValue);
         return;
       }
 
-      // 长度相同时才做完整比较
+      // 长度相同时才做完整比较（大于50KB长度相同认为内容相同，避免toString巨大开销）
       if (nextValue.length === 0 && docLen === 0) return; // 都为空，跳过
-      if (nextValue !== view.state.doc.toString()) {
+      if (docLen < 50000 && nextValue !== view.state.doc.toString()) {
+        lastAppliedFileName = cmStore.currentFileName;
+        applyContentToEditor(nextValue);
+      }
+    },
+  );
+
+  // ★ 监听当前文件名切换，确保即使内容长度恰巧相同时也能重新检测语言和应用高亮
+  watch(
+    () => cmStore.currentFileName,
+    (newVal, oldVal) => {
+      if (!view || newVal === oldVal) return;
+      // 切换文件时，如果内容长度相同，watch(CmCode) 会被跳过，
+      // 这里强制触发一次 applyContentToEditor
+      const nextValue = cmStore.CmCode || "";
+      if (newVal !== lastAppliedFileName) {
+        lastAppliedFileName = newVal;
         applyContentToEditor(nextValue);
       }
     },
@@ -839,7 +915,8 @@ const CreateView = () => {
   //    手动将已有内容推送到编辑器，确保编辑器不会空白
   if (!view) return;
   const existing = cmStore.CmCode;
-  if (existing && existing !== view.state.doc.toString()) {
+  if (existing && (existing.length !== view.state.doc.length || (existing.length < 50000 && existing !== view.state.doc.toString()))) {
+    lastAppliedFileName = cmStore.currentFileName;
     applyContentToEditor(existing);
   }
 };
@@ -850,7 +927,8 @@ watch(
     const nextLanguage = normalizeEditorLanguage(language, "auto");
     if (selectedLanguage.value === nextLanguage) return;
     selectedLanguage.value = nextLanguage;
-    syncLanguageForDocument(view?.state.doc.toString() || "");
+    const docLen = view?.state.doc.length || 0;
+    syncLanguageForDocument(docLen > LARGE_FILE_PLAINTEXT_THRESHOLD ? "" : (view?.state.doc.toString() || ""));
   },
 );
 
@@ -1411,6 +1489,50 @@ const pasteNav = async () => {
 const toggleCollapsed = () => {
   collapsed.value = !collapsed.value;
 };
+
+// ★ 监听设置变更事件，实时重配 Compartment
+const handleSettingsChange = (e) => {
+  if (e?.detail) {
+    cmConfig = { ...cmConfig, ...e.detail };
+  } else {
+    cmConfig = getCmSettings();
+  }
+  if (!view) return;
+
+  const docLen = view.state.doc.length;
+  const isLargeFile = docLen > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
+  const editAssistEnabled = !isLargeFile;
+
+  view.dispatch({
+    effects: [
+      lineWrappingCompartment.reconfigure(createLineWrappingExt(docLen)),
+      heavyDecorations.reconfigure(createHeavyDecorations(docLen)),
+      editAssist.reconfigure(createEditAssist(editAssistEnabled)),
+      hyperLinkCompartment.reconfigure(createHyperLinkExt(!isLargeFile)),
+    ],
+  });
+
+  // 如果当前是高亮状态但文档超过了新的高亮阈值，降级纯文本；反之若在阈值内且为 auto 则重新同步高亮
+  if (docLen > getHighlightThresholdBytes()) {
+    if (activeLanguage.value !== "plaintext") {
+      applyLanguage("plaintext");
+    }
+  } else if (docLen <= getHighlightThresholdBytes() && activeLanguage.value === "plaintext") {
+    if (selectedLanguage.value === "auto") {
+      syncLanguageForDocument(view.state.doc.toString());
+    } else {
+      applyLanguage(selectedLanguage.value);
+    }
+  }
+};
+
+onMounted(() => {
+  window.addEventListener(CM_SETTINGS_EVENT, handleSettingsChange);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener(CM_SETTINGS_EVENT, handleSettingsChange);
+});
 </script>
 
 <style lang="scss" scoped>
@@ -2136,6 +2258,9 @@ const toggleCollapsed = () => {
   }
 }
 </style>
+
+
+
 
 <style>
 .cm-search-fab {
