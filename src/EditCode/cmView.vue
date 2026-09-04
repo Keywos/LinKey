@@ -245,7 +245,7 @@ const getFoldIndentThresholdBytes = () => cmConfig.foldIndentThreshold * 1024 * 
 const LARGE_FILE_PLAINTEXT_THRESHOLD_1 = 1.4 * 1024 * 1024;
 const LARGE_FILE_PLAINTEXT_THRESHOLD = 2 * 1024 * 1024; // 超过 2MB 强制纯文本，不做复杂语法高亮和重度扩展
 const HEAVY_SYNTAX_HIGHLIGHT_THRESHOLD = 1.4 * 1024 * 1024; // 语法高亮上限（超过降级为纯文本，防止主线程/Worker卡死崩溃）
-const SYNC_DEBOUNCE_MS = 50;
+const SYNC_DEBOUNCE_MS = 800; // 防抖延长到 800ms，避免每次按键频繁重算语言
 
 // ★ iOS 检测 — iOS Safari 内存限制更严格，大文件需要分块加载防闪退
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -539,7 +539,9 @@ const syncLanguageForDocument = async (docContent, force = false) => {
     languageDetectionStatus.value = "idle";
     scheduleLanguageDetectionBusy(requestId);
     try {
-      const detectedLanguage = await detectEditorLanguage(docSnapshot, cmStore.currentFileName);
+      // 头部 32KB 采样，避免对巨大文档做全量正则检测
+      const sample = docSnapshot.length > 32 * 1024 ? docSnapshot.slice(0, 32 * 1024) : docSnapshot;
+      const detectedLanguage = await detectEditorLanguage(sample, cmStore.currentFileName);
       if (requestId !== languageRequestId || normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto" || (view && view.state.doc.length !== docSnapshot.length)) {
         return;
       }
@@ -606,7 +608,11 @@ const debouncedSyncLanguage = (docContentGetter) => {
     syncIdleId = null;
   }
 
-  const getContent = typeof docContentGetter === "function" ? docContentGetter : () => docContentGetter;
+  const getContent = () => {
+    if (typeof docContentGetter === "function") return docContentGetter();
+    if (typeof docContentGetter === "string") return docContentGetter;
+    return view?.state?.doc?.sliceString(0, 32 * 1024) || "";
+  };
 
   // 获取文档长度快速判断是否为大文件
   const docLen = view?.state?.doc?.length || 0;
@@ -640,7 +646,23 @@ let _skipNextHistory = false;
 //   保留 URL/导入文件的原始扩展名
 let _skipNextFileRename = false;
 
+let lastAppliedFileName = "";
+let applyContentToEditor = null;
+
 defineExpose({
+  loadContent(content, options = {}) {
+    const { fileName, manualLanguage, skipHistory = true } = options;
+    if (fileName !== undefined) {
+      cmStore.setCurrentFileName(fileName);
+      lastAppliedFileName = fileName;
+    }
+    if (manualLanguage !== undefined) {
+      cmStore.setManualLanguage(manualLanguage);
+    }
+    _skipNextHistory = skipHistory;
+    const nextVal = content ?? "";
+    applyContentToEditor?.(nextVal);
+  },
   skipNextLanguageSync() {
     _skipNextLangSync = true;
   },
@@ -717,8 +739,11 @@ const CreateView = () => {
           // ★ 大文件避免每次按键无条件 toString()，防抖同步到 store
           debouncedStoreSync(() => update.state.doc.toString());
 
-          if (selectedLanguage.value === "auto" && !(docLen > getHighlightThresholdBytes()) && !_skipNextLangSync) {
-            debouncedSyncLanguage(() => update.state.doc.toString());
+          // 文档超过 4KB 且已识别出语言后，语言基本不再变化，跳过无谓的按键频繁重新探测
+          const needDetect = docLen < 4096 || autoDetectedLanguage.value === null;
+          if (selectedLanguage.value === "auto" && !(docLen > getHighlightThresholdBytes()) && !_skipNextLangSync && needDetect) {
+            // 直接由 debouncedSyncLanguage 从 view.state.doc 读取头部切片，不闭包持有 update 对象
+            debouncedSyncLanguage();
           }
         }),
         hyperLinkCompartment.of(createHyperLinkExt(true)),
@@ -729,10 +754,9 @@ const CreateView = () => {
     parent: viewRef.value,
   });
 
-  let lastAppliedFileName = "";
   let applyContentId = 0;
 
-  const applyContentToEditor = async (nextValue) => {
+  applyContentToEditor = async (nextValue) => {
     console.log("Code更新到文档");
     if (!view) return;
     const currentId = ++applyContentId;
@@ -886,18 +910,17 @@ const CreateView = () => {
     },
   );
 
-  // ★ 监听当前文件名切换，确保即使内容长度恰巧相同时也能重新检测语言和应用高亮
+  // ★ 监听当前文件名切换，仅重新计算/同步语言，不再重新加载编辑器文档内容
   watch(
     () => cmStore.currentFileName,
-    (newVal, oldVal) => {
-      if (!view || newVal === oldVal) return;
-      // 切换文件时，如果内容长度相同，watch(CmCode) 会被跳过，
-      // 这里强制触发一次 applyContentToEditor
-      const nextValue = cmStore.CmCode || "";
-      if (newVal !== lastAppliedFileName) {
-        lastAppliedFileName = newVal;
-        applyContentToEditor(nextValue);
-      }
+    (newVal) => {
+      if (!view || newVal === lastAppliedFileName) return;
+      lastAppliedFileName = newVal;
+      const locked = cmStore.manualLanguage || shouldLockLanguageFromFilename(newVal);
+      selectedLanguage.value = locked || "auto";
+      autoDetectedLanguage.value = locked;
+      const len = view.state.doc.length;
+      syncLanguageForDocument(len > getHighlightThresholdBytes() ? "" : view.state.doc.sliceString(0, 32 * 1024), true);
     },
   );
 

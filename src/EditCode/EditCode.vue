@@ -23,8 +23,8 @@
               <input type="checkbox" :checked="allChecked" @change="toggleCheckAll" />
               全选
             </label>
-            <button class="saves-btn" :disabled="checkedIds.length === 0" @click="deleteSelected">删除({{ checkedIds.length }})</button>
-            <button class="saves-btn" :disabled="checkedIds.length === 0" @click="exportSelected">导出选中({{ checkedIds.length }})</button>
+            <button class="saves-btn" :disabled="checkedIds.size === 0" @click="deleteSelected">删除({{ checkedIds.size }})</button>
+            <button class="saves-btn" :disabled="checkedIds.size === 0" @click="exportSelected">导出选中({{ checkedIds.size }})</button>
           </template>
 
           <template v-else>
@@ -609,7 +609,6 @@ const sortedSavedItems = computed(() =>
     })
     .sort((a, b) => (timeSortDescending.value ? 1 : -1) * (itemUpdatedAt(b) - itemUpdatedAt(a))),
 );
-const checkedIds = ref([]);
 const showSaves = ref(false);
 const toolbarExpanded = ref(false);
 const loadingItemId = ref(null);
@@ -621,8 +620,9 @@ const syncingAllGists = ref(false);
 const expandedActionItemId = ref(null);
 const actionPanelsReady = ref(false);
 const editorReady = ref(false);
-const expandedGistIds = ref([]);
-const expandedItemIds = ref([]);
+const expandedGistIds = ref(new Set());
+const expandedItemIds = ref(new Set());
+const checkedIds = ref(new Set());
 const savesListWidth = ref(0);
 const savesListRef = ref(null);
 let savesListObserver = null;
@@ -716,7 +716,7 @@ const toggleSaves = async () => {
 const toggleSelectMode = () => {
   selectMode.value = !selectMode.value;
   if (!selectMode.value) {
-    checkedIds.value = [];
+    checkedIds.value.clear();
   }
 };
 
@@ -904,28 +904,57 @@ const gistPath = (item) => {
 };
 const hasLocalContent = (item) => item.gist?.downloaded === true;
 const hasUrlAndGist = (item) => Boolean(item.url && item.gist?.rawUrl);
-const gistItems = (gistId) => savedItems.value.filter((item) => item.gist?.id === gistId);
-const groupItems = (item) => (item.gist?.id ? gistItems(item.gist.id) : item.localGroupId ? savedItems.value.filter((child) => child.localGroupId === item.localGroupId) : [item]);
+
+const groupKey = (it) => (it?.gist?.id ? `g:${it.gist.id}` : it?.localGroupId ? `l:${it.localGroupId}` : null);
+
+const groupIndex = computed(() => {
+  const map = new Map();
+  for (const it of savedItems.value) {
+    const key = groupKey(it);
+    if (!key) continue;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(it);
+  }
+  return map;
+});
+
+const gistItems = (gistId) => (gistId ? groupIndex.value.get(`g:${gistId}`) || [] : []);
+const groupItems = (item) => {
+  const key = groupKey(item);
+  return key ? groupIndex.value.get(key) || [item] : [item];
+};
 const isGistPrimary = (item) => groupItems(item)[0]?.id === item.id;
 const groupFileName = (item) => item.gist?.filename || item.name;
-const gistChildItems = (item) => {
-  const parentFileName = groupFileName(item);
-  const seenFileNames = new Set([parentFileName]);
 
-  return groupItems(item).filter((child) => {
-    const fileName = groupFileName(child);
-    if (child.id === item.id || seenFileNames.has(fileName)) return false;
-    seenFileNames.add(fileName);
-    return true;
-  });
-};
+// 子项预计算，避免模板中 getItemChildrenCount + gistChildItems 重复计算和逐项 Set 构建
+const childrenIndex = computed(() => {
+  const res = new Map();
+  for (const [, list] of groupIndex.value) {
+    if (!list || list.length === 0) continue;
+    const seen = new Set([groupFileName(list[0])]);
+    const children = list.slice(1).filter((c) => {
+      const fn = groupFileName(c);
+      if (seen.has(fn)) return false;
+      seen.add(fn);
+      return true;
+    });
+    res.set(list[0].id, children);
+  }
+  return res;
+});
+
+const gistChildItems = (item) => childrenIndex.value.get(item.id) || [];
 const getItemChildrenCount = (item) => gistChildItems(item).length;
 const shouldShowSavedItem = (item) => isGistPrimary(item);
 const localExpansionId = (item) => item.localGroupId || item.id;
-const isItemExpanded = (item) => (item.gist?.id ? expandedGistIds.value.includes(item.gist.id) : expandedItemIds.value.includes(localExpansionId(item)));
+const isItemExpanded = (item) => (item.gist?.id ? expandedGistIds.value.has(item.gist.id) : expandedItemIds.value.has(localExpansionId(item)));
 
 const toggleGistFiles = (gistId) => {
-  expandedGistIds.value = expandedGistIds.value.includes(gistId) ? expandedGistIds.value.filter((id) => id !== gistId) : [...expandedGistIds.value, gistId];
+  if (expandedGistIds.value.has(gistId)) {
+    expandedGistIds.value.delete(gistId);
+  } else {
+    expandedGistIds.value.add(gistId);
+  }
 };
 
 const toggleItemExpansion = (item) => {
@@ -934,7 +963,11 @@ const toggleItemExpansion = (item) => {
     return;
   }
   const groupId = localExpansionId(item);
-  expandedItemIds.value = expandedItemIds.value.includes(groupId) ? expandedItemIds.value.filter((id) => id !== groupId) : [...expandedItemIds.value, groupId];
+  if (expandedItemIds.value.has(groupId)) {
+    expandedItemIds.value.delete(groupId);
+  } else {
+    expandedItemIds.value.add(groupId);
+  }
 };
 
 const createExpandedFile = async (item) => {
@@ -1275,13 +1308,13 @@ const createNewBlank = async () => {
 
     skipWatchSave = true;
 
-    cmViewRef.value?.skipNextHistory();
-    cmViewRef.value?.skipNextFileRename();
-
     await setCurrentItem(item.id, item.name);
 
-    cmStore.setCurrentFileName(item.name);
-    cmStore.setCmCode(EMPTY_CONTENT);
+    cmViewRef.value?.loadContent?.(EMPTY_CONTENT, {
+      fileName: item.name,
+      manualLanguage: "",
+      skipHistory: true,
+    });
     lastSavedContent.value = EMPTY_CONTENT;
 
     await idbStorage.setItem(contentKey(item.id), EMPTY_CONTENT);
@@ -1349,7 +1382,7 @@ const deleteSingleItem = async (item) => {
 };
 
 const deleteSelected = async () => {
-  if (checkedIds.value.length === 0) {
+  if (checkedIds.value.size === 0) {
     showToast("请先勾选要删除的项");
     return;
   }
@@ -1357,7 +1390,7 @@ const deleteSelected = async () => {
   const ok = await askConfirm(`确定要删除选中的 ${ids.length} 项吗？此操作不可恢复。`);
   if (!ok) return;
 
-  const items = savedItems.value.filter((item) => ids.includes(item.id));
+  const items = savedItems.value.filter((item) => checkedIds.value.has(item.id));
   if (items.some((item) => item.gist?.id)) {
     showToast("远程 Gist 文件请使用单条删除");
     return;
@@ -1367,11 +1400,11 @@ const deleteSelected = async () => {
   } catch (error) {
     console.error("删除内容失败", error);
   }
-  savedItems.value = savedItems.value.filter((item) => !ids.includes(item.id));
-  checkedIds.value = [];
+  savedItems.value = savedItems.value.filter((item) => !checkedIds.value.has(item.id));
+  checkedIds.value.clear();
   await persistIndex();
 
-  if (currentItemId.value && ids.includes(currentItemId.value)) {
+  if (currentItemId.value && checkedIds.value.has(currentItemId.value)) {
     await setCurrentItem(null, "");
   }
 
@@ -1400,20 +1433,13 @@ const loadItem = async (item) => {
       return;
     }
 
-    // ★ 大文件加载前先告诉 cmView 跳过立即语言同步，
-    //   等 CodeMirror 渲染完成后再延迟触发，避免主线程卡死导致滚动崩溃
-    if (content && content.length > LARGE_FILE_THRESHOLD) {
-      cmViewRef.value?.skipNextLanguageSync();
-    }
-
-    cmViewRef.value?.skipNextHistory();
-    cmViewRef.value?.skipNextFileRename();
-
     // 🔥 切换期间抑制自动保存 watch，避免内容设置触发 isDirty / 错误保存
     isSwitchingItem = true;
-    cmStore.setCurrentFileName(item.name);
-    cmStore.setManualLanguage(item.manualLanguage || "");
-    cmStore.setCmCode(content || EMPTY_CONTENT);
+    cmViewRef.value?.loadContent?.(content || EMPTY_CONTENT, {
+      fileName: item.name,
+      manualLanguage: item.manualLanguage || "",
+      skipHistory: true,
+    });
 
     await setCurrentItem(item.id, item.name);
 
@@ -1484,21 +1510,15 @@ async function refreshUrlItem(item) {
     await saveMeta(item);
     await persistIndex();
 
-    // ★ 刷新 URL 内容同样走大文件保护
-    if (content.length > LARGE_FILE_THRESHOLD) {
-      cmViewRef.value?.skipNextLanguageSync();
-    }
-
-    cmViewRef.value?.skipNextHistory();
-    cmViewRef.value?.skipNextFileRename();
-
     // ★ 用 URL 的文件名/后缀设置语言识别用的文件名，列表名不变
     const urlFileName = getFileNameFromUrl(item.url || "");
 
     isSwitchingItem = true;
-    cmStore.setCurrentFileName(urlFileName);
-    cmStore.setManualLanguage(item.manualLanguage || "");
-    cmStore.setCmCode(content);
+    cmViewRef.value?.loadContent?.(content, {
+      fileName: urlFileName,
+      manualLanguage: item.manualLanguage || "",
+      skipHistory: true,
+    });
     await setCurrentItem(item.id, urlFileName);
     lastSavedContent.value = content;
     await nextTick();
@@ -1570,9 +1590,9 @@ const renameItem = async (item) => {
   showToast("已重命名为 " + newName);
 };
 
-const allChecked = computed(() => savedItems.value.length > 0 && checkedIds.value.length === savedItems.value.length);
+const allChecked = computed(() => savedItems.value.length > 0 && checkedIds.value.size === savedItems.value.length);
 const toggleCheckAll = () => {
-  checkedIds.value = allChecked.value ? [] : savedItems.value.map((i) => i.id);
+  checkedIds.value = allChecked.value ? new Set() : new Set(savedItems.value.map((i) => i.id));
 };
 
 function truncateUrl(url) {
@@ -1646,9 +1666,12 @@ const syncCurrentItemContent = async () => {
       isDirty = false;
       return;
     }
-    await idbStorage.setItem(contentKey(id), content);
 
-    lastSavedContent.value = content;
+    if (content !== lastSavedContent.value) {
+      await idbStorage.setItem(contentKey(id), content);
+      lastSavedContent.value = content;
+    }
+
     isDirty = false;
 
     savedItems.value[idx] = {
@@ -1736,8 +1759,10 @@ const flushCurrentSave = async () => {
         isDirty = false;
         return;
       }
-      await idbStorage.setItem(contentKey(id), content);
-      lastSavedContent.value = content;
+      if (content !== lastSavedContent.value) {
+        await idbStorage.setItem(contentKey(id), content);
+        lastSavedContent.value = content;
+      }
       isDirty = false;
       savedItems.value[idx] = { ...savedItems.value[idx], name: cmStore.currentFileName || savedItems.value[idx].name, ...buildMeta(content) };
       await saveMeta(savedItems.value[idx]);
@@ -1842,11 +1867,6 @@ const onImportFileChange = async (e) => {
   try {
     const text = await file.text();
 
-    // ★ 导入大文件同样保护
-    if (text.length > LARGE_FILE_THRESHOLD) {
-      cmViewRef.value?.skipNextLanguageSync();
-    }
-
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     await idbStorage.setItem(contentKey(id), text);
     savedItems.value.unshift({ id, name: file.name, ...buildMeta(text), tags: ["CH"] });
@@ -1860,13 +1880,12 @@ const onImportFileChange = async (e) => {
     }
     await nextTick();
 
-    cmViewRef.value?.skipNextHistory();
-    cmViewRef.value?.skipNextFileRename();
-
     isSwitchingItem = true;
-    cmStore.setCurrentFileName(file.name);
-    cmStore.setManualLanguage(""); // 新导入文件清除手动语言
-    cmStore.setCmCode(text);
+    cmViewRef.value?.loadContent?.(text, {
+      fileName: file.name,
+      manualLanguage: "",
+      skipHistory: true,
+    });
     await setCurrentItem(id, file.name);
     lastSavedContent.value = text;
     clearTimeout(autosaveTimer);
@@ -1928,12 +1947,12 @@ const exportCurrent = () => {
 };
 
 const exportSelected = async () => {
-  if (checkedIds.value.length === 0) {
+  if (checkedIds.value.size === 0) {
     showToast("请先勾选要导出的项");
     return;
   }
   const ids = [...checkedIds.value];
-  const items = savedItems.value.filter((item) => ids.includes(item.id));
+  const items = savedItems.value.filter((item) => checkedIds.value.has(item.id));
 
   if (items.length === 1) {
     const item = items[0];
@@ -2165,17 +2184,12 @@ async function loadUrlContent(inputUrl, inputUserAgent = "") {
     }
     await nextTick();
 
-    // ★ URL 加载大文件同样保护
-    if (content.length > LARGE_FILE_THRESHOLD) {
-      cmViewRef.value?.skipNextLanguageSync();
-    }
-
-    cmViewRef.value?.skipNextHistory();
-    cmViewRef.value?.skipNextFileRename();
-
     isSwitchingItem = true;
-    cmStore.setCurrentFileName(fileName);
-    cmStore.setCmCode(content);
+    cmViewRef.value?.loadContent?.(content, {
+      fileName,
+      manualLanguage: "",
+      skipHistory: true,
+    });
     await setCurrentItem(id, fileName);
     lastSavedContent.value = content;
     isDirty = false;
@@ -2287,11 +2301,6 @@ onMounted(async () => {
     if (lastItem) {
       initialCode = typeof lastContent === "string" ? lastContent : EMPTY_CONTENT;
       currentItemId.value = lastId;
-      if (initialCode.length > LARGE_FILE_THRESHOLD) {
-        nextTick(() => {
-          cmViewRef.value?.skipNextLanguageSync();
-        });
-      }
       cmStore.setCurrentFileName(lastItem.name);
       cmStore.setManualLanguage(lastItem.manualLanguage || "");
       console.log("0 已默认载入最后打开的内容");
@@ -2329,15 +2338,6 @@ onMounted(async () => {
         await setCurrentItem(firstId, firstName);
       }
     }
-  }
-
-  // ★ 大文件初始加载：通知 cmView 延迟语言同步，防止首次滚动时卡死
-  cmViewRef.value?.skipNextHistory();
-  cmViewRef.value?.skipNextFileRename();
-
-  if (initialCode && initialCode.length > LARGE_FILE_THRESHOLD) {
-    cmViewRef.value?.skipNextLanguageSync();
-    await nextTick();
   }
 
   // ★ URL 加载已由 loadUrlContent 完成设置，跳过重复赋值避免触发多余 watcher
