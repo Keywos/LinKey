@@ -6,8 +6,20 @@
         <div class="cm-img-button">
           <div>
             <div class="editor-background-select-wrap">
-              <select v-model="selectedLanguage" class="editor-background-select" :title="selectedLanguageTitle" aria-label="Editor language" @pointerdown.stop @click.stop @change="onLanguageChange">
-                <option v-for="option in languageOptions" :key="option.value" :value="option.value">
+              <select
+                v-model="selectedLanguage"
+                class="editor-background-select"
+                :title="selectedLanguageTitle"
+                aria-label="Editor language"
+                @pointerdown.stop
+                @click.stop
+                @change="onLanguageChange"
+              >
+                <option
+                  v-for="option in languageOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
                   {{ option.label }}
                 </option>
               </select>
@@ -22,14 +34,20 @@
                 @click.stop
                 @change="setEditorDarkBackground"
               >
-                <option v-for="option in editorDarkBackgroundOptions" :key="option.value" :value="option.value">
+                <option
+                  v-for="option in editorDarkBackgroundOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
                   {{ option.label }}
                 </option>
               </select>
             </div>
             <button @click="undoCode"><img :src="undoimg" /></button>
             <button @click="redoCode"><img :src="redoimg" /></button>
-            <button @click="formatCode" title="JS 选项"><img :src="format" /></button>
+            <button @click="formatCode" title="JS 选项">
+              <img :src="format" />
+            </button>
             <button @click="copyText"><img :src="copyimg" /></button>
             <button @click="delAllCode"><img :src="del" /></button>
             <button @click="pasteNav"><img :src="paste" /></button>
@@ -45,7 +63,11 @@
         @click="toggleCollapsed"
       >
         <span class="cm-toolbar-more" aria-hidden="true">
-          <svg class="icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <svg
+            class="icon"
+            viewBox="0 0 1024 1024"
+            xmlns="http://www.w3.org/2000/svg"
+          >
             <path
               d="M203.1 599.3c-48.9 0-88.6-39.6-88.6-88.5s39.6-88.5 88.6-88.5c48.9 0 88.6 39.6 88.6 88.5-0.1 48.9-39.7 88.5-88.6 88.5z m309.9 0c-48.9 0-88.6-39.6-88.6-88.5s39.6-88.5 88.6-88.5c48.9 0 88.6 39.6 88.6 88.5s-39.7 88.5-88.6 88.5z m309.9 0c-48.9 0-88.6-39.6-88.6-88.5s39.6-88.5 88.6-88.5c48.9 0 88.6 39.6 88.6 88.5s-39.6 88.5-88.6 88.5z"
             />
@@ -61,7 +83,9 @@
         :style="[searchFabStyle, editorOverlayStyle]"
         type="button"
         :aria-label="searchOpen ? '关闭查找与替换' : '打开查找与替换'"
-        :title="searchOpen ? '关闭查找与替换（可拖动）' : '查找与替换（可拖动）'"
+        :title="
+          searchOpen ? '关闭查找与替换（可拖动）' : '查找与替换（可拖动）'
+        "
         @pointerdown="startSearchFabDrag"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -111,13 +135,53 @@
               >
                 {{ replaceOpen ? "▴" : "▾" }}
               </button>
-              <button type="button" :class="{ active: searchCaseSensitive }" :aria-pressed="searchCaseSensitive" title="区分大小写" @click="toggleCaseSensitive">Aa</button>
-              <button type="button" :class="{ active: searchWholeWord }" :aria-pressed="searchWholeWord" title="全词匹配" @click="toggleWholeWord">ab</button>
-              <button type="button" :class="{ active: searchRegexp }" :aria-pressed="searchRegexp" title="正则表达式" @click="toggleRegexp">.*</button>
+              <button
+                type="button"
+                :class="{ active: searchCaseSensitive }"
+                :aria-pressed="searchCaseSensitive"
+                title="区分大小写"
+                @click="toggleCaseSensitive"
+              >
+                Aa
+              </button>
+              <button
+                type="button"
+                :class="{ active: searchWholeWord }"
+                :aria-pressed="searchWholeWord"
+                title="全词匹配"
+                @click="toggleWholeWord"
+              >
+                ab
+              </button>
+              <button
+                type="button"
+                :class="{ active: searchRegexp }"
+                :aria-pressed="searchRegexp"
+                title="正则表达式"
+                @click="toggleRegexp"
+              >
+                .*
+              </button>
             </div>
           </div>
-          <button class="cm-search-nav" type="button" aria-label="上一个匹配" title="上一个" @click="findPrev">↑</button>
-          <button class="cm-search-nav" type="button" aria-label="下一个匹配" title="下一个" @click="findNext">↓</button>
+          <button
+            class="cm-search-nav"
+            type="button"
+            aria-label="上一个匹配"
+            title="上一个"
+            @click="findPrev"
+          >
+            ↑
+          </button>
+          <button
+            class="cm-search-nav"
+            type="button"
+            aria-label="下一个匹配"
+            title="下一个"
+            @click="findNext"
+          >
+            ↓
+          </button>
         </div>
 
         <div v-if="replaceOpen" class="cm-replace-area">
@@ -135,8 +199,22 @@
               @keydown.enter.prevent="findNext"
             />
             <div class="cm-replace-actions">
-              <button type="button" :disabled="!canSearch" @pointerdown.stop @click.stop="replaceNext">替换</button>
-              <button type="button" class="cm-replace-all" :class="{ armed: replaceAllArmed }" :disabled="!canSearch" @pointerdown.stop @click.stop="confirmReplaceAll">
+              <button
+                type="button"
+                :disabled="!canSearch"
+                @pointerdown.stop
+                @click.stop="replaceNext"
+              >
+                替换
+              </button>
+              <button
+                type="button"
+                class="cm-replace-all"
+                :class="{ armed: replaceAllArmed }"
+                :disabled="!canSearch"
+                @pointerdown.stop
+                @click.stop="confirmReplaceAll"
+              >
                 {{ replaceAllArmed ? "再次点击确认" : "全替" }}
               </button>
             </div>
@@ -145,25 +223,42 @@
       </section>
     </Teleport>
     <div ref="viewRef" style="width: 100%; font-size: 11px" />
-    <div v-if="editorLoading" class="cm-content-loading" role="status" aria-live="polite">
+    <div
+      v-if="editorLoading"
+      class="cm-content-loading"
+      role="status"
+      aria-live="polite"
+    >
       <span class="cm-content-loading-spinner"></span>
       <span>正在载入编辑器…</span>
     </div>
     <div style="height: 10px" />
 
     <Teleport to="body">
-      <div v-if="compressOpts.visible" class="compress-overlay" @click.self="closeCompressDialog">
+      <div
+        v-if="compressOpts.visible"
+        class="compress-overlay"
+        @click.self="closeCompressDialog"
+      >
         <div class="compress-dialog" :style="editorOverlayStyle">
           <div class="compress-title">压缩选项</div>
           <div class="compress-body">
             <div class="compress-group">
               <div class="compress-label">压缩模式</div>
               <label class="compress-radio">
-                <input type="radio" v-model="compressOpts.keepNames" :value="false" />
+                <input
+                  type="radio"
+                  v-model="compressOpts.keepNames"
+                  :value="false"
+                />
                 <span>标准压缩（混淆函数名）</span>
               </label>
               <label class="compress-radio">
-                <input type="radio" v-model="compressOpts.keepNames" :value="true" />
+                <input
+                  type="radio"
+                  v-model="compressOpts.keepNames"
+                  :value="true"
+                />
                 <span>不压缩函数名</span>
               </label>
             </div>
@@ -177,19 +272,31 @@
             <div class="compress-group">
               <div class="compress-label">中文编码</div>
               <label class="compress-radio">
-                <input type="radio" v-model="compressOpts.charset" value="utf8" />
+                <input
+                  type="radio"
+                  v-model="compressOpts.charset"
+                  value="utf8"
+                />
                 <span>UTF-8（保留中文）</span>
               </label>
               <label class="compress-radio">
-                <input type="radio" v-model="compressOpts.charset" value="ascii" />
+                <input
+                  type="radio"
+                  v-model="compressOpts.charset"
+                  value="ascii"
+                />
                 <span>ASCII（\uXXXX）</span>
               </label>
             </div>
           </div>
           <div class="compress-buttons">
-            <button class="compress-btn cancel" @click="closeCompressDialog">取消</button>
+            <button class="compress-btn cancel" @click="closeCompressDialog">
+              取消
+            </button>
             <button class="compress-btn" @click="doFormat">格式化</button>
-            <button class="compress-btn primary" @click="doCompress">压缩</button>
+            <button class="compress-btn primary" @click="doCompress">
+              压缩
+            </button>
           </div>
         </div>
       </div>
@@ -204,9 +311,26 @@ import { javascript } from "@/EditCode/lang-js";
 import { json } from "@codemirror/lang-json";
 import { yaml } from "@codemirror/lang-yaml";
 
-import { detectEditorLanguage, EDITOR_LANGUAGE_OPTIONS, loadEditorLanguageExtension, normalizeEditorLanguage } from "@/EditCode/editorLanguages";
-import { shikiHighlight, SHIKI_SUPPORTED_LANGUAGES } from "@/EditCode/shikiHighlight";
-import { computed, nextTick, ref, reactive, onBeforeUnmount, onMounted, watch, watchEffect } from "vue";
+import {
+  detectEditorLanguage,
+  EDITOR_LANGUAGE_OPTIONS,
+  loadEditorLanguageExtension,
+  normalizeEditorLanguage,
+} from "@/EditCode/editorLanguages";
+import {
+  shikiHighlight,
+  SHIKI_SUPPORTED_LANGUAGES,
+} from "@/EditCode/shikiHighlight";
+import {
+  computed,
+  nextTick,
+  ref,
+  reactive,
+  onBeforeUnmount,
+  onMounted,
+  watch,
+  watchEffect,
+} from "vue";
 import {
   highlightSelectionMatches,
   search as cmSearch,
@@ -217,10 +341,28 @@ import {
   replaceNext as cmReplaceNext,
   replaceAll as cmReplaceAll,
 } from "@/EditCode/search";
-import { lineNumbers, EditorView, highlightActiveLine, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
-import { foldGutter, bracketMatching } from "@codemirror/language";
+import {
+  lineNumbers,
+  EditorView,
+  highlightActiveLine,
+  keymap,
+  placeholder as cmPlaceholder,
+} from "@codemirror/view";
+import {
+  foldGutter,
+  bracketMatching,
+  forceParsing,
+  syntaxTree,
+} from "@codemirror/language";
 
-import { undo, redo, history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
+import {
+  undo,
+  redo,
+  history,
+  defaultKeymap,
+  historyKeymap,
+  indentWithTab,
+} from "@codemirror/commands";
 import { closeBrackets, autocompletion } from "@codemirror/autocomplete";
 import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import { hyperLink } from "@/EditCode/link/index.ts";
@@ -237,21 +379,96 @@ import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
 import { getCmSettings, CM_SETTINGS_EVENT } from "@/EditCode/editorSettings.js";
 
+// ★ iOS 上滚动事件在惯性滚动期间会被浏览器降级/延迟调度，
+//   直接在 updateListener 里做 forceParsing 可能追不上；
+//   改用 requestAnimationFrame 持续轮询，不依赖 scroll 事件本身
+let parseRafId = null;
+
+const activeLanguage = ref("plaintext");
+
 // ★ 从设置中动态获取配置
 let cmConfig = getCmSettings();
-const getHighlightThresholdBytes = () => cmConfig.highlightThreshold * 1024 * 1024;
-const getLinewrapThresholdBytes = () => cmConfig.linewrapThreshold * 1024 * 1024;
-const getFoldIndentThresholdBytes = () => cmConfig.foldIndentThreshold * 1024 * 1024;
+const getHighlightThresholdBytes = () =>
+  cmConfig.highlightThreshold * 1024 * 1024;
+const getLinewrapThresholdBytes = () =>
+  cmConfig.linewrapThreshold * 1024 * 1024;
+const getFoldIndentThresholdBytes = () =>
+  cmConfig.foldIndentThreshold * 1024 * 1024;
 
-const LARGE_FILE_PLAINTEXT_THRESHOLD_1 = 1.4 * 1024 * 1024;
-const LARGE_FILE_PLAINTEXT_THRESHOLD = 2 * 1024 * 1024; // 超过 2MB 强制纯文本，不做复杂语法高亮和重度扩展
-const HEAVY_SYNTAX_HIGHLIGHT_THRESHOLD = 1.4 * 1024 * 1024; // 语法高亮上限（超过降级为纯文本，防止主线程/Worker卡死崩溃）
-const SYNC_DEBOUNCE_MS = 800; // 防抖延长到 800ms，避免每次按键频繁重算语言
+const SYNC_DEBOUNCE_MS = 900; // 防抖延长到 900ms，避免每次按键频繁重算语言
 
 // ★ iOS 检测 — iOS Safari 内存限制更严格，大文件需要分块加载防闪退
-const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const IS_IOS =
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const CHUNKED_LOAD_THRESHOLD = IS_IOS ? 300 * 1024 : 3 * 1024 * 1024; // iOS 300KB / 其他 3MB
 const CHUNK_SIZE = IS_IOS ? 200 * 1024 : 512 * 1024;
+
+function stopParseLoop() {
+  if (parseRafId != null) cancelAnimationFrame(parseRafId);
+  parseRafId = null;
+}
+
+// 最大强制解析字符深度（大文件严禁强制全量解析，交给 CM6 原生后台机制）
+// const MAX_FORCE_PARSE_LEN = getHighlightThresholdBytes();
+const MAX_PARSE_FRAMES = 40; // 单次循环最大帧数限制（约 0.3~0.6s），防止死循环跑死主线程
+
+/**
+ * 优化版语法解析追踪循环
+ */
+function ensureParseLoop(targetView) {
+  if (parseRafId != null) return; // 循环已在运行
+
+  // 1. 基础有效性拦截
+  if (!targetView || !targetView.dom?.isConnected) return;
+  if (activeLanguage.value === "plaintext") return;
+
+  const docLen = targetView.state.doc.length;
+  // 超大文件直接放弃强制追赶，防爆内存（CM6 本身有按需惰性解析机制）
+  if (docLen > getHighlightThresholdBytes()) return;
+
+  let lastParsedLen = -1;
+  let stagnantCount = 0; // 记录连续无进展的次数
+  let frameCount = 0; // 记录执行的帧数
+
+  const step = () => {
+    parseRafId = null;
+
+    // 2. 生命周期与环境安全校验（DOM 已脱离文档或已销毁，立即熔断释放引用）
+    if (!targetView || !targetView.dom?.isConnected || !view) return;
+    if (activeLanguage.value === "plaintext") return;
+
+    // 3. 熔断保护：超过最大连续帧数，主动交出主线程，让 GC 喘息
+    frameCount++;
+    if (frameCount > MAX_PARSE_FRAMES) return;
+
+    const target = Math.min(
+      targetView.viewport.to,
+      getHighlightThresholdBytes(),
+    );
+    const parsedLen = syntaxTree(targetView.state).length;
+
+    // 4. 停滞保护：如果解析进度卡住（连续 3 帧没有向前推进），说明遇到瓶颈，立即退出
+    if (parsedLen === lastParsedLen) {
+      stagnantCount++;
+      if (stagnantCount >= 3) return;
+    } else {
+      stagnantCount = 0;
+      lastParsedLen = parsedLen;
+    }
+
+    if (parsedLen < target) {
+      const timeBudget = IS_IOS ? 16 : 32;
+      const done = forceParsing(targetView, target, timeBudget);
+
+      if (!done) {
+        parseRafId = requestAnimationFrame(step);
+      }
+    }
+  };
+
+  parseRafId = requestAnimationFrame(step);
+}
 
 const cmStore = useCmStore();
 const { isDarkModeEnabled } = useTheme();
@@ -283,7 +500,8 @@ const editorOverlayStyle = computed(() => {
   const background = getEditorDarkBackground();
   return {
     "--editor-overlay-background": background,
-    "--editor-overlay-sheet-background": background === "#000000" ? "#14141469" : `${background}23`,
+    "--editor-overlay-sheet-background":
+      background === "#000000" ? "#14141469" : `${background}23`,
   };
 });
 
@@ -313,7 +531,20 @@ const props = defineProps({
   },
   toolbarActions: {
     type: Array,
-    default: () => ["fullscreen", "import", "language-detect", "language", "undo", "redo", "format", "search", "copy", "delete", "paste", "panel"],
+    default: () => [
+      "fullscreen",
+      "import",
+      "language-detect",
+      "language",
+      "undo",
+      "redo",
+      "format",
+      "search",
+      "copy",
+      "delete",
+      "paste",
+      "panel",
+    ],
   },
   toolbarVariant: {
     type: String,
@@ -336,7 +567,8 @@ const createLineWrappingExt = (docLen = 0) => {
 const createHeavyDecorations = (docLen = 0) => {
   const deco = [];
   const threshold = getFoldIndentThresholdBytes();
-  if (docLen < threshold) deco.push(foldGutter({ closedText: "▸", openText: "▾" }));
+  if (docLen < threshold)
+    deco.push(foldGutter({ closedText: "▸", openText: "▾" }));
   // 缩进标记默认阈值也可以跟随设定值（或折半）
   if (docLen < Math.min(threshold, 500 * 1024)) deco.push(indentationMarkers());
   return deco;
@@ -360,9 +592,11 @@ const createHistoryExt = (isLarge) => history({ minDepth: isLarge ? 50 : 200 });
 
 // ★ 超链接装饰 — 大文件或用户关闭时禁用避免每次按键全文正则扫描
 const hyperLinkCompartment = new Compartment();
-const createHyperLinkExt = (enabled) => (enabled && cmConfig.enableHyperlink ? [hyperLink] : []);
-const selectedLanguage = ref(normalizeEditorLanguage(props.editorLanguage, "auto"));
-const activeLanguage = ref("plaintext");
+const createHyperLinkExt = (enabled) =>
+  enabled && cmConfig.enableHyperlink ? [hyperLink] : [];
+const selectedLanguage = ref(
+  normalizeEditorLanguage(props.editorLanguage, "auto"),
+);
 
 const autoDetectedLanguage = ref(null);
 const isFormatting = ref(false);
@@ -389,10 +623,14 @@ const languageDetectionStatus = ref("idle");
 
 const getLanguageLabel = (language) => {
   const normalizedLanguage = normalizeEditorLanguage(language, "plaintext");
-  return editorLanguage_json[normalizedLanguage] || editorLanguage_json.plaintext;
+  return (
+    editorLanguage_json[normalizedLanguage] || editorLanguage_json.plaintext
+  );
 };
 
-const selectedLanguageDisplayLabel = computed(() => getLanguageLabel(selectedLanguage.value));
+const selectedLanguageDisplayLabel = computed(() =>
+  getLanguageLabel(selectedLanguage.value),
+);
 
 const LANGUAGE_DETECTION_BUSY_DELAY = 300;
 let languageDetectionTimer;
@@ -406,7 +644,10 @@ const scheduleLanguageDetectionBusy = (requestId) => {
   clearLanguageDetectionTimer();
   languageDetectionTimer = setTimeout(() => {
     languageDetectionTimer = undefined;
-    if (requestId === languageRequestId && normalizeEditorLanguage(selectedLanguage.value, "auto") === "auto") {
+    if (
+      requestId === languageRequestId &&
+      normalizeEditorLanguage(selectedLanguage.value, "auto") === "auto"
+    ) {
       languageDetectionStatus.value = "detecting";
     }
   }, LANGUAGE_DETECTION_BUSY_DELAY);
@@ -435,12 +676,19 @@ const onLanguageChange = () => {
   // ★ 手动选择非 auto 时保存到 store，选 auto 时清除
   cmStore.setManualLanguage(next !== "auto" ? next : "");
 
-  syncLanguageForDocument(docLen > getHighlightThresholdBytes() ? "" : (view?.state.doc.toString() || ""));
+  syncLanguageForDocument(
+    docLen > getHighlightThresholdBytes()
+      ? ""
+      : view?.state.doc.toString() || "",
+  );
 };
 
 const languageOptions = computed(() =>
   EDITOR_LANGUAGE_OPTIONS.map((option) => {
-    const label = option.value === "auto" && autoDetectedLanguage.value ? getLanguageLabel(autoDetectedLanguage.value) : getLanguageLabel(option.value);
+    const label =
+      option.value === "auto" && autoDetectedLanguage.value
+        ? getLanguageLabel(autoDetectedLanguage.value)
+        : getLanguageLabel(option.value);
     return { ...option, label };
   }),
 );
@@ -448,7 +696,9 @@ const selectedLanguageTitle = computed(() => {
   if (normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto") {
     return selectedLanguageDisplayLabel.value;
   }
-  return autoDetectedLanguage.value ? getLanguageLabel(autoDetectedLanguage.value) : getLanguageLabel("auto");
+  return autoDetectedLanguage.value
+    ? getLanguageLabel(autoDetectedLanguage.value)
+    : getLanguageLabel("auto");
 });
 
 const createShikiHighlight = (language = activeLanguage.value) =>
@@ -457,7 +707,12 @@ const createShikiHighlight = (language = activeLanguage.value) =>
     dark: isDarkModeEnabled.value,
   });
 
-const applyLanguage = async (language, requestId = ++languageRequestId, force = false, docLen = view?.state.doc.length ?? 0) => {
+const applyLanguage = async (
+  language,
+  requestId = ++languageRequestId,
+  force = false,
+  docLen = view?.state.doc.length ?? 0,
+) => {
   const nextLanguage = normalizeEditorLanguage(language, "plaintext");
   if (!view || requestId !== languageRequestId) return;
 
@@ -515,7 +770,9 @@ const applyLanguage = async (language, requestId = ++languageRequestId, force = 
     console.log(`启用 ${getLanguageLabel(nextLanguage)} 语法高亮 - 使用 shiki`);
     effects.push(shikiSyntax.reconfigure(createShikiHighlight(nextLanguage)));
   } else {
-    console.log(`启用 ${getLanguageLabel(nextLanguage)} 语法高亮 - 使用 codemirror`);
+    console.log(
+      `启用 ${getLanguageLabel(nextLanguage)} 语法高亮 - 使用 codemirror`,
+    );
     effects.push(shikiSyntax.reconfigure([]));
   }
   view.dispatch({ effects });
@@ -534,16 +791,29 @@ const syncLanguageForDocument = async (docContent, force = false) => {
     return;
   }
 
-  const manualLanguage = normalizeEditorLanguage(selectedLanguage.value, "auto");
+  const manualLanguage = normalizeEditorLanguage(
+    selectedLanguage.value,
+    "auto",
+  );
 
   if (manualLanguage === "auto") {
     languageDetectionStatus.value = "idle";
     scheduleLanguageDetectionBusy(requestId);
     try {
       // 头部 32KB 采样，避免对巨大文档做全量正则检测
-      const sample = docSnapshot.length > 32 * 1024 ? docSnapshot.slice(0, 32 * 1024) : docSnapshot;
-      const detectedLanguage = await detectEditorLanguage(sample, cmStore.currentFileName);
-      if (requestId !== languageRequestId || normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto" || (view && view.state.doc.length !== docSnapshot.length)) {
+      const sample =
+        docSnapshot.length > 32 * 1024
+          ? docSnapshot.slice(0, 32 * 1024)
+          : docSnapshot;
+      const detectedLanguage = await detectEditorLanguage(
+        sample,
+        cmStore.currentFileName,
+      );
+      if (
+        requestId !== languageRequestId ||
+        normalizeEditorLanguage(selectedLanguage.value, "auto") !== "auto" ||
+        (view && view.state.doc.length !== docSnapshot.length)
+      ) {
         return;
       }
       autoDetectedLanguage.value = detectedLanguage;
@@ -558,7 +828,10 @@ const syncLanguageForDocument = async (docContent, force = false) => {
 
   clearLanguageDetectionTimer();
   languageDetectionStatus.value = "idle";
-  if (requestId !== languageRequestId || normalizeEditorLanguage(selectedLanguage.value, "auto") !== manualLanguage) {
+  if (
+    requestId !== languageRequestId ||
+    normalizeEditorLanguage(selectedLanguage.value, "auto") !== manualLanguage
+  ) {
     return;
   }
   await applyLanguage(manualLanguage, requestId, force);
@@ -597,7 +870,8 @@ function shouldLockLanguageFromFilename(filename) {
   return EXT_TO_LANG[ext] || "plaintext";
 }
 
-const createEditorPlaceholder = () => (props.placeholder ? cmPlaceholder(props.placeholder) : []);
+const createEditorPlaceholder = () =>
+  props.placeholder ? cmPlaceholder(props.placeholder) : [];
 
 let syncTimer = null;
 let syncIdleId = null; // requestIdleCallback ID
@@ -617,7 +891,7 @@ const debouncedSyncLanguage = (docContentGetter) => {
 
   // 获取文档长度快速判断是否为大文件
   const docLen = view?.state?.doc?.length || 0;
-  const isLarge = docLen > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
+  const isLarge = docLen > getHighlightThresholdBytes();
 
   if (isLarge && typeof requestIdleCallback !== "undefined") {
     // ★ 大文件使用 requestIdleCallback，让浏览器在空闲时再做语言检测
@@ -694,7 +968,10 @@ const flushStoreSync = () => {
   }
   if (_pendingStoreContent != null) {
     docUpdate = true;
-    const content = typeof _pendingStoreContent === "function" ? _pendingStoreContent() : _pendingStoreContent;
+    const content =
+      typeof _pendingStoreContent === "function"
+        ? _pendingStoreContent()
+        : _pendingStoreContent;
     cmStore.setCmCode(content);
     docUpdate = false;
     _pendingStoreContent = null;
@@ -716,10 +993,28 @@ const CreateView = () => {
         historyCompartment.of(history()),
         cmSearch(),
         keymap.of([
-          { key: "Mod-f", run: () => (openSearch(), true), preventDefault: true },
-          { key: "F3", run: () => (findNext(), true), shift: () => (findPrev(), true), preventDefault: true },
-          { key: "Mod-g", run: () => (findNext(), true), shift: () => (findPrev(), true), preventDefault: true },
-          { key: "Escape", run: () => (searchOpen.value ? (closeSearch(), true) : false), preventDefault: true },
+          {
+            key: "Mod-f",
+            run: () => (openSearch(), true),
+            preventDefault: true,
+          },
+          {
+            key: "F3",
+            run: () => (findNext(), true),
+            shift: () => (findPrev(), true),
+            preventDefault: true,
+          },
+          {
+            key: "Mod-g",
+            run: () => (findNext(), true),
+            shift: () => (findPrev(), true),
+            preventDefault: true,
+          },
+          {
+            key: "Escape",
+            run: () => (searchOpen.value ? (closeSearch(), true) : false),
+            preventDefault: true,
+          },
           indentWithTab,
           ...defaultKeymap,
           ...historyKeymap,
@@ -734,15 +1029,22 @@ const CreateView = () => {
         highlightActiveLine(),
         editAssist.of(createEditAssist(true)), // ★ 初始启用，大文件时动态关闭
         EditorView.updateListener.of((update) => {
-          if (!update.docChanged || _chunkedLoading) return; // ★ 分块加载时跳过
+          if (activeLanguage.value !== "plaintext")
+            ensureParseLoop(update.view); // 只负责触发/保活 rAF 循环
+          // if (!update.docChanged || _chunkedLoading) return; // ★ 分块加载时跳过
           const docLen = update.state.doc.length;
 
           // ★ 大文件避免每次按键无条件 toString()，防抖同步到 store
           debouncedStoreSync(() => update.state.doc.toString());
-
           // 文档超过 4KB 且已识别出语言后，语言基本不再变化，跳过无谓的按键频繁重新探测
-          const needDetect = docLen < 4096 || autoDetectedLanguage.value === null;
-          if (selectedLanguage.value === "auto" && !(docLen > getHighlightThresholdBytes()) && !_skipNextLangSync && needDetect) {
+          const needDetect =
+            docLen < 4096 || autoDetectedLanguage.value === null;
+          if (
+            selectedLanguage.value === "auto" &&
+            !(docLen > getHighlightThresholdBytes()) &&
+            !_skipNextLangSync &&
+            needDetect
+          ) {
             // 直接由 debouncedSyncLanguage 从 view.state.doc 读取头部切片，不闭包持有 update 对象
             debouncedSyncLanguage();
           }
@@ -759,11 +1061,12 @@ const CreateView = () => {
 
   applyContentToEditor = async (nextValue) => {
     console.log("Code更新到文档");
+    stopParseLoop(); // ★ 新内容替换旧文档时，先停掉旧的追赶循环
     if (!view) return;
     const currentId = ++applyContentId;
     editorLoading.value = true;
     try {
-      const isLargeFile = nextValue.length > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
+      const isLargeFile = nextValue.length > getHighlightThresholdBytes();
       const needChunked = nextValue.length > CHUNKED_LOAD_THRESHOLD;
       const overHighlight = nextValue.length > getHighlightThresholdBytes();
 
@@ -787,7 +1090,10 @@ const CreateView = () => {
       clearLanguageDetectionTimer();
       activeLanguage.value = "plaintext";
       cmStore.setActiveLanguage("plaintext");
-      const unloadLangEffects = [langs.reconfigure([]), shikiSyntax.reconfigure([])];
+      const unloadLangEffects = [
+        langs.reconfigure([]),
+        shikiSyntax.reconfigure([]),
+      ];
 
       const skipHist = _skipNextHistory;
       _skipNextHistory = false; // 用完即重置
@@ -802,8 +1108,12 @@ const CreateView = () => {
           changes: { from: 0, to: view.state.doc.length, insert: nextValue },
           effects: [
             ...unloadLangEffects,
-            lineWrappingCompartment.reconfigure(createLineWrappingExt(nextValue.length)),
-            heavyDecorations.reconfigure(createHeavyDecorations(nextValue.length)),
+            lineWrappingCompartment.reconfigure(
+              createLineWrappingExt(nextValue.length),
+            ),
+            heavyDecorations.reconfigure(
+              createHeavyDecorations(nextValue.length),
+            ),
             editAssist.reconfigure(createEditAssist(editAssistEnabled)),
             historyCompartment.reconfigure(createHistoryExt(historyLimited)),
             hyperLinkCompartment.reconfigure(createHyperLinkExt(!isLargeFile)),
@@ -819,7 +1129,9 @@ const CreateView = () => {
             changes: { from: 0, to: view.state.doc.length, insert: "" },
             effects: [
               ...unloadLangEffects,
-              lineWrappingCompartment.reconfigure(createLineWrappingExt(nextValue.length)),
+              lineWrappingCompartment.reconfigure(
+                createLineWrappingExt(nextValue.length),
+              ),
               heavyDecorations.reconfigure([]),
               editAssist.reconfigure(createEditAssist(false)),
               historyCompartment.reconfigure(createHistoryExt(true)),
@@ -832,14 +1144,23 @@ const CreateView = () => {
           if (currentId !== applyContentId) return;
 
           // Phase 2: 分块插入内容
-          for (let offset = 0; offset < nextValue.length; offset += CHUNK_SIZE) {
-            const chunk = nextValue.slice(offset, Math.min(offset + CHUNK_SIZE, nextValue.length));
+          for (
+            let offset = 0;
+            offset < nextValue.length;
+            offset += CHUNK_SIZE
+          ) {
+            const chunk = nextValue.slice(
+              offset,
+              Math.min(offset + CHUNK_SIZE, nextValue.length),
+            );
             const pos = view.state.doc.length;
             const isFirstChunk = offset === 0;
             view.dispatch({
               changes: { from: pos, insert: chunk },
               // 仅第一块记录历史（整个内容算一步撤销）
-              annotations: isFirstChunk ? Transaction.addToHistory.of(!skipHist) : Transaction.addToHistory.of(false),
+              annotations: isFirstChunk
+                ? Transaction.addToHistory.of(!skipHist)
+                : Transaction.addToHistory.of(false),
             });
             // 每块之间让出主线程，防止 iOS watchdog 超时
             if (offset + CHUNK_SIZE < nextValue.length) {
@@ -857,7 +1178,9 @@ const CreateView = () => {
         cmStore.setCmCode(nextValue);
         docUpdate = false;
 
-        console.log(`分块加载完成: ${(nextValue.length / 1024).toFixed(0)}KB, ${Math.ceil(nextValue.length / CHUNK_SIZE)} 块`);
+        console.log(
+          `分块加载完成: ${(nextValue.length / 1024).toFixed(0)}KB, ${Math.ceil(nextValue.length / CHUNK_SIZE)} 块`,
+        );
       }
 
       await nextTick();
@@ -868,7 +1191,12 @@ const CreateView = () => {
 
       // ★ 3. 文档已经是新内容，此时 view.state.doc.length 正确，再应用语言
       if (lockedLang) {
-        await applyLanguage(overHighlight ? "plaintext" : lockedLang, ++languageRequestId, true, nextValue.length);
+        await applyLanguage(
+          overHighlight ? "plaintext" : lockedLang,
+          ++languageRequestId,
+          true,
+          nextValue.length,
+        );
       } else if (overHighlight) {
         syncLanguageForDocument(nextValue);
       } else if (_skipNextLangSync) {
@@ -917,11 +1245,17 @@ const CreateView = () => {
     (newVal) => {
       if (!view || newVal === lastAppliedFileName) return;
       lastAppliedFileName = newVal;
-      const locked = cmStore.manualLanguage || shouldLockLanguageFromFilename(newVal);
+      const locked =
+        cmStore.manualLanguage || shouldLockLanguageFromFilename(newVal);
       selectedLanguage.value = locked || "auto";
       autoDetectedLanguage.value = locked;
       const len = view.state.doc.length;
-      syncLanguageForDocument(len > getHighlightThresholdBytes() ? "" : view.state.doc.sliceString(0, 32 * 1024), true);
+      syncLanguageForDocument(
+        len > getHighlightThresholdBytes()
+          ? ""
+          : view.state.doc.sliceString(0, 32 * 1024),
+        true,
+      );
     },
   );
 
@@ -939,7 +1273,11 @@ const CreateView = () => {
   //    手动将已有内容推送到编辑器，确保编辑器不会空白
   if (!view) return;
   const existing = cmStore.CmCode;
-  if (existing && (existing.length !== view.state.doc.length || (existing.length < 50000 && existing !== view.state.doc.toString()))) {
+  if (
+    existing &&
+    (existing.length !== view.state.doc.length ||
+      (existing.length < 50000 && existing !== view.state.doc.toString()))
+  ) {
     lastAppliedFileName = cmStore.currentFileName;
     applyContentToEditor(existing);
   }
@@ -952,7 +1290,11 @@ watch(
     if (selectedLanguage.value === nextLanguage) return;
     selectedLanguage.value = nextLanguage;
     const docLen = view?.state.doc.length || 0;
-    syncLanguageForDocument(docLen > LARGE_FILE_PLAINTEXT_THRESHOLD ? "" : (view?.state.doc.toString() || ""));
+    syncLanguageForDocument(
+      docLen > getHighlightThresholdBytes()
+        ? ""
+        : view?.state.doc.toString() || "",
+    );
   },
 );
 
@@ -991,6 +1333,7 @@ const refreshEditorTheme = () => {
 };
 
 onBeforeUnmount(() => {
+  stopParseLoop();
   clearLanguageDetectionTimer();
   clearTimeout(syncTimer);
   clearTimeout(_storeSyncTimer);
@@ -1041,15 +1384,25 @@ const SEARCH_FAB_MARGIN = 10;
 const savedSearchFabPos = localStorage.getItem("cm_search_fab_pos");
 let initialSearchFabPos = null;
 try {
-  initialSearchFabPos = savedSearchFabPos ? JSON.parse(savedSearchFabPos) : null;
+  initialSearchFabPos = savedSearchFabPos
+    ? JSON.parse(savedSearchFabPos)
+    : null;
 } catch {}
 const searchFabPos = ref(
-  initialSearchFabPos && Number.isFinite(initialSearchFabPos.x) && Number.isFinite(initialSearchFabPos.y)
+  initialSearchFabPos &&
+    Number.isFinite(initialSearchFabPos.x) &&
+    Number.isFinite(initialSearchFabPos.y)
     ? initialSearchFabPos
-    : { x: window.innerWidth - SEARCH_FAB_SIZE - 16, y: Math.round(window.innerHeight * 0.66 - SEARCH_FAB_SIZE / 2) },
+    : {
+        x: window.innerWidth - SEARCH_FAB_SIZE - 16,
+        y: Math.round(window.innerHeight * 0.66 - SEARCH_FAB_SIZE / 2),
+      },
 );
 const searchFabDragging = ref(false);
-const searchFabStyle = computed(() => ({ left: `${searchFabPos.value.x}px`, top: `${searchFabPos.value.y}px` }));
+const searchFabStyle = computed(() => ({
+  left: `${searchFabPos.value.x}px`,
+  top: `${searchFabPos.value.y}px`,
+}));
 let searchFabDragState = null;
 
 // ★ 搜索面板拖拽
@@ -1065,7 +1418,11 @@ const searchSheetPos = ref(
 );
 const searchSheetStyle = computed(() => {
   if (!searchSheetPos.value) return {};
-  return { left: `${searchSheetPos.value.x}px`, top: `${searchSheetPos.value.y}px`, transform: "none" };
+  return {
+    left: `${searchSheetPos.value.x}px`,
+    top: `${searchSheetPos.value.y}px`,
+    transform: "none",
+  };
 });
 let searchSheetDragState = null;
 
@@ -1073,7 +1430,9 @@ const clampSearchSheetPosition = (x, y) => {
   const minX = 10;
   const minY = 10;
   // 用面板实际宽度计算右侧边界，避免拖到屏幕右边以外
-  const panelWidth = document.querySelector(".cm-search-sheet")?.offsetWidth ?? Math.min(560, window.innerWidth - 20) + 20;
+  const panelWidth =
+    document.querySelector(".cm-search-sheet")?.offsetWidth ??
+    Math.min(560, window.innerWidth - 20) + 20;
   const maxX = window.innerWidth - panelWidth - 10;
   const maxY = window.innerHeight - 60;
   return {
@@ -1098,7 +1457,10 @@ const onSearchSheetDrag = (e) => {
   if (!searchSheetDragState.dragging && Math.hypot(dx, dy) < 6) return;
   searchSheetDragState.dragging = true;
   e.preventDefault();
-  searchSheetPos.value = clampSearchSheetPosition(searchSheetDragState.originX + dx, searchSheetDragState.originY + dy);
+  searchSheetPos.value = clampSearchSheetPosition(
+    searchSheetDragState.originX + dx,
+    searchSheetDragState.originY + dy,
+  );
 };
 
 const endSearchSheetDrag = () => {
@@ -1106,7 +1468,10 @@ const endSearchSheetDrag = () => {
   document.removeEventListener("pointerup", endSearchSheetDrag);
   document.removeEventListener("pointercancel", endSearchSheetDrag);
   if (searchSheetDragState) {
-    localStorage.setItem("cm_search_sheet_pos", JSON.stringify(searchSheetPos.value));
+    localStorage.setItem(
+      "cm_search_sheet_pos",
+      JSON.stringify(searchSheetPos.value),
+    );
   }
   searchSheetDragState = null;
 };
@@ -1121,19 +1486,30 @@ const startSearchSheetDrag = (e) => {
     originY: searchSheetPos.value.y,
     dragging: false,
   };
-  document.addEventListener("pointermove", onSearchSheetDrag, { passive: false });
+  document.addEventListener("pointermove", onSearchSheetDrag, {
+    passive: false,
+  });
   document.addEventListener("pointerup", endSearchSheetDrag);
   document.addEventListener("pointercancel", endSearchSheetDrag);
 };
 
 const clampSearchFabPosition = (x, y) => ({
-  x: Math.max(SEARCH_FAB_MARGIN, Math.min(window.innerWidth - SEARCH_FAB_SIZE - SEARCH_FAB_MARGIN, x)),
-  y: Math.max(SEARCH_FAB_MARGIN, Math.min(window.innerHeight - SEARCH_FAB_SIZE - SEARCH_FAB_MARGIN, y)),
+  x: Math.max(
+    SEARCH_FAB_MARGIN,
+    Math.min(window.innerWidth - SEARCH_FAB_SIZE - SEARCH_FAB_MARGIN, x),
+  ),
+  y: Math.max(
+    SEARCH_FAB_MARGIN,
+    Math.min(window.innerHeight - SEARCH_FAB_SIZE - SEARCH_FAB_MARGIN, y),
+  ),
 });
 
 // 与折叠圆点一样始终固定在可视区域内；避免其它页面或旋转屏幕后恢复了屏幕外的旧坐标。
 const keepSearchFabInViewport = () => {
-  searchFabPos.value = clampSearchFabPosition(searchFabPos.value.x, searchFabPos.value.y);
+  searchFabPos.value = clampSearchFabPosition(
+    searchFabPos.value.x,
+    searchFabPos.value.y,
+  );
 };
 
 const onSearchFabDrag = (e) => {
@@ -1142,7 +1518,10 @@ const onSearchFabDrag = (e) => {
   const dy = e.clientY - searchFabDragState.startY;
   if (!searchFabDragging.value && Math.hypot(dx, dy) < 6) return;
   searchFabDragging.value = true;
-  searchFabPos.value = clampSearchFabPosition(searchFabDragState.originX + dx, searchFabDragState.originY + dy);
+  searchFabPos.value = clampSearchFabPosition(
+    searchFabDragState.originX + dx,
+    searchFabDragState.originY + dy,
+  );
 };
 
 const endSearchFabDrag = () => {
@@ -1150,7 +1529,10 @@ const endSearchFabDrag = () => {
   document.removeEventListener("pointerup", endSearchFabDrag);
   document.removeEventListener("pointercancel", endSearchFabDrag);
   if (searchFabDragging.value) {
-    localStorage.setItem("cm_search_fab_pos", JSON.stringify(searchFabPos.value));
+    localStorage.setItem(
+      "cm_search_fab_pos",
+      JSON.stringify(searchFabPos.value),
+    );
   } else {
     toggleSearch();
   }
@@ -1182,8 +1564,12 @@ const buildSearchQuery = () =>
     regexp: searchRegexp.value,
   });
 
-const searchIsValid = computed(() => !searchQuery.value || buildSearchQuery().valid);
-const canSearch = computed(() => Boolean(searchQuery.value && searchIsValid.value));
+const searchIsValid = computed(
+  () => !searchQuery.value || buildSearchQuery().valid,
+);
+const canSearch = computed(() =>
+  Boolean(searchQuery.value && searchIsValid.value),
+);
 
 const disarmReplaceAll = () => {
   replaceAllArmed.value = false;
@@ -1251,7 +1637,9 @@ const closeSearch = () => {
     document.activeElement.blur();
   }
   if (view) {
-    view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: "" })) });
+    view.dispatch({
+      effects: setSearchQuery.of(new SearchQuery({ search: "" })),
+    });
   }
   // ★ 关闭时清除拖拽状态
   searchSheetDragState = null;
@@ -1341,7 +1729,11 @@ const compressOpts = reactive({
 
 // 选项变化时自动保存到 localStorage
 watch(
-  () => [compressOpts.keepNames, compressOpts.keepConsole, compressOpts.charset],
+  () => [
+    compressOpts.keepNames,
+    compressOpts.keepConsole,
+    compressOpts.charset,
+  ],
   () => {
     localStorage.setItem(
       COMPRESS_OPTS_KEY,
@@ -1366,7 +1758,9 @@ const formatWorkerPending = new Map();
 
 function getFormatWorker() {
   if (!formatWorker) {
-    formatWorker = new Worker(new URL("./formatWorker.js", import.meta.url), { type: "module" });
+    formatWorker = new Worker(new URL("./formatWorker.js", import.meta.url), {
+      type: "module",
+    });
     formatWorker.addEventListener("message", (e) => {
       const { type, id, result, error } = e.data;
       const resolve = formatWorkerPending.get(id);
@@ -1402,20 +1796,20 @@ async function doCompress() {
     const result = await callFormatWorker("compress", {
       code,
       options: {
-  compress: {
-    drop_console: !compressOpts.keepConsole,
-    toplevel: !compressOpts.keepNames,
-  },
-  mangle: compressOpts.keepNames
-    ? false
-    : {
-        toplevel: true,
+        compress: {
+          drop_console: !compressOpts.keepConsole,
+          toplevel: !compressOpts.keepNames,
+        },
+        mangle: compressOpts.keepNames
+          ? false
+          : {
+              toplevel: true,
+            },
+        format: {
+          ascii_only: compressOpts.charset === "ascii",
+          comments: false,
+        },
       },
-  format: {
-    ascii_only: compressOpts.charset === "ascii",
-    comments: false,
-  },
-}
     });
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: result.code },
@@ -1524,7 +1918,7 @@ const handleSettingsChange = (e) => {
   if (!view) return;
 
   const docLen = view.state.doc.length;
-  const isLargeFile = docLen > LARGE_FILE_PLAINTEXT_THRESHOLD_1;
+  const isLargeFile = docLen > getHighlightThresholdBytes();
   const editAssistEnabled = !isLargeFile;
 
   view.dispatch({
@@ -1541,7 +1935,10 @@ const handleSettingsChange = (e) => {
     if (activeLanguage.value !== "plaintext") {
       applyLanguage("plaintext");
     }
-  } else if (docLen <= getHighlightThresholdBytes() && activeLanguage.value === "plaintext") {
+  } else if (
+    docLen <= getHighlightThresholdBytes() &&
+    activeLanguage.value === "plaintext"
+  ) {
     if (selectedLanguage.value === "auto") {
       syncLanguageForDocument(view.state.doc.toString());
     } else {
@@ -2247,7 +2644,11 @@ onBeforeUnmount(() => {
   }
 
   .cm-search-sheet.is-dark {
-    background: color-mix(in srgb, var(--editor-overlay-sheet-background, #282c34) 96%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--editor-overlay-sheet-background, #282c34) 96%,
+      transparent
+    );
     border-color: rgba(255, 255, 255, 0.14);
     color: #eceff4;
   }
@@ -2282,9 +2683,6 @@ onBeforeUnmount(() => {
   }
 }
 </style>
-
-
-
 
 <style>
 .cm-search-fab {
@@ -2492,7 +2890,11 @@ onBeforeUnmount(() => {
 }
 
 .cm-search-sheet.is-dark {
-  background: color-mix(in srgb, var(--editor-overlay-sheet-background, #282c34) 96%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--editor-overlay-sheet-background, #282c34) 96%,
+    transparent
+  );
   border-color: rgba(255, 255, 255, 0.14);
   color: #eceff4;
 }
