@@ -3560,8 +3560,8 @@ onBeforeUnmount(() => {
 .saves-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12.5px 12px;
+  gap: 6px;
+  padding: 10px 12px 11px;
   border-bottom: 0px solid rgba(128, 128, 128, 0);
   flex-wrap: wrap;
 }
@@ -3576,31 +3576,39 @@ onBeforeUnmount(() => {
 
 .saves-btn {
   font-size: 13px;
-  padding: 5px;
+  padding: 5px 8px;
   height: 29px;
   line-height: 19px;
   box-sizing: border-box;
   border-radius: 14px;
   border: 0px;
-  background: #8f98c60e;
+  background: #8f98c60b;
   color: var(--text);
   flex: 1 1 0;
   min-width: 0;
   white-space: nowrap;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .saves-btn:hover {
+    background: #8f98c61c;
+  }
 }
 
 .saves-toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 1 0 100%;
   min-width: 0;
+  margin-top: 2px;
 }
 
 .saves-toolbar-search {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 4 1 0;
   min-width: 0;
   position: relative;
@@ -3609,14 +3617,17 @@ onBeforeUnmount(() => {
 .saves-toolbar-filters {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 1 0 100%;
+  margin-top: 2px;
 }
 
 .saves-search-input {
   flex: 1;
   min-width: 0;
-  padding: 6px 76px 6px 10px;
+  height: 29px;
+  padding: 6px 76px 6px 11px;
+  box-sizing: border-box;
   border: 0;
   border-radius: 14px;
   outline: none;
@@ -3657,7 +3668,7 @@ onBeforeUnmount(() => {
 }
 
 .saves-filter-btn {
-  padding: 5px 8px;
+  padding: 4px 7px;
 }
 
 .saves-filter-btn.active {
