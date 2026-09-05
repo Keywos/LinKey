@@ -165,7 +165,7 @@ import yjurlIcon from "./img/svg/yjurl.svg";
 const router = useRouter();
 const emit = defineEmits(["edit-mode-change"]);
 const hcard = ref(getHomeCards().filter((card) => card.enabled));
-const layout = ref(localStorage.getItem("HomeCardLayout") === "icon" ? "icon" : "card");
+const layout = ref(localStorage.getItem("HomeCardLayout") === "card" ? "card" : "icon"); 
 const storedIconRadius = localStorage.getItem("HomeIconRadius");
 const storedIconSpacing = localStorage.getItem("HomeIconSpacing");
 const iconRadius = ref(storedIconRadius === null ? 18 : Number(storedIconRadius));
