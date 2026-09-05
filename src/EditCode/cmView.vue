@@ -1,6 +1,6 @@
 <template>
   <div class="cmviewRef">
-    <div class="cm-toolbar-row">
+    <div class="cm-toolbar-row cm-toolbar-row--locked-y">
       <!-- 展开态：完整工具栏 -->
       <div v-if="!collapsed" class="cm-toolbar-wrapper">
         <div class="cm-img-button">
@@ -222,7 +222,11 @@
         </div>
       </section>
     </Teleport>
-    <div ref="viewRef" style="width: 100%; font-size: 11px" />
+    <div
+      ref="viewRef"
+      class="cmview-editor-host"
+      style="width: 100%; min-width: 0; font-size: 11px; overflow: hidden"
+    />
     <div
       v-if="editorLoading"
       class="cm-content-loading"
@@ -411,6 +415,13 @@ const IS_IOS =
 const CHUNKED_LOAD_THRESHOLD = IS_IOS ? 300 * 1024 : 3 * 1024 * 1024; // iOS 300KB / 其他 3MB
 const CHUNK_SIZE = IS_IOS ? 200 * 1024 : 512 * 1024;
 
+// 文件大小完全由 editorSettings.js 中的自定义阈值控制。
+// 保留 iOS 滚动稳定性修复，但不再覆盖用户配置的高亮/换行/折叠阈值。
+const isRuntimeLargeFile = (docLen = 0) =>
+  docLen > getHighlightThresholdBytes();
+const isRuntimeLineWrapDisabled = (docLen = 0) =>
+  docLen >= getLinewrapThresholdBytes();
+
 function stopParseLoop() {
   if (parseRafId != null) cancelAnimationFrame(parseRafId);
   parseRafId = null;
@@ -432,7 +443,7 @@ function ensureParseLoop(targetView) {
 
   const docLen = targetView.state.doc.length;
   // 超大文件直接放弃强制追赶，防爆内存（CM6 本身有按需惰性解析机制）
-  if (docLen > highlightThresholdBytes) return;
+  if (isRuntimeLargeFile(docLen)) return;
 
   let lastParsedLen = -1;
   let stagnantCount = 0; // 记录连续无进展的次数
@@ -451,7 +462,7 @@ function ensureParseLoop(targetView) {
 
     const target = Math.min(
       targetView.viewport.to,
-      highlightThresholdBytes,
+      getHighlightThresholdBytes(),
     );
     const parsedLen = syntaxTree(targetView.state).length;
 
@@ -568,7 +579,7 @@ const heavyDecorations = new Compartment();
 
 const lineWrappingCompartment = new Compartment();
 const createLineWrappingExt = (docLen = 0) => {
-  return docLen < getLinewrapThresholdBytes() ? [EditorView.lineWrapping] : [];
+  return isRuntimeLineWrapDisabled(docLen) ? [] : [EditorView.lineWrapping];
 };
 
 const createHeavyDecorations = (docLen = 0) => {
@@ -576,8 +587,10 @@ const createHeavyDecorations = (docLen = 0) => {
   const threshold = getFoldIndentThresholdBytes();
   if (docLen < threshold)
     deco.push(foldGutter({ closedText: "▸", openText: "▾" }));
-  // 缩进标记默认阈值也可以跟随设定值（或折半）
-  if (docLen < Math.min(threshold, 500 * 1024)) deco.push(indentationMarkers());
+  // 折叠和缩进标记由 foldIndentThreshold 自定义阈值控制。
+  if (docLen < Math.min(threshold, 500 * 1024)) {
+    deco.push(indentationMarkers());
+  }
   return deco;
 };
 
@@ -669,11 +682,13 @@ const emit = defineEmits(["update:editorLanguage"]);
 const onLanguageChange = () => {
   const next = normalizeEditorLanguage(selectedLanguage.value, "auto");
   const docLen = view?.state.doc.length || 0;
-  const isLarge = docLen > highlightThresholdBytes;
+  const isLarge = isRuntimeLargeFile(docLen);
 
   // ★ 超过高亮阈值不允许切换复杂语言，强制纯文本以防卡死
   if (isLarge && next !== "plaintext") {
     selectedLanguage.value = "plaintext";
+    // 不能只改下拉框，必须立即卸载当前语言解析器。
+    syncLanguageForDocument(undefined, true);
     showToast("大文件仅支持纯文本模式以保证流畅");
     return;
   }
@@ -721,7 +736,7 @@ const applyLanguage = async (
   if (!view || requestId !== languageRequestId) return;
 
   // ★ 大文件（超过高亮阈值）避免加载任何解析器或 shiki 高亮导致主线程崩溃，降级为纯文本
-  if (nextLanguage !== "plaintext" && docLen > highlightThresholdBytes) {
+  if (nextLanguage !== "plaintext" && isRuntimeLargeFile(docLen)) {
     activeLanguage.value = "plaintext";
     cmStore.setActiveLanguage("plaintext");
     view.dispatch({
@@ -790,7 +805,7 @@ const syncLanguageForDocument = async (docContent, force = false) => {
       : view?.state.doc.length || 0;
 
   // ★ 超过阈值强制纯文本，不做语言检测、不高亮
-  if (docLen > highlightThresholdBytes) {
+  if (isRuntimeLargeFile(docLen)) {
     clearLanguageDetectionTimer();
     languageDetectionStatus.value = "idle";
     autoDetectedLanguage.value = null;
@@ -896,7 +911,7 @@ const debouncedSyncLanguage = (docContent) => {
     typeof docContent === "string"
       ? docContent.length
       : view?.state?.doc?.length || 0;
-  const isLarge = docLen > highlightThresholdBytes;
+  const isLarge = isRuntimeLargeFile(docLen);
 
   if (isLarge && typeof requestIdleCallback !== "undefined") {
     // ★ 大文件使用 requestIdleCallback，让浏览器在空闲时再做语言检测
@@ -966,6 +981,42 @@ let _storeSyncTimer = null;
 const STORE_SYNC_DELAY = 300; // 大文件编辑时 300ms 防抖
 let _pendingStoreContent = null;
 
+// 给 CodeMirror 一个明确的滚动视口，并先关闭 iOS 惯性滚动。
+// 这是为了避免页面滚动和编辑器滚动同时参与大面积重绘。
+const iosScrollStabilityTheme = EditorView.theme({
+  "&": {
+    // 高度由外层 cmview-editor-host 提供，编辑器本身填满宿主。
+    height: "100%",
+    minHeight: 0,
+    maxHeight: "100%",
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  },
+  ".cm-scroller": {
+    // 关键：让滚动条属于 CmView 内部，而不是 body/页面右侧。
+    flex: "1 1 0",
+    minHeight: 0,
+    height: "100%",
+    maxHeight: "100%",
+    minWidth: 0,
+    overflowY: "scroll",
+    overflowX: "auto",
+    "scrollbar-gutter": "stable",
+    "-webkit-overflow-scrolling": "auto",
+    "overscroll-behavior": "contain",
+  },
+  ".cm-scroller::-webkit-scrollbar": {
+    width: "10px",
+    height: "10px",
+  },
+  ".cm-scroller::-webkit-scrollbar-thumb": {
+    background: "rgba(128, 128, 128, 0.55)",
+    borderRadius: "5px",
+  },
+});
+
 const flushStoreSync = () => {
   if (_storeSyncTimer) {
     clearTimeout(_storeSyncTimer);
@@ -995,6 +1046,7 @@ const CreateView = () => {
   view = new EditorView({
     state: EditorState.create({
       extensions: [
+        iosScrollStabilityTheme,
         historyCompartment.of(history()),
         cmSearch(),
         keymap.of([
@@ -1032,21 +1084,24 @@ const CreateView = () => {
         lineWrappingCompartment.of(createLineWrappingExt(0)), // 换行
         lineNumbers(),
         highlightActiveLine(),
-        editAssist.of(createEditAssist(true)), // ★ 初始启用，大文件时动态关闭
+        editAssist.of(createEditAssist(true)), // 初始按用户开关配置，加载大文件后动态关闭
         EditorView.updateListener.of((update) => {
-          if (activeLanguage.value !== "plaintext")
-            ensureParseLoop(update.view); // 只负责触发/保活 rAF 循环
-          // if (!update.docChanged || _chunkedLoading) return; // ★ 分块加载时跳过
-          const docLen = update.state.doc.length;
+          // viewportChanged / selectionSet 也会触发 updateListener。
+          // 快速滚动时绝不能复制整份文档或强制追赶语法树。
+          if (activeLanguage.value !== "plaintext" && update.docChanged) {
+            ensureParseLoop(update.view);
+          }
+          if (!update.docChanged || _chunkedLoading) return;
 
-          // ★ 大文件避免每次按键无条件 toString()，防抖同步到 store
+          // 仅文档真正改变时才复制整份文档到 store；滚动不是编辑。
           debouncedStoreSync(() => update.state.doc.toString());
-          // 文档超过 4KB 且已识别出语言后，语言基本不再变化，跳过无谓的按键频繁重新探测
+          // 文档超过 4KB 且已识别出语言后，跳过无谓的重新探测。
+          const docLen = update.state.doc.length;
           const needDetect =
             docLen < 4096 || autoDetectedLanguage.value === null;
           if (
             selectedLanguage.value === "auto" &&
-            !(docLen > highlightThresholdBytes) &&
+            !isRuntimeLargeFile(docLen) &&
             !_skipNextLangSync &&
             needDetect
           ) {
@@ -1070,8 +1125,10 @@ const CreateView = () => {
     const currentId = ++applyContentId;
     editorLoading.value = true;
     try {
-      const isLargeFile = nextValue.length > highlightThresholdBytes;
-      const needChunked = nextValue.length > CHUNKED_LOAD_THRESHOLD;
+      const isLargeFile = isRuntimeLargeFile(nextValue.length);
+      const needChunked =
+        nextValue.length > CHUNKED_LOAD_THRESHOLD ||
+        (IS_IOS && isLargeFile);
 
       // ★ 1. 只决定目标语言，不在这里 applyLanguage（此时 view 里还是旧文档）
       let lockedLang = null;
@@ -1172,7 +1229,7 @@ const CreateView = () => {
             }
           }
         } finally {
-          _chunkedLoading = false;
+          if (currentId === applyContentId) _chunkedLoading = false;
         }
 
         // 分块完成，同步最终内容到 store
@@ -1188,6 +1245,8 @@ const CreateView = () => {
 
       await nextTick();
       if (currentId !== applyContentId) return; // 如果有新的 applyContentToEditor 调用，则放弃当前更新
+      // 文档高度、换行或装饰发生变化后，主动让 CodeMirror 重新测量滚动区域。
+      view?.requestMeasure?.();
 
       // 外部加载新文件时重置格式化状态
       isFormatted.value = false;
@@ -1302,7 +1361,9 @@ watch(
 onMounted(() => {
   CreateView();
   keepSearchFabInViewport();
+  requestAnimationFrame(() => view?.requestMeasure?.());
   window.addEventListener("resize", keepSearchFabInViewport);
+  window.addEventListener("resize", refreshEditorLayout);
   window.addEventListener("orientationchange", handleViewportChange);
   window.addEventListener("editor-theme-change", refreshEditorTheme);
 });
@@ -1332,6 +1393,7 @@ onBeforeUnmount(() => {
   _pendingStoreContent = null;
   clearTimeout(replaceAllArmTimer);
   window.removeEventListener("resize", keepSearchFabInViewport);
+  window.removeEventListener("resize", refreshEditorLayout);
   window.removeEventListener("orientationchange", handleViewportChange);
   window.removeEventListener("editor-theme-change", refreshEditorTheme);
   document.removeEventListener("pointermove", onSearchFabDrag);
@@ -1910,7 +1972,7 @@ const handleSettingsChange = (e) => {
   if (!view) return;
 
   const docLen = view.state.doc.length;
-  const isLargeFile = docLen > highlightThresholdBytes;
+  const isLargeFile = isRuntimeLargeFile(docLen);
   const editAssistEnabled = !isLargeFile;
 
   view.dispatch({
@@ -1921,6 +1983,7 @@ const handleSettingsChange = (e) => {
       hyperLinkCompartment.reconfigure(createHyperLinkExt(!isLargeFile)),
     ],
   });
+  requestAnimationFrame(() => view?.requestMeasure?.());
 
   // 如果当前是高亮状态但文档超过了新的高亮阈值，降级纯文本；反之若在阈值内且为 auto 则重新同步高亮
   if (isLargeFile) {
@@ -1945,966 +2008,87 @@ onBeforeUnmount(() => {
 });
 </script>
 
-<style lang="scss" scoped>
-/* ★ 压缩选项弹窗（放在媒体查询外，保证宽屏也生效） */
-.compress-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.32);
-}
-
-.compress-dialog {
-  width: 85%;
-  max-width: 340px;
-  background: var(--editor-overlay-sheet-background, rgba(250, 250, 252, 0.88));
-  border: 0.1px solid rgba(22, 22, 22, 0.007);
-  border-radius: 16px;
-  box-shadow: 0 10px 32px rgba(29, 38, 52, 0.24);
-  overflow: hidden;
-  backdrop-filter: blur(20px) saturate(120%);
-  -webkit-backdrop-filter: blur(20px) saturate(120%);
-}
-
-.compress-title {
-  padding: 18px 20px 10px;
-  font-size: 17px;
-  font-weight: 600;
-  color: #222;
-}
-
-.compress-body {
-  padding: 4px 20px 14px;
-}
-
-.compress-group {
-  margin-bottom: 12px;
-}
-
-.compress-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #66666680;
-  margin-bottom: 6px;
-}
-
-.compress-radio {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 0;
-  font-size: 14px;
-  color: #3333337a;
-  cursor: pointer;
-}
-
-.compress-radio input[type="radio"],
-.compress-radio input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: #4a90d9;
-  cursor: pointer;
-}
-
-.compress-radio span {
-  user-select: none;
-}
-
-.compress-buttons {
-  display: flex;
-  border-top: 0.1px solid rgba(128, 128, 128, 0.05);
-}
-
-.compress-btn {
-  flex: 1;
-  height: 44px;
-  border: none;
-  background: transparent;
-  font-size: 15px;
-  color: #33333362;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.compress-btn:hover {
-  background: #f5f5f5;
-}
-
-.compress-btn:active {
-  background: #eee;
-}
-
-.compress-btn.cancel {
-  color: #999;
-}
-
-.compress-btn.primary {
-  color: #4a90d9;
-  font-weight: 600;
-}
-
-@media (prefers-color-scheme: dark) {
-  .compress-overlay {
-    background: rgba(0, 0, 0, 0.46);
-  }
-  .compress-dialog {
-    background: var(--editor-overlay-sheet-background, rgba(40, 44, 52, 0.7));
-    border-color: rgba(255, 255, 255, 0.14);
-    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.46);
-  }
-  .compress-title {
-    color: #e0e0e0;
-  }
-  .compress-label {
-    color: #999;
-  }
-  .compress-radio {
-    color: #ccc;
-  }
-  .compress-buttons {
-    border-top-color: rgba(255, 255, 255, 0.05);
-  }
-  .compress-btn {
-    color: #ccc;
-  }
-  .compress-btn:hover {
-    background: #3a3a3a5f;
-  }
-  .compress-btn:active {
-    background: #444;
-  }
-  .compress-btn.cancel {
-    color: #888888d7;
-  }
-  .compress-btn.primary {
-    color: #6a9ed8;
-  }
-  .compress-radio input[type="radio"],
-  .compress-radio input[type="checkbox"] {
-    accent-color: #6a9ed8;
-  }
-}
-
-.editor-background-select-wrap {
-  display: flex;
-  align-items: center;
-  flex: 0 0 48px;
-  // width: 40px;
-  min-height: 30px;
-  touch-action: manipulation;
-}
-
-.editor-background-select {
-  width: 48px;
-  height: 30px;
-  border: 0;
-  border-radius: 10px;
-  outline: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 11px;
-  text-align: right;
-  text-align-last: right;
-  padding-right: 2px;
-  appearance: none;
-  -webkit-appearance: none;
-  opacity: 0.7;
-  padding-right: 6px;
-  touch-action: manipulation;
-  cursor: pointer;
-}
-
-.editor-background-select option {
-  color: #222;
-  // background-color: #fff;
-}
-
-.cm-img-button button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 31px;
-  height: 30px;
-  justify-content: center;
-  align-items: center;
-}
-
-.cm-toolbar-row {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-width: 0;
-  height: 40px;
-  margin: 0 0 8px;
-}
-
-.cm-content-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  min-height: 120px;
-  color: var(--text);
-  font-size: 13px;
-  opacity: 0.7;
-}
-
-.cm-content-loading-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: cm-content-loading-spin 0.8s linear infinite;
-}
-
-@keyframes cm-content-loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.cm-toolbar-wrapper {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  height: 40px;
-}
-
-.cm-img-button {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-width: 0;
-  overflow-x: auto;
-  padding: 5px 7px;
-  box-sizing: border-box;
-  scrollbar-width: none;
-}
-
-.cm-img-button::-webkit-scrollbar {
-  display: none;
-}
-
-.cm-img-button > div:first-child {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  min-width: max-content;
-}
-
-.cm-collapse-btn {
-  display: grid;
-  place-items: center;
-  flex: 0 0 31px;
-  width: 31px;
-  height: 34px;
-  margin-right: 10px;
-  margin-left: auto;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  border-radius: 10px;
-  transition: background 0.2s;
-  opacity: 0.7;
-}
-.cm-collapse-btn:hover {
-  background: rgba(128, 128, 128, 0.1);
-}
-
-/* ★ 折叠按钮图标（放在媒体查询外，保证宽屏也显示） */
-.cm-toolbar-more {
-  display: block;
-  color: currentColor;
-  line-height: 1;
-  pointer-events: none;
-  transition:
-    background 0.2s,
-    transform 0.2s;
-}
-.cm-toolbar-more:active {
-  transform: scale(0.8);
-}
-.cm-toolbar-more svg {
-  display: block;
-  width: 18px;
-  height: 18px;
-  fill: currentColor;
-}
-
-@media (max-width: 480px), (orientation: landscape) and (max-height: 600px) {
-  .cm-img-button .language-detect-button {
-    flex-basis: 22px;
-    width: 22px;
-    height: 22px;
-    margin-right: 3px;
-  }
-
-  .cm-toolbar-wrapper {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    flex: 1;
-    height: 40px;
-    min-width: 0;
-    margin: 0;
-    box-sizing: border-box;
-    color: var(--text);
-  }
-
-  .cm-collapse-btn {
-    position: relative;
-    z-index: 2;
-    display: grid;
-    place-items: center;
-    align-self: stretch;
-    margin-right: 10px;
-    margin-left: auto;
-    width: 31px;
-    height: 34px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    border-radius: 50%;
-    opacity: 0.7;
-    transition:
-      background 0.2s,
-      transform 0.2s;
-  }
-
-  .cm-collapse-btn:hover {
-    background: rgba(128, 128, 128, 0.1);
-  }
-
-  .cm-collapse-btn:active {
-    transform: scale(0.8);
-  }
-
-  .cm-toolbar-row {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    height: 40px;
-    margin: 0 0 8px;
-  }
-
-  .cm-img-button {
-    width: 100%;
-    height: 40px;
-    min-width: 0;
-    overflow-x: auto;
-    display: flex;
-    align-items: center;
-    padding: 5px 7px;
-    box-sizing: border-box;
-    scrollbar-width: none;
-  }
-
-  .cm-img-button::-webkit-scrollbar {
-    display: none;
-  }
-
-  .cm-img-button > div:first-child {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 3px;
-    min-width: 100%;
-  }
-
-  .cm-img-button button {
-    border-radius: 10px;
-  }
-
-  .cm-img-button button:hover {
-    background: rgba(128, 128, 128, 0.1);
-  }
-
-  @media (max-width: 480px) {
-    .cm-toolbar-wrapper {
-      margin-bottom: 6px;
-      border-radius: 12px;
-    }
-
-    .cm-img-button {
-      padding: 4px 5px;
-    }
-  }
-
-  :global(.cm-search-fab) {
-    position: fixed;
-    z-index: 1090;
-    display: grid;
-    place-items: center;
-    width: 48px;
-    height: 48px;
-    padding: 0;
-    border: 0px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.96);
-    color: #313842;
-    box-shadow: 0 5px 18px rgba(29, 38, 52, 0.16);
-    touch-action: none;
-    // border: 1px solid rgba(128, 128, 128, 0.1);
-    -webkit-tap-highlight-color: transparent;
-    cursor: grab;
-    isolation: isolate;
-    backdrop-filter: blur(6px) saturate(60%);
-    -webkit-backdrop-filter: blur(6px) saturate(60%);
-  }
-
-  :global(.cm-search-fab svg) {
-    width: 22px;
-    height: 22px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2;
-    stroke-linecap: round;
-    opacity: 0.6;
-  }
-
-  :global(.cm-search-fab:active:not(.dragging)) {
-    transform: scale(0.94);
-  }
-
-  :global(.cm-search-fab.dragging) {
-    cursor: grabbing;
-    box-shadow: 0 6px 8px rgba(29, 38, 52, 0.24);
-  }
-
-  .cm-search-sheet {
-    position: fixed;
-    top: calc(10px + env(safe-area-inset-top, 0px));
-    left: 50%;
-    z-index: 99990;
-    width: min(560px, calc(100vw - 20px));
-    padding: 12px;
-    box-sizing: border-box;
-    border-radius: 20px;
-    background: rgba(250, 250, 252, 0.96);
-    color: #25262a;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-    transform: translateX(-50%);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    user-select: none;
-    -webkit-user-select: none;
-    touch-action: none;
-    cursor: grab;
-  }
-
-  .cm-search-sheet:active {
-    cursor: grabbing;
-  }
-
-  .cm-search-field-row,
-  .cm-search-input-wrap,
-  .cm-replace-row,
-  .cm-replace-actions {
-    display: flex;
-    align-items: center;
-  }
-
-  .cm-search-nav {
-    display: grid;
-    place-items: center;
-    flex: 0 0 33px;
-    width: 33px;
-    height: 33px;
-    padding: 0;
-    border: 0;
-    border-radius: 12px;
-    background: rgba(128, 128, 128, 0.09);
-    color: inherit;
-    font-size: 14px;
-    font-weight: 900;
-    opacity: 0.7;
-    line-height: 1;
-    touch-action: manipulation;
-  }
-
-  .cm-search-nav:active,
-  .cm-replace-toggle:active {
-    background: rgba(55, 127, 209, 0.18);
-    opacity: 1;
-    transform: scale(0.96);
-  }
-
-  .cm-search-field-row {
-    gap: 6px;
-  }
-
-  .cm-search-input {
-    min-width: 0;
-    width: 100%;
-    height: 33px;
-    padding: 0 calc(var(--cm-search-options-width) + 13px) 0 13px;
-    box-sizing: border-box;
-    border: 0px;
-    border-radius: 12px;
-    background: rgba(128, 128, 128, 0.07);
-    color: inherit;
-    font-size: 13px;
-    outline: none;
-    user-select: text;
-    -webkit-user-select: text;
-  }
-
-  .cm-search-input:focus {
-    border-color: #6d9ddc44;
-    // box-shadow: 0 0 0 1px rgba(109, 158, 220, 0.14);
-  }
-
-  .cm-search-input.invalid {
-    border-color: #d84c4c;
-  }
-
-  .cm-search-options {
-    --cm-search-options-width: 110px;
-    position: absolute;
-    top: 50%;
-    right: 0px;
-    display: flex;
-    width: var(--cm-search-options-width);
-    gap: 2px;
-    // padding: 2px;
-    box-sizing: border-box;
-    // border-radius: 10px;
-    // background: rgba(128, 128, 128, 0.09);
-    transform: translateY(-50%);
-  }
-
-  .cm-search-input-wrap {
-    // --cm-search-options-width: 145px;
-    position: relative;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .cm-search-options button {
-    box-sizing: border-box;
-    // flex: 0 0 auto;
-    width: 25px;
-    height: 30px;
-    // padding: 0 5px;
-    border: 0;
-    border-radius: 10px;
-    background: transparent;
-    color: inherit;
-    font-size: 10px;
-    font-weight: 650;
-    opacity: 0.58;
-    touch-action: manipulation;
-  }
-
-  .cm-search-options button.active {
-    background: #fff;
-    color: #377fd1;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.11);
-    opacity: 1;
-  }
-
-  .cm-replace-toggle {
-    width: 30px;
-    height: 30px;
-    padding: 0 5px;
-    opacity: 0.7;
-    border: 0;
-    border-radius: 12px;
-    background: rgba(128, 128, 128, 0.09);
-    color: inherit;
-    font-size: 12px;
-    font-weight: 650;
-    line-height: 1;
-    touch-action: manipulation;
-    transition:
-      background 0.12s ease,
-      color 0.12s ease,
-      transform 0.12s ease;
-  }
-
-  .cm-replace-toggle.active {
-    color: #377fd1;
-    background: rgba(55, 127, 209, 0.12);
-  }
-
-  .cm-replace-area {
-    margin-top: 9px;
-    padding-top: 9px;
-    border-top: 1px solid rgba(128, 128, 128, 0.05);
-  }
-
-  .cm-replace-row {
-    gap: 7px;
-  }
-
-  .cm-replace-actions {
-    justify-content: flex-end;
-    gap: 8px;
-    flex: 0 0 auto;
-  }
-
-  .cm-replace-actions button {
-    min-width: 50px;
-    height: 33px;
-    padding: 0 9px;
-    border: 0;
-    border-radius: 13px;
-    background: rgba(128, 128, 128, 0.1);
-    color: inherit;
-    font-size: 13px;
-    touch-action: manipulation;
-  }
-
-  .cm-replace-actions button:disabled {
-    opacity: 0.6;
-  }
-
-  .cm-replace-actions button:not(:disabled):active {
-    background: rgba(55, 127, 209, 0.18);
-    transform: scale(0.96);
-  }
-
-  .cm-replace-actions .cm-replace-all {
-    color: #c44343;
-  }
-
-  .cm-replace-actions .cm-replace-all.armed {
-    background: #d84c4c;
-    color: #fff;
-    font-weight: 600;
-  }
-
-  @media (max-width: 390px) {
-    .cm-search-sheet {
-      width: calc(100vw - 12px);
-      padding: 10px;
-      border-radius: 17px;
-    }
-
-    .cm-search-field-row {
-      gap: 4px;
-    }
-
-    .cm-search-options {
-      --cm-search-options-width: 123px;
-      right: 1px;
-      width: var(--cm-search-options-width);
-      gap: 0;
-      padding: 1px;
-    }
-
-    .cm-search-options button {
-      min-width: 26px;
-      padding: 0 3px;
-      font-size: 12px;
-    }
-
-    .cm-search-nav,
-    .cm-replace-toggle {
-      flex-basis: 29px;
-      width: 29px;
-    }
-
-    .cm-replace-row {
-      gap: 5px;
-    }
-
-    .cm-replace-actions {
-      gap: 5px;
-    }
-
-    .cm-replace-actions button {
-      min-width: 68px;
-      padding: 0 6px;
-      font-size: 12px;
-    }
-  }
-
-  :deep(.cm-editor .cm-search) {
-    display: none !important;
-  }
-
-  .cm-search-sheet.is-dark {
-    background: color-mix(
-      in srgb,
-      var(--editor-overlay-sheet-background, #282c34) 96%,
-      transparent
-    );
-    border-color: rgba(255, 255, 255, 0.14);
-    color: #eceff4;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .cm-collapse-btn,
-    .cm-toolbar-more {
-      color: var(--text, inherit);
-    }
-    :global(.cm-search-fab) {
-      background: var(--editor-overlay-sheet-background, #282c3420);
-      // border-color: rgba(255, 255, 255, 0.15);
-      color: var(--text, inherit);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.463);
-    }
-
-    .cm-search-sheet .cm-search-input {
-      background: rgba(255, 255, 255, 0.03);
-    }
-    .cm-search-sheet .cm-search-input:focus {
-      background: rgba(143, 180, 232, 0.08);
-    }
-    .cm-search-options button.active {
-      background: rgba(106, 158, 216, 0.22);
-      color: #88bcf5;
-      box-shadow: none;
-    }
-
-    .cm-search-sheet {
-      box-shadow: 0 6px 26px rgba(0, 0, 0, 0.7);
-    }
-  }
-}
-</style>
-
-<style>
-.cm-search-fab {
-  position: fixed;
-  z-index: 1090;
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.96);
-  color: #313842;
-  box-shadow: 0 5px 18px rgba(29, 38, 52, 0.16);
-  touch-action: none;
-  -webkit-tap-highlight-color: transparent;
-  cursor: grab;
-  isolation: isolate;
-  backdrop-filter: blur(6px) saturate(60%);
-  -webkit-backdrop-filter: blur(6px) saturate(60%);
-}
-
-.cm-search-fab svg {
-  width: 22px;
-  height: 22px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  opacity: 0.6;
-}
-
-.cm-search-fab:active:not(.dragging) {
-  transform: scale(0.94);
-}
-
-.cm-search-fab.dragging {
-  cursor: grabbing;
-  box-shadow: 0 6px 8px rgba(29, 38, 52, 0.24);
-}
-
-.cm-search-sheet {
-  position: fixed;
-  top: calc(10px + env(safe-area-inset-top, 0px));
-  left: 50%;
-  z-index: 99990;
-  width: min(560px, calc(100vw - 20px));
-  padding: 12px;
-  box-sizing: border-box;
-  border-radius: 20px;
-  background: rgba(250, 250, 252, 0.96);
-  color: #25262a;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-  transform: translateX(-50%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: none;
-  cursor: grab;
-}
-
-.cm-search-sheet:active {
-  cursor: grabbing;
-}
-
-.cm-search-field-row,
-.cm-search-input-wrap,
-.cm-replace-row,
-.cm-replace-actions {
-  display: flex;
-  align-items: center;
-}
-
-.cm-search-field-row {
-  gap: 6px;
-}
-
-.cm-search-input-wrap {
-  --cm-search-options-width: 112px;
+<style scoped>
+/* 展开态工具栏不参与页面的上下拖动；按钮和 select 仍可正常点击。 */
+.cmviewRef > .cm-toolbar-row--locked-y {
   position: relative;
-  flex: 1;
-  min-width: 0;
-}
-
-.cm-search-input {
-  min-width: 0;
+  top: auto;
+  left: auto;
+  right: auto;
+  z-index: 50;
+  flex: 0 0 40px;
   width: 100%;
-  height: 33px;
-  padding: 0 calc(var(--cm-search-options-width) + 8px) 0 13px;
+  min-width: 0;
   box-sizing: border-box;
-  border: 0;
-  border-radius: 12px;
-  background: rgba(128, 128, 128, 0.07);
-  color: inherit;
-  font-size: 13px;
-  outline: none;
-  user-select: text;
-  -webkit-user-select: text;
+  overflow-y: hidden !important;
+  overscroll-behavior-y: none;
+  touch-action: pan-x;
 }
 
-.cm-search-input::-webkit-search-cancel-button {
-  margin-right: 0px;
-  opacity: 0.5;
+.cmviewRef > .cm-toolbar-row--locked-y .cm-toolbar-wrapper {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: calc(100% - 41px);
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  overflow-y: hidden !important;
+  overscroll-behavior-y: none;
 }
 
-.cm-search-options {
-  /* --cm-search-options-width: 110px; */
-  position: absolute;
-  top: 50%;
-  right: 0;
+/* CmView 自己占满视口，页面 body 不再承担编辑器滚动。 */
+.cmviewRef {
+  width: 100%;
+  max-width: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  min-width: 0;
   display: flex;
-  width: var(--cm-search-options-width);
-  gap: 2px;
+  flex-direction: column;
   box-sizing: border-box;
-  transform: translateY(-50%);
+  overflow: hidden;
+  position: relative;
 }
 
-.cm-search-options button,
-.cm-search-nav,
-.cm-replace-toggle,
-.cm-replace-actions button {
-  border: 0;
-  color: inherit;
-  touch-action: manipulation;
+.cmviewRef > .cmview-editor-host {
+  flex: 1 1 0;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: hidden !important;
 }
 
-.cm-search-options button {
-  width: 25px;
-  height: 30px;
-  border-radius: 10px;
-  background: transparent;
-  font-size: 10px;
-  font-weight: 650;
-  opacity: 0.58;
+.cmviewRef > .cm-toolbar-row--locked-y .cm-toolbar-wrapper,
+.cmviewRef > .cm-toolbar-row--locked-y .cm-img-button {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  box-sizing: border-box;
+  overflow-y: hidden !important;
 }
 
-.cm-search-options button.active {
-  background: #fff;
-  color: #377fd1;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.11);
-  opacity: 1;
+.cmviewRef :deep(.cm-editor) {
+  min-height: 0 !important;
+  height: 1000px !important;
+  /* 100% !important; */
+  max-height: 1000px !important;
 }
 
-.cm-search-nav {
-  display: grid;
-  place-items: center;
-  flex: 0 0 33px;
-  width: 33px;
-  height: 33px;
-  padding: 0;
-  border-radius: 12px;
-  background: rgba(128, 128, 128, 0.09);
-  font-size: 14px;
-  font-weight: 900;
-  opacity: 0.7;
-  line-height: 1;
+.cmviewRef :deep(.cm-scroller) {
+  min-height: 0 !important;
+  height:1000px !important;
+  max-height: 1000px !important;
+}
+.cmviewRef {
+  height: 130dvh;
+  min-height: 130dvh;
 }
 
-.cm-replace-toggle {
-  width: 30px;
-  height: 30px;
-  padding: 0 5px;
-  border-radius: 12px;
-  background: rgba(128, 128, 128, 0.09);
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 1;
-  opacity: 0.7;
-}
-
-.cm-replace-toggle.active {
-  color: #377fd1;
-  background: rgba(55, 127, 209, 0.12);
-}
-
-.cm-replace-area {
-  margin-top: 9px;
-  padding-top: 9px;
-  border-top: 1px solid rgba(128, 128, 128, 0.05);
-}
-
-.cm-replace-row {
-  gap: 7px;
-}
-
-.cm-replace-actions {
-  justify-content: flex-end;
-  gap: 8px;
-  flex: 0 0 auto;
-}
-
-.cm-replace-actions button {
-  min-width: 50px;
-  height: 33px;
-  padding: 0 9px;
-  border-radius: 13px;
-  background: rgba(128, 128, 128, 0.1);
-  font-size: 13px;
-}
-
-.cm-replace-actions .cm-replace-all {
-  color: #c44343;
-}
-
-.cm-search-sheet.is-dark {
-  background: color-mix(
-    in srgb,
-    var(--editor-overlay-sheet-background, #282c34) 96%,
-    transparent
-  );
-  border-color: rgba(255, 255, 255, 0.14);
-  color: #eceff4;
-}
-
-@media (prefers-color-scheme: dark) {
-  .cm-search-sheet .cm-search-input {
-    background: rgba(255, 255, 255, 0.03);
-  }
-
-  .cm-search-options button.active {
-    background: rgba(106, 158, 216, 0.22);
-    color: #88bcf5;
-    box-shadow: none;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  .cm-search-fab {
-    background: var(--editor-overlay-sheet-background, #282c3420);
-    color: var(--text, inherit);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.463);
-  }
-}
 </style>
