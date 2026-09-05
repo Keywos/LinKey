@@ -3554,7 +3554,7 @@ onBeforeUnmount(() => {
   max-width: none !important;
   min-width: 0;
   margin-left: var(--saves-width, 400px);
-  margin-right: 2%;
+  margin-right: 0;
   box-sizing: border-box;
 }
   /* 宽度拖拽手柄 + 1px 半透明分隔线 */
