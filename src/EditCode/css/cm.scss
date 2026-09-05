@@ -75,23 +75,36 @@
 .cm-img-button button {
   height: 16px;
   background-repeat: no-repeat;
-  // background-color: #00000000;
+  background-color: transparent !important;
   // border: #00000000;
   border: none;
-  background: none;
+  background: none !important;
   padding: 0;
   margin: 0;
   width: 33px;
   transition: transform 0.2s;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.cm-img-button button:hover {
-  transform: scale(0.9);
+@media (hover: hover) and (pointer: fine) {
+  .cm-img-button button:hover {
+    transform: scale(0.9);
+  }
 }
 
 .cm-img-button button:active {
-  transform: scale(0.9);
-  filter: invert(0.5);
+  animation: cm-toolbar-button-press 180ms ease-out;
+}
+
+@keyframes cm-toolbar-button-press {
+  0% {
+    transform: scale(0.9);
+    filter: invert(0.5);
+  }
+  100% {
+    transform: scale(1);
+    filter: none;
+  }
 }
 
 .cm-button {

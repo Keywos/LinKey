@@ -1,8 +1,35 @@
 <template>
-  <h2 class="edit-code-editor" :class="{ 'saves-open': showSaves }" style="-webkit-user-select: none; user-select: none; display: flex; justify-content: left; width: 90%; margin-top: -10px">
-    <span class="edit-code-editor-title" style="opacity: 0.6" @click="goFunction()">Code Hub</span>
-    <div style="display: flex; align-items: center; gap: 10px; color: var(--text)">
-      <span @click="toggleSaves" style="font-size: 16px; padding: 6px 10px; cursor: pointer; color: var(--text); line-height: 1; opacity: 0.4">{{ showSaves ? "▴" : "▾" }}</span>
+  <h2
+    class="edit-code-editor"
+    :class="{ 'saves-open': showSaves }"
+    style="
+      -webkit-user-select: none;
+      user-select: none;
+      display: flex;
+      justify-content: left;
+      width: 90%;
+      margin-top: -10px;
+    "
+  >
+    <span
+      class="edit-code-editor-title"
+      style="opacity: 0.6"
+      @click="goFunction()"
+      >Code Hub</span
+    >
+    <span class="edit-code-editor-toggle" @click.stop="toggleSaves">{{
+      showSaves ? "▴" : "▾"
+    }}</span>
+    <div class="edit-code-editor-actions">
+      <button
+        class="edit-code-editor-add"
+        type="button"
+        title="新建"
+        aria-label="新建"
+        @click.stop="createNewBlank"
+      >
+        +
+      </button>
     </div>
   </h2>
 
@@ -10,8 +37,13 @@
   <div v-if="showSaves" class="saves-panel">
     <div class="saves-body" :style="{ height: savesPanelHeight + 'px' }">
       <div class="saves-toolbar">
-        <button class="saves-btn" @click="toggleToolbar">{{ toolbarExpanded ? "折叠" : "展开" }}</button>
-        <button class="saves-btn" @click="createNewBlank">新建</button>
+        <button class="saves-btn" @click="toggleToolbar">
+          {{ toolbarExpanded ? "折叠" : "展开" }}
+        </button>
+        <!-- <button class="saves-btn" @click="createNewBlank">新建</button> -->
+        <button class="saves-btn" @click="toggleTimeSort">
+          {{ timeSortDescending ? "顺序" : "倒序" }}
+        </button>
         <button class="saves-btn" @click="requestUrlContent">URL</button>
         <button class="saves-btn" @click="triggerImport">导入</button>
         <button class="saves-btn" @click="exportCurrent">导出</button>
@@ -20,57 +52,141 @@
           <template v-if="selectMode">
             <button class="saves-btn" @click="toggleSelectMode">完成</button>
             <label class="saves-check-all">
-              <input type="checkbox" :checked="allChecked" @change="toggleCheckAll" />
+              <input
+                type="checkbox"
+                :checked="allChecked"
+                @change="toggleCheckAll"
+              />
               全选
             </label>
-            <button class="saves-btn" :disabled="checkedIds.size === 0" @click="deleteSelected">删除({{ checkedIds.size }})</button>
-            <button class="saves-btn" :disabled="checkedIds.size === 0" @click="exportSelected">导出选中({{ checkedIds.size }})</button>
+            <button
+              class="saves-btn"
+              :disabled="checkedIds.size === 0"
+              @click="deleteSelected"
+            >
+              删除({{ checkedIds.size }})
+            </button>
+            <button
+              class="saves-btn"
+              :disabled="checkedIds.size === 0"
+              @click="exportSelected"
+            >
+              导出选中({{ checkedIds.size }})
+            </button>
           </template>
 
           <template v-else>
             <button class="saves-btn" @click="toggleSelectMode">选择</button>
-            <button class="saves-btn" :disabled="syncingAllGists" @click="downloadAllGists">
-              {{ syncingAllGists ? "拉取中…" : "拉取全部 Gist" }}
+            <button
+              class="saves-btn"
+              :disabled="syncingAllGists"
+              @click="downloadAllGists"
+            >
+              {{ syncingAllGists ? "获取中…" : "GIST" }}
             </button>
-            <button class="saves-btn" @click="toggleTimeSort">{{ timeSortDescending ? "时间倒序" : "时间顺序" }}</button>
+            <div v-if="toolbarExpanded" class="saves-toolbar-search">
+              <input
+                v-model="saveSearchQuery"
+                class="saves-search-input"
+                type="search"
+                placeholder=" 搜索"
+                @input="searchSavedContent"
+              />
+              <span v-if="searchingSavedContent" class="saves-search-status"
+                >搜索中…</span
+              >
+            </div>
           </template>
         </div>
 
-        <div v-if="toolbarExpanded" class="saves-toolbar-search">
-          <input v-model="saveSearchQuery" class="saves-search-input" type="search" placeholder="搜索名称、标签或内容" @input="searchSavedContent" />
-          <span v-if="searchingSavedContent" class="saves-search-status">搜索中…</span>
-        </div>
-
         <div v-if="toolbarExpanded" class="saves-toolbar-filters">
-          <span class="saves-filter-label">筛选：</span>
-          <button class="saves-filter-btn" :class="{ active: selectedTags.length === 0 }" @click="selectedTags = []">全部</button>
-          <button v-for="tag in availableTags" :key="tag" class="saves-filter-btn" :class="{ active: selectedTags.includes(tag) }" @click="toggleTagFilter(tag)">
+          <span class="saves-filter-label">&nbsp; 筛选：</span>
+          <button
+            class="saves-filter-btn"
+            :class="{ active: selectedTags.length === 0 }"
+            @click="selectedTags = []"
+          >
+            全部
+          </button>
+          <button
+            v-for="tag in availableTags"
+            :key="tag"
+            class="saves-filter-btn"
+            :class="{ active: selectedTags.includes(tag) }"
+            @click="toggleTagFilter(tag)"
+          >
             {{ tag }}
           </button>
         </div>
 
-        <input ref="importInputRef" type="file" style="display: none" @change="onImportFileChange" />
-        <input ref="backupRestoreInputRef" type="file" accept=".zip,application/zip" style="display: none" @change="onBackupRestoreFileChange" />
+        <input
+          ref="importInputRef"
+          type="file"
+          style="display: none"
+          @change="onImportFileChange"
+        />
+        <input
+          ref="backupRestoreInputRef"
+          type="file"
+          accept=".zip,application/zip"
+          style="display: none"
+          @change="onBackupRestoreFileChange"
+        />
       </div>
       <div ref="savesListRef" class="saves-list">
         <Transition name="saves-empty">
-          <div v-if="!isLoadingSaves && savedItems.length === 0" class="saves-empty">暂无保存的内容</div>
+          <div
+            v-if="!isLoadingSaves && savedItems.length === 0"
+            class="saves-empty"
+          >
+            暂无保存的内容
+          </div>
         </Transition>
         <template v-for="item in primarySavedItems" :key="item.id">
           <Transition name="saves-item" appear>
-            <div @click.stop="toggleItemActions(item)" class="saves-item" :class="{ 'saves-item-current': item.id === currentItemId }">
-              <input v-if="selectMode" type="checkbox" :value="item.id" v-model="checkedIds" @click.stop />
+            <div
+              :data-save-id="item.id"
+              @click.stop="toggleItemActions(item)"
+              class="saves-item"
+              :class="{ 'saves-item-current': item.id === currentItemId }"
+            >
+              <input
+                v-if="selectMode"
+                type="checkbox"
+                :value="item.id"
+                v-model="checkedIds"
+                @click.stop
+              />
 
               <div class="saves-item-info">
                 <span class="saves-item-name">
                   {{ item.name }}
-                  <span v-if="getItemChildrenCount(item) > 0" class="saves-item-child-count">{{ getItemChildrenCount(item) + 1 + " 项" }}</span>
-                  <span v-if="item.gist" class="saves-item-source" :title="gistPath(item)">{{ gistPath(item) }}</span>
-                  <span v-if="item.tags?.length" class="saves-item-tags">{{ item.tags.join(" · ") }}</span>
+                  <span
+                    v-if="getItemChildrenCount(item) > 0"
+                    class="saves-item-child-count"
+                    >{{ getItemChildrenCount(item) + 1 + " 项" }}</span
+                  >
+                  <span
+                    v-if="item.gist"
+                    class="saves-item-source"
+                    :title="gistPath(item)"
+                    >{{ gistPath(item) }}</span
+                  >
+                  <span v-if="item.tags?.length" class="saves-item-tags">
+                    <span
+                      v-for="tag in item.tags"
+                      :key="tag"
+                      class="saves-item-tag"
+                      :class="`saves-item-tag-${tag.toLowerCase()}`"
+                      >{{ tag }}</span
+                    >
+                  </span>
                 </span>
 
                 <div class="saves-item-preview">
-                  <span class="saves-item-content-preview">{{ item.preview || "" }}</span>
+                  <span class="saves-item-content-preview">{{
+                    item.preview || ""
+                  }}</span>
                 </div>
 
                 <span class="saves-item-meta">
@@ -81,35 +197,90 @@
               </div>
 
               <Transition :name="actionPanelsReady ? 'saves-actions' : ''">
-                <div v-if="isItemActionsExpanded(item)" class="saves-item-sync-actions">
+                <div
+                  v-if="isItemActionsExpanded(item)"
+                  class="saves-item-sync-actions"
+                >
                   <div class="saves-item-sync-actions-content">
                     <div class="saves-item-action-group">
-                      <button class="saves-sync-btn" @click.stop="toggleItemExpansion(item)">
-                        {{ isItemExpanded(item) ? "收起" : getItemChildrenCount(item) > 0 ? `展开 (${getItemChildrenCount(item)})` : "展开" }}
+                      <button
+                        class="saves-sync-btn"
+                        @click.stop="toggleItemExpansion(item)"
+                      >
+                        {{
+                          isItemExpanded(item)
+                            ? "收起"
+                            : getItemChildrenCount(item) > 0
+                              ? `展开 (${getItemChildrenCount(item)})`
+                              : "展开"
+                        }}
                       </button>
                       <button
                         class="saves-sync-btn"
-                        :class="{ 'is-syncing': syncingItemId === item.id && syncingAction === 'upload' }"
-                        :disabled="syncingItemId === item.id && syncingAction === 'upload'"
+                        :class="{
+                          'is-syncing':
+                            syncingItemId === item.id &&
+                            syncingAction === 'upload',
+                        }"
+                        :disabled="
+                          syncingItemId === item.id &&
+                          syncingAction === 'upload'
+                        "
                         title="上传到 Gist"
                         @click.stop="confirmUploadToGist(item)"
                       >
                         上传
                       </button>
-                      <button class="saves-sync-btn" @click.stop="deleteSingleItem(item)">删除</button>
-                      <button class="saves-sync-btn" @click.stop="editItemTags(item)">+ 标签</button>
-                    </div>
-                    <div class="saves-item-action-group saves-item-action-group-right">
-                      <button v-if="item.url" class="saves-sync-btn" @click.stop="copyUrl(item, 'raw')">
-                        {{ item.blobUrl ? "Raw" : "Url" }}
+                      <button
+                        class="saves-sync-btn"
+                        @click.stop="deleteSingleItem(item)"
+                      >
+                        删除
                       </button>
-                      <button v-if="item.blobUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'blob')">Blob</button>
-                      <button v-if="item.gist?.rawUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'gist')">Gist</button>
-                      <button v-if="item.gist?.htmlUrl" class="saves-sync-btn" @click.stop="copyUrl(item, 'html')">Html</button>
+                      <button
+                        class="saves-sync-btn"
+                        @click.stop="editItemTags(item)"
+                      >
+                        + 标签
+                      </button>
+                    </div>
+                    <div
+                      class="saves-item-action-group saves-item-action-group-right"
+                    >
                       <button
                         v-if="item.url"
                         class="saves-sync-btn"
-                        :class="{ 'is-syncing': refreshingUrlItemId === item.id }"
+                        @click.stop="copyUrl(item, 'raw')"
+                      >
+                        {{ item.blobUrl ? "Raw" : "Url" }}
+                      </button>
+                      <button
+                        v-if="item.blobUrl"
+                        class="saves-sync-btn"
+                        @click.stop="copyUrl(item, 'blob')"
+                      >
+                        Blob
+                      </button>
+                      <button
+                        v-if="item.gist?.rawUrl"
+                        class="saves-sync-btn"
+                        @click.stop="copyUrl(item, 'gist')"
+                      >
+                        Gist
+                      </button>
+                      <button
+                        v-if="item.gist?.htmlUrl"
+                        class="saves-sync-btn"
+                        @click.stop="copyUrl(item, 'html')"
+                      >
+                        Html
+                      </button>
+                      <button
+                        v-if="item.url"
+                        class="saves-sync-btn"
+                        :class="{
+                          'is-syncing': refreshingUrlItemId === item.id,
+                        }"
                         :disabled="refreshingUrlItemId === item.id"
                         title="从原始 URL 重新拉取"
                         @click.stop="confirmRefreshFromUrl(item)"
@@ -119,14 +290,25 @@
                       <button
                         v-if="item.gist?.rawUrl"
                         class="saves-sync-btn"
-                        :class="{ 'is-syncing': syncingItemId === item.id && syncingAction === 'gist' }"
-                        :disabled="syncingItemId === item.id && syncingAction === 'gist'"
+                        :class="{
+                          'is-syncing':
+                            syncingItemId === item.id &&
+                            syncingAction === 'gist',
+                        }"
+                        :disabled="
+                          syncingItemId === item.id && syncingAction === 'gist'
+                        "
                         title="从 Gist 拉取最新内容"
                         @click.stop="confirmDownloadFromGist(item)"
                       >
                         拉取 Gist
                       </button>
-                      <button class="saves-sync-btn" @click.stop="renameItem(item)">重命名</button>
+                      <button
+                        class="saves-sync-btn"
+                        @click.stop="renameItem(item)"
+                      >
+                        重命名
+                      </button>
                       <!-- <button class="saves-sync-btn" :class="{ 'is-current': item.id === currentItemId }" :disabled="loadingItemId === item.id" @click.stop="loadItemForList(item)">
                   {{ item.id === currentItemId ? "当前" : "加载" }}
                 </button> -->
@@ -144,18 +326,40 @@
                   v-for="child in gistChildItems(item)"
                   :key="child.id"
                   class="saves-item saves-gist-child"
+                  :data-save-id="child.id"
                   :class="{ 'saves-item-current': child.id === currentItemId }"
                 >
-                  <input v-if="selectMode" type="checkbox" :value="child.id" v-model="checkedIds" @click.stop />
+                  <input
+                    v-if="selectMode"
+                    type="checkbox"
+                    :value="child.id"
+                    v-model="checkedIds"
+                    @click.stop
+                  />
 
                   <div class="saves-item-info">
                     <span class="saves-item-name">
                       {{ child.name }}
-                      <span v-if="child.gist" class="saves-item-source" :title="gistPath(child)">{{ gistPath(child) }}</span>
-                      <span v-if="child.tags?.length" class="saves-item-tags">{{ child.tags.join(" · ") }}</span>
+                      <span
+                        v-if="child.gist"
+                        class="saves-item-source"
+                        :title="gistPath(child)"
+                        >{{ gistPath(child) }}</span
+                      >
+                      <span v-if="child.tags?.length" class="saves-item-tags">
+                        <span
+                          v-for="tag in child.tags"
+                          :key="tag"
+                          class="saves-item-tag"
+                          :class="`saves-item-tag-${tag.toLowerCase()}`"
+                          >{{ tag }}</span
+                        >
+                      </span>
                     </span>
                     <div class="saves-item-preview">
-                      <span class="saves-item-content-preview">{{ child.preview || "" }}</span>
+                      <span class="saves-item-content-preview">{{
+                        child.preview || ""
+                      }}</span>
                     </div>
                     <span class="saves-item-meta">
                       {{ formatTime(itemUpdatedAt(child)) }}
@@ -164,35 +368,93 @@
                     </span>
                   </div>
 
-                  <div v-if="isItemActionsExpanded(child)" class="saves-item-sync-actions">
+                  <div
+                    v-if="isItemActionsExpanded(child)"
+                    class="saves-item-sync-actions"
+                  >
                     <div class="saves-item-sync-actions-content">
                       <div class="saves-item-action-group">
-                        <button class="saves-sync-btn" @click.stop="toggleItemExpansion(child)">
-                          {{ isItemExpanded(child) ? "收起" : getItemChildrenCount(child) > 0 ? `展开 (${getItemChildrenCount(child)})` : "展开" }}
+                        <button
+                          class="saves-sync-btn"
+                          @click.stop="toggleItemExpansion(child)"
+                        >
+                          {{
+                            isItemExpanded(child)
+                              ? "收起"
+                              : getItemChildrenCount(child) > 0
+                                ? `展开 (${getItemChildrenCount(child)})`
+                                : "展开"
+                          }}
                         </button>
                         <button
                           class="saves-sync-btn"
-                          :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'upload' }"
-                          :disabled="syncingItemId === child.id && syncingAction === 'upload'"
+                          :class="{
+                            'is-syncing':
+                              syncingItemId === child.id &&
+                              syncingAction === 'upload',
+                          }"
+                          :disabled="
+                            syncingItemId === child.id &&
+                            syncingAction === 'upload'
+                          "
                           title="上传到 Gist"
                           @click.stop="confirmUploadToGist(child)"
                         >
                           上传
                         </button>
-                        <button class="saves-sync-btn" @click.stop="deleteSingleItem(child)">删除</button>
-                        <button class="saves-sync-btn" @click.stop="editItemTags(child)">+ 标签</button>
-                      </div>
-                      <div class="saves-item-action-group saves-item-action-group-right">
-                        <button v-if="child.url" class="saves-sync-btn" @click.stop="copyUrl(child, 'raw')">
-                          {{ child.blobUrl ? "Raw" : "Url" }}
+                        <button
+                          class="saves-sync-btn"
+                          @click.stop="deleteSingleItem(child)"
+                        >
+                          删除
                         </button>
-                        <button v-if="child.blobUrl" title="复制 Blob URL" class="saves-sync-btn" @click.stop="copyUrl(child, 'blob')">Blob</button>
-                        <button v-if="child.gist?.rawUrl" class="saves-sync-btn" title="复制 Gist URL" @click.stop="copyUrl(child, 'gist')">Gist</button>
-                        <button v-if="child.gist?.htmlUrl" class="saves-sync-btn" title="复制 Html URL" @click.stop="copyUrl(child, 'html')">Html</button>
+                        <button
+                          class="saves-sync-btn"
+                          @click.stop="editItemTags(child)"
+                        >
+                          + 标签
+                        </button>
+                      </div>
+                      <div
+                        class="saves-item-action-group saves-item-action-group-right"
+                      >
                         <button
                           v-if="child.url"
                           class="saves-sync-btn"
-                          :class="{ 'is-syncing': refreshingUrlItemId === child.id }"
+                          @click.stop="copyUrl(child, 'raw')"
+                        >
+                          {{ child.blobUrl ? "Raw" : "Url" }}
+                        </button>
+                        <button
+                          v-if="child.blobUrl"
+                          title="复制 Blob URL"
+                          class="saves-sync-btn"
+                          @click.stop="copyUrl(child, 'blob')"
+                        >
+                          Blob
+                        </button>
+                        <button
+                          v-if="child.gist?.rawUrl"
+                          class="saves-sync-btn"
+                          title="复制 Gist URL"
+                          @click.stop="copyUrl(child, 'gist')"
+                        >
+                          Gist
+                        </button>
+                        <button
+                          v-if="child.gist?.htmlUrl"
+                          class="saves-sync-btn"
+                          title="复制 Html URL"
+                          @click.stop="copyUrl(child, 'html')"
+                        >
+                          Html
+                        </button>
+                        <button
+                          v-if="child.url"
+                          class="saves-sync-btn"
+                          :class="{
+                            'is-syncing': refreshingUrlItemId === child.id,
+                          }"
                           :disabled="refreshingUrlItemId === child.id"
                           title="从原始 URL 重新拉取"
                           @click.stop="confirmRefreshFromUrl(child)"
@@ -202,20 +464,42 @@
                         <button
                           v-if="child.gist?.rawUrl"
                           class="saves-sync-btn"
-                          :class="{ 'is-syncing': syncingItemId === child.id && syncingAction === 'gist' }"
-                          :disabled="syncingItemId === child.id && syncingAction === 'gist'"
+                          :class="{
+                            'is-syncing':
+                              syncingItemId === child.id &&
+                              syncingAction === 'gist',
+                          }"
+                          :disabled="
+                            syncingItemId === child.id &&
+                            syncingAction === 'gist'
+                          "
                           title="从 Gist 拉取最新内容"
                           @click.stop="confirmDownloadFromGist(child)"
                         >
                           从 Gist 拉取
                         </button>
-                        <button class="saves-sync-btn" @click.stop="renameItem(child)">重命名</button>
-                        <button class="saves-sync-btn" :class="{ 'is-current': child.id === currentItemId }" :disabled="loadingItemId === child.id" @click.stop="loadItemForList(child)">加载</button>
+                        <button
+                          class="saves-sync-btn"
+                          @click.stop="renameItem(child)"
+                        >
+                          重命名
+                        </button>
+                        <button
+                          class="saves-sync-btn"
+                          :class="{ 'is-current': child.id === currentItemId }"
+                          :disabled="loadingItemId === child.id"
+                          @click.stop="loadItemForList(child)"
+                        >
+                          加载
+                        </button>
                       </div>
                     </div>
                   </div>
                 </div>
-                <button class="saves-gist-child saves-gist-child-new" @click.stop="createExpandedFile(item)">
+                <button
+                  class="saves-gist-child saves-gist-child-new"
+                  @click.stop="createExpandedFile(item)"
+                >
                   {{ item.gist?.id ? "+ 新建 Gist 文件" : "+ 新建" }}
                 </button>
               </div>
@@ -223,55 +507,141 @@
           </Transition>
         </template>
         <div class="saves-footers">
-          <button class="saves-sync-btn" @click.stop="push_home">返回首页</button>
-          <button class="saves-sync-btn" :disabled="backupInProgress" @click.stop="backupDatabase">
+          <button class="saves-sync-btn" @click.stop="push_home">
+            返回首页
+          </button>
+          <button
+            class="saves-sync-btn"
+            :disabled="backupInProgress"
+            @click.stop="backupDatabase"
+          >
             {{ backupInProgress ? "备份中…" : "备份" }}
           </button>
-          <button class="saves-sync-btn" :disabled="restoreInProgress" @click.stop="triggerBackupRestore">
+          <button
+            class="saves-sync-btn"
+            :disabled="restoreInProgress"
+            @click.stop="triggerBackupRestore"
+          >
             {{ restoreInProgress ? "恢复中…" : "恢复备份" }}
           </button>
         </div>
       </div>
     </div>
     <!-- 拖拽调整高度手柄 -->
-    <div ref="savesHandleRef" class="saves-resize-handle" @pointerdown="startSavesResizePointer">
+    <div
+      ref="savesHandleRef"
+      class="saves-resize-handle"
+      @pointerdown="startSavesResizePointer"
+    >
       <div class="saves-resize-bar"></div>
     </div>
     <!-- 拖拽调整宽度手柄（宽屏时显示） -->
-    <div class="saves-vresize-handle" @pointerdown="startSavesWidthResizePointer" title="拖拽调整宽度">
+    <div
+      class="saves-vresize-handle"
+      @pointerdown="startSavesWidthResizePointer"
+      title="拖拽调整宽度"
+    >
       <div class="saves-vresize-bar"></div>
       <!-- <div class="saves-vresize-knob">
         <span class="saves-vresize-dots"></span>
       </div> -->
     </div>
   </div>
-  <cmView v-if="editorReady" ref="cmViewRef" id="main" :isReadOnly="false" :class="{ 'saves-open': showSaves }" />
+  <cmView
+    v-if="editorReady"
+    ref="cmViewRef"
+    id="main"
+    :isReadOnly="false"
+    :class="{ 'saves-open': showSaves }"
+  />
 
   <!-- ★ 可拖拽控制台面板 -->
   <div
     v-if="showlog"
     class="log-panel"
     ref="logPanelRef"
-    :style="{ left: logPos.x + 'px', top: logPos.y + 'px', width: logSize.w + 'px', height: logSize.h + 'px', maxWidth: '100vw', maxHeight: MAX_H + 'px' }"
+    :style="{
+      left: logPos.x + 'px',
+      top: logPos.y + 'px',
+      width: logSize.w + 'px',
+      height: logSize.h + 'px',
+      maxWidth: '100vw',
+      maxHeight: MAX_H + 'px',
+    }"
   >
     <div class="log-header" @pointerdown.prevent="startDrag">
       <span class="log-title">
-        <svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 450 130" width="60" height="17" @click.stop="onClickLogo">
-          <ellipse cx="65" cy="65" rx="50" ry="52" stroke="rgb(220,60,54)" stroke-width="2" fill="rgb(237,108,96)" />
-          <ellipse cx="225" cy="65" rx="50" ry="52" stroke="rgb(218,151,33)" stroke-width="2" fill="rgb(247,193,81)" />
-          <ellipse cx="385" cy="65" rx="50" ry="52" stroke="rgb(27,161,37)" stroke-width="2" fill="rgb(100,200,86)" />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          version="1.1"
+          viewBox="0 0 450 130"
+          width="60"
+          height="17"
+          @click.stop="onClickLogo"
+        >
+          <ellipse
+            cx="65"
+            cy="65"
+            rx="50"
+            ry="52"
+            stroke="rgb(220,60,54)"
+            stroke-width="2"
+            fill="rgb(237,108,96)"
+          />
+          <ellipse
+            cx="225"
+            cy="65"
+            rx="50"
+            ry="52"
+            stroke="rgb(218,151,33)"
+            stroke-width="2"
+            fill="rgb(247,193,81)"
+          />
+          <ellipse
+            cx="385"
+            cy="65"
+            rx="50"
+            ry="52"
+            stroke="rgb(27,161,37)"
+            stroke-width="2"
+            fill="rgb(100,200,86)"
+          />
         </svg>
       </span>
       <span class="log-time">{{ logTime }}</span>
       <div class="log-actions">
-        <button class="log-btn log-copy" @click.stop="copyText(logAllReactive)" title="复制日志">
+        <button
+          class="log-btn log-copy"
+          @click.stop="copyText(logAllReactive)"
+          title="复制日志"
+        >
           <svg viewBox="0 1 26 17" width="14" height="14" fill="currentColor">
-            <rect x="9" y="3" width="12" height="15" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"></rect>
-            <path d="M15 21H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2" stroke="currentColor" stroke-width="1.5" fill="none"></path>
+            <rect
+              x="9"
+              y="3"
+              width="12"
+              height="15"
+              rx="1.5"
+              stroke="currentColor"
+              stroke-width="1.5"
+              fill="none"
+            ></rect>
+            <path
+              d="M15 21H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2"
+              stroke="currentColor"
+              stroke-width="1.5"
+              fill="none"
+            ></path>
           </svg>
         </button>
-        <button class="log-btn log-run" @click.stop="goFunction()" title="运行脚本">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>
+        <button
+          class="log-btn log-run"
+          @click.stop="goFunction()"
+          title="运行脚本"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+            <polygon points="5,3 19,12 5,21" />
+          </svg>
         </button>
       </div>
     </div>
@@ -288,7 +658,13 @@
       <div v-if="promptState.hasTags" class="modal-tag-list">
         <span v-for="tag in promptState.tags" :key="tag" class="modal-tag">
           {{ tag }}
-          <button class="modal-tag-remove" :title="`删除标签 ${tag}`" @click="removePromptTag(tag)">×</button>
+          <button
+            class="modal-tag-remove"
+            :title="`删除标签 ${tag}`"
+            @click="removePromptTag(tag)"
+          >
+            ×
+          </button>
         </span>
       </div>
       <input
@@ -296,26 +672,49 @@
         v-model="promptState.value"
         class="modal-input"
         type="text"
-        :placeholder="promptState.hasTags ? '输入标签后按回车添加' : '输入 URL 链接'"
+        :placeholder="
+          promptState.hasTags ? '输入标签后按回车添加' : '输入 URL 链接'
+        "
         autofocus
         @input="autoFillScriptHubUserAgent"
         @keyup.enter="promptState.hasTags ? addPromptTag() : promptConfirm()"
         @keyup.esc="promptCancel"
       />
-      <input v-if="promptState.hasUserAgent" v-model="promptState.userAgent" class="modal-input" type="text" placeholder="UA（可选）" @keyup.enter="promptConfirm" @keyup.esc="promptCancel" />
+      <input
+        v-if="promptState.hasUserAgent"
+        v-model="promptState.userAgent"
+        class="modal-input"
+        type="text"
+        placeholder="UA（可选）"
+        @keyup.enter="promptConfirm"
+        @keyup.esc="promptCancel"
+      />
       <div class="modal-actions">
         <button class="modal-btn" @click="pasteToPromptInput">粘贴</button>
         <button class="modal-btn" @click="promptCancel">取消</button>
-        <button class="modal-btn modal-btn-primary" @click="promptConfirm">确定</button>
+        <button class="modal-btn modal-btn-primary" @click="promptConfirm">
+          确定
+        </button>
       </div>
     </div>
   </div>
 
   <!-- 自定义确认弹窗 -->
   <div v-if="confirmState.visible" class="modal-mask" @click.self="confirmNo">
-    <div ref="confirmDialogRef" class="modal-box" tabindex="-1" @keydown.enter.prevent="confirmYes" @keydown.esc.prevent="confirmNo">
+    <div
+      ref="confirmDialogRef"
+      class="modal-box"
+      tabindex="-1"
+      @keydown.enter.prevent="confirmYes"
+      @keydown.esc.prevent="confirmNo"
+    >
       <div class="modal-title">{{ confirmState.title }}</div>
-      <label v-if="confirmState.hasInput" class="modal-input-label" for="gist-description-input">Desc</label>
+      <label
+        v-if="confirmState.hasInput"
+        class="modal-input-label"
+        for="gist-description-input"
+        >Desc</label
+      >
       <input
         v-if="confirmState.hasInput"
         id="gist-description-input"
@@ -329,7 +728,9 @@
       />
       <div class="modal-actions">
         <button class="modal-btn" @click="confirmNo">取消</button>
-        <button class="modal-btn modal-btn-primary" @click="confirmYes">确定</button>
+        <button class="modal-btn modal-btn-primary" @click="confirmYes">
+          确定
+        </button>
       </div>
     </div>
   </div>
@@ -337,7 +738,16 @@
 
 <script setup>
 import cmView from "./cmView.vue";
-import { ref, computed, nextTick, watch, watchEffect, onMounted, onBeforeUnmount, toRaw } from "vue";
+import {
+  ref,
+  computed,
+  nextTick,
+  watch,
+  watchEffect,
+  onMounted,
+  onBeforeUnmount,
+  toRaw,
+} from "vue";
 import { showToast } from "vant";
 import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
@@ -395,7 +805,13 @@ const MAX_H = Math.round(window.innerHeight * 0.6);
 // 拖拽移动
 let _dragData = null;
 function startDrag(e) {
-  _dragData = { sx: e.clientX, sy: e.clientY, ox: logPos.value.x, oy: logPos.value.y, moved: false };
+  _dragData = {
+    sx: e.clientX,
+    sy: e.clientY,
+    ox: logPos.value.x,
+    oy: logPos.value.y,
+    moved: false,
+  };
   document.addEventListener("pointermove", onDrag);
   document.addEventListener("pointerup", endDrag);
 }
@@ -427,14 +843,25 @@ function onClickLogo() {
 // 拖拽缩放
 let _resizeData = null;
 function startResize(e) {
-  _resizeData = { sx: e.clientX, sy: e.clientY, ow: logSize.value.w, oh: logSize.value.h };
+  _resizeData = {
+    sx: e.clientX,
+    sy: e.clientY,
+    ow: logSize.value.w,
+    oh: logSize.value.h,
+  };
   document.addEventListener("pointermove", onResize);
   document.addEventListener("pointerup", endResize);
 }
 function onResize(e) {
   if (!_resizeData) return;
-  logSize.value.w = Math.max(200, _resizeData.ow + (e.clientX - _resizeData.sx));
-  logSize.value.h = Math.min(MAX_H, Math.max(80, _resizeData.oh + (e.clientY - _resizeData.sy)));
+  logSize.value.w = Math.max(
+    200,
+    _resizeData.ow + (e.clientX - _resizeData.sx),
+  );
+  logSize.value.h = Math.min(
+    MAX_H,
+    Math.max(80, _resizeData.oh + (e.clientY - _resizeData.sy)),
+  );
 }
 function endResize() {
   if (_resizeData) {
@@ -461,8 +888,23 @@ const confirmInputRef = ref(null);
 const cmViewRef = ref(null);
 
 // ===== 自定义弹窗 =====
-const promptState = ref({ visible: false, title: "", value: "", userAgent: "", hasUserAgent: false, hasTags: false, tags: [], resolve: null });
-const confirmState = ref({ visible: false, title: "", value: "", hasInput: false, resolve: null });
+const promptState = ref({
+  visible: false,
+  title: "",
+  value: "",
+  userAgent: "",
+  hasUserAgent: false,
+  hasTags: false,
+  tags: [],
+  resolve: null,
+});
+const confirmState = ref({
+  visible: false,
+  title: "",
+  value: "",
+  hasInput: false,
+  resolve: null,
+});
 
 watch(
   () => promptState.value.visible,
@@ -480,7 +922,10 @@ watch(
   (visible) => {
     if (visible) {
       nextTick(() => {
-        (confirmState.value.hasInput ? confirmInputRef.value : confirmDialogRef.value)?.focus();
+        (confirmState.value.hasInput
+          ? confirmInputRef.value
+          : confirmDialogRef.value
+        )?.focus();
       });
     }
   },
@@ -498,7 +943,9 @@ function askPrompt(title, defaultValue = "", hasUserAgent = false) {
       visible: true,
       title,
       value: defaultValue,
-      userAgent: hasUserAgent ? localStorage.getItem("codeHubUserAgent") || "" : "",
+      userAgent: hasUserAgent
+        ? localStorage.getItem("codeHubUserAgent") || ""
+        : "",
       hasUserAgent,
       hasTags: false,
       tags: [],
@@ -512,13 +959,17 @@ function askUrlPrompt() {
 }
 
 function autoFillScriptHubUserAgent() {
-  if (promptState.value.hasUserAgent && SCRIPT_HUB_LPX_URL_PATTERN.test(promptState.value.value)) {
+  if (
+    promptState.value.hasUserAgent &&
+    SCRIPT_HUB_LPX_URL_PATTERN.test(promptState.value.value)
+  ) {
     promptState.value.userAgent = SCRIPT_HUB_USER_AGENT;
   }
 }
 
 const promptConfirm = () => {
-  const { resolve, value, userAgent, hasUserAgent, hasTags, tags } = promptState.value;
+  const { resolve, value, userAgent, hasUserAgent, hasTags, tags } =
+    promptState.value;
   promptState.value.visible = false;
   if (hasTags) {
     resolve?.(normalizeTags([...tags, ...value.split(/[,，\s]+/)]));
@@ -538,11 +989,16 @@ const promptCancel = () => {
   resolve?.(null);
 };
 const addPromptTag = () => {
-  promptState.value.tags = normalizeTags([...promptState.value.tags, ...promptState.value.value.split(/[,，\s]+/)]);
+  promptState.value.tags = normalizeTags([
+    ...promptState.value.tags,
+    ...promptState.value.value.split(/[,，\s]+/),
+  ]);
   promptState.value.value = "";
 };
 const removePromptTag = (tag) => {
-  promptState.value.tags = promptState.value.tags.filter((currentTag) => currentTag !== tag);
+  promptState.value.tags = promptState.value.tags.filter(
+    (currentTag) => currentTag !== tag,
+  );
 };
 const push_home = () => {
   router.push("/");
@@ -559,7 +1015,13 @@ async function pasteToPromptInput() {
 
 function askConfirm(title, inputValue) {
   return new Promise((resolve) => {
-    confirmState.value = { visible: true, title, value: inputValue || "", hasInput: inputValue !== undefined, resolve };
+    confirmState.value = {
+      visible: true,
+      title,
+      value: inputValue || "",
+      hasInput: inputValue !== undefined,
+      resolve,
+    };
   });
 }
 const confirmYes = () => {
@@ -572,32 +1034,36 @@ const confirmNo = () => {
   confirmState.value.visible = false;
   resolve?.(hasInput ? null : false);
 };
-const createId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const createId = () =>
+  Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-const toStoredValue = (value) => (value == null ? null : JSON.parse(JSON.stringify(toRaw(value))));
+const toStoredValue = (value) =>
+  value == null ? null : JSON.parse(JSON.stringify(toRaw(value)));
 
 const saveMeta = async (item) => {
-  try {
-    await idbStorage.setItem(metaKey(item.id), {
-      name: item.name,
-      length: item.length,
-      preview: item.preview,
-      updatedAt: item.updatedAt,
-      language: item.language,
-      manualLanguage: item.manualLanguage || "",
-      url: item.url || "",
-      blobUrl: item.blobUrl || "",
-      userAgent: item.userAgent || "",
-      gist: toStoredValue(item.gist),
-      localGroupId: item.localGroupId || "",
-      tags: normalizeTags(item.tags),
-    });
-  } catch (error) {
-    console.error("保存元数据失败", error);
-  }
+  await idbStorage.setItem(metaKey(item.id), {
+    name: item.name,
+    length: item.length,
+    preview: item.preview,
+    updatedAt: item.updatedAt,
+    language: item.language,
+    manualLanguage: item.manualLanguage || "",
+    url: item.url || "",
+    blobUrl: item.blobUrl || "",
+    userAgent: item.userAgent || "",
+    gist: toStoredValue(item.gist),
+    localGroupId: item.localGroupId || "",
+    tags: normalizeTags(item.tags),
+  });
 };
 
-const normalizeTags = (tags) => [...new Set((Array.isArray(tags) ? tags : []).map((tag) => String(tag).trim()).filter(Boolean))];
+const normalizeTags = (tags) => [
+  ...new Set(
+    (Array.isArray(tags) ? tags : [])
+      .map((tag) => String(tag).trim())
+      .filter(Boolean),
+  ),
+];
 const savedItems = ref([]);
 const timeSortDescending = ref(true);
 const saveSearchQuery = ref("");
@@ -605,21 +1071,37 @@ const isLoadingSaves = ref(true);
 const contentSearchIds = ref(null);
 const searchingSavedContent = ref(false);
 const selectedTags = ref([]);
-const availableTags = computed(() => [...new Set(savedItems.value.flatMap((item) => normalizeTags(item.tags)))].sort((a, b) => a.localeCompare(b, "zh-CN")));
+const availableTags = computed(() =>
+  [
+    ...new Set(savedItems.value.flatMap((item) => normalizeTags(item.tags))),
+  ].sort((a, b) => a.localeCompare(b, "zh-CN")),
+);
 const sortedSavedItems = computed(() =>
   [...savedItems.value]
     .filter((item) => {
       const query = saveSearchQuery.value.trim().toLowerCase();
-      const matchesInfo = [item.name, item.preview, ...normalizeTags(item.tags)].some((value) =>
+      const matchesInfo = [
+        item.name,
+        item.preview,
+        ...normalizeTags(item.tags),
+      ].some((value) =>
         String(value || "")
           .toLowerCase()
           .includes(query),
       );
       const matchesContent = contentSearchIds.value?.has(item.id) || false;
-      const matchesTags = selectedTags.value.length === 0 || selectedTags.value.every((tag) => normalizeTags(item.tags).includes(tag));
+      const matchesTags =
+        selectedTags.value.length === 0 ||
+        selectedTags.value.every((tag) =>
+          normalizeTags(item.tags).includes(tag),
+        );
       return (!query || matchesInfo || matchesContent) && matchesTags;
     })
-    .sort((a, b) => (timeSortDescending.value ? 1 : -1) * (itemUpdatedAt(b) - itemUpdatedAt(a))),
+    .sort(
+      (a, b) =>
+        (timeSortDescending.value ? 1 : -1) *
+        (itemUpdatedAt(b) - itemUpdatedAt(a)),
+    ),
 );
 const showSaves = ref(false);
 const toolbarExpanded = ref(false);
@@ -642,7 +1124,10 @@ let savesListObserver = null;
 // ===== 保存面板拖拽调整高度 =====
 const MIN_SAVES_HEIGHT = 57;
 const SAVES_HEIGHT_KEY = "codehub_saves_panel_height";
-const savesPanelHeight = ref(parseInt(localStorage.getItem(SAVES_HEIGHT_KEY), 10) || Math.round(window.innerHeight * 0.3));
+const savesPanelHeight = ref(
+  parseInt(localStorage.getItem(SAVES_HEIGHT_KEY), 10) ||
+    Math.round(window.innerHeight * 0.3),
+);
 let savesResizeStartY = 0;
 let savesResizeStartHeight = 0;
 
@@ -658,7 +1143,10 @@ function startSavesResizePointer(e) {
 
 function onSavesResizePointer(e) {
   const delta = e.clientY - savesResizeStartY;
-  savesPanelHeight.value = Math.max(MIN_SAVES_HEIGHT, savesResizeStartHeight + delta);
+  savesPanelHeight.value = Math.max(
+    MIN_SAVES_HEIGHT,
+    savesResizeStartHeight + delta,
+  );
 }
 
 function endSavesResizePointer(e) {
@@ -683,18 +1171,26 @@ function cleanupSavesResizeListeners() {
 const MIN_SAVES_WIDTH = 240;
 const MAX_SAVES_WIDTH_RATIO = 0.6;
 const SAVES_WIDTH_KEY = "codehub_saves_panel_width";
-const savesWidth = ref(parseInt(localStorage.getItem(SAVES_WIDTH_KEY), 10) || 400);
+const savesWidth = ref(
+  parseInt(localStorage.getItem(SAVES_WIDTH_KEY), 10) || 400,
+);
 let savesWidthResizeStartX = 0;
 let savesWidthResizeStartWidth = 0;
 
 function applySavesWidth() {
-  document.documentElement.style.setProperty("--saves-width", savesWidth.value + "px");
+  document.documentElement.style.setProperty(
+    "--saves-width",
+    savesWidth.value + "px",
+  );
 }
 
 // ★ 测量顶部导航栏高度，供宽屏分栏时标题栏定位使用
 const updateNavHeight = () => {
   const nav = document.querySelector(".blurNavdiv");
-  document.documentElement.style.setProperty("--nav-height", (nav?.offsetHeight || 0) + "px");
+  document.documentElement.style.setProperty(
+    "--nav-height",
+    (nav?.offsetHeight || 0) + "px",
+  );
 };
 
 function startSavesWidthResizePointer(e) {
@@ -710,7 +1206,10 @@ function startSavesWidthResizePointer(e) {
 function onSavesWidthResizePointer(e) {
   const delta = e.clientX - savesWidthResizeStartX;
   const maxWidth = Math.round(window.innerWidth * MAX_SAVES_WIDTH_RATIO);
-  savesWidth.value = Math.min(maxWidth, Math.max(MIN_SAVES_WIDTH, savesWidthResizeStartWidth + delta));
+  savesWidth.value = Math.min(
+    maxWidth,
+    Math.max(MIN_SAVES_WIDTH, savesWidthResizeStartWidth + delta),
+  );
   applySavesWidth();
 }
 
@@ -756,11 +1255,14 @@ const toggleTimeSort = () => {
 };
 
 let savedContentSearchTimer = null;
+let savedContentSearchRequestId = 0;
 const searchSavedContent = () => {
   clearTimeout(savedContentSearchTimer);
+  const requestId = ++savedContentSearchRequestId;
   const query = saveSearchQuery.value.trim().toLowerCase();
   if (!query) {
     contentSearchIds.value = null;
+    searchingSavedContent.value = false;
     return;
   }
   savedContentSearchTimer = setTimeout(async () => {
@@ -768,26 +1270,36 @@ const searchSavedContent = () => {
     try {
       const matchingIds = new Set();
       for (const item of savedItems.value) {
-        const searchable = `${item.name || ""}\n${item.preview || ""}\n${normalizeTags(item.tags).join(" ")}`.toLowerCase();
+        const searchable =
+          `${item.name || ""}\n${item.preview || ""}\n${normalizeTags(item.tags).join(" ")}`.toLowerCase();
         if (searchable.includes(query)) {
           matchingIds.add(item.id);
           continue;
         }
         const content = await idbStorage.getItem(contentKey(item.id));
-        if (typeof content === "string" && content.toLowerCase().includes(query)) matchingIds.add(item.id);
+        if (
+          typeof content === "string" &&
+          content.toLowerCase().includes(query)
+        )
+          matchingIds.add(item.id);
       }
+      if (requestId !== savedContentSearchRequestId) return;
       contentSearchIds.value = matchingIds;
     } catch (error) {
       console.error("搜索保存内容失败", error);
+      if (requestId !== savedContentSearchRequestId) return;
       contentSearchIds.value = null;
     } finally {
-      searchingSavedContent.value = false;
+      if (requestId === savedContentSearchRequestId)
+        searchingSavedContent.value = false;
     }
   }, 250);
 };
 
 const toggleTagFilter = (tag) => {
-  selectedTags.value = selectedTags.value.includes(tag) ? selectedTags.value.filter((selectedTag) => selectedTag !== tag) : [...selectedTags.value, tag];
+  selectedTags.value = selectedTags.value.includes(tag)
+    ? selectedTags.value.filter((selectedTag) => selectedTag !== tag)
+    : [...selectedTags.value, tag];
 };
 
 const editItemTags = async (item) => {
@@ -800,7 +1312,16 @@ const editItemTags = async (item) => {
 
 const askTags = (tags) =>
   new Promise((resolve) => {
-    promptState.value = { visible: true, title: "修改标签", value: "", userAgent: "", hasUserAgent: false, hasTags: true, tags, resolve };
+    promptState.value = {
+      visible: true,
+      title: "修改标签",
+      value: "",
+      userAgent: "",
+      hasUserAgent: false,
+      hasTags: true,
+      tags,
+      resolve,
+    };
   });
 
 const isItemActionsExpanded = (item) => expandedActionItemId.value === item.id;
@@ -823,13 +1344,25 @@ const loadSaves = async () => {
         try {
           const meta = await idbStorage.getItem(metaKey(id));
           if (meta) {
-            return { id, ...meta, tags: normalizeTags(meta.tags?.length ? meta.tags : meta.gist ? ["Gist"] : meta.url ? ["Url"] : ["CH"]) };
+            return {
+              id,
+              ...meta,
+              tags: normalizeTags(
+                meta.tags?.length
+                  ? meta.tags
+                  : meta.gist
+                    ? ["Gist"]
+                    : meta.url
+                      ? ["Url"]
+                      : ["CH"],
+              ),
+            };
           }
           return null;
         } catch {
           return null;
         }
-      })
+      }),
     );
     const items = metaEntries.filter(Boolean);
 
@@ -897,44 +1430,57 @@ const loadSaves = async () => {
 };
 
 const persistIndex = async () => {
-  try {
-    const idList = savedItems.value.map((item) => item.id);
-    // ★ 防御：空列表写入前检查 IDB 是否仍有数据，防止意外清空索引
-    if (idList.length === 0) {
-      try {
-        const allKeys = await idbStorage.getAllKeys();
-        const hasData = allKeys.some((k) => typeof k === "string" && k.startsWith("codehub_save_meta:"));
-        if (hasData) {
-          console.warn("persistIndex: 拒绝写入空索引，IDB 中仍有保存数据");
-          return;
-        }
-      } catch {}
+  const idList = savedItems.value.map((item) => item.id);
+  // ★ 防御：空列表写入前检查 IDB 是否仍有数据，防止意外清空索引
+  if (idList.length === 0) {
+    const allKeys = await idbStorage.getAllKeys();
+    const hasData = allKeys.some(
+      (k) => typeof k === "string" && k.startsWith("codehub_save_meta:"),
+    );
+    if (hasData) {
+      console.warn("persistIndex: 拒绝写入空索引，IDB 中仍有保存数据");
+      return;
     }
-    await idbStorage.setItem(SAVES_INDEX_KEY, idList);
-  } catch (error) {
-    console.error("写入保存列表索引失败", error);
-    showToast("保存列表写入失败");
   }
+  await idbStorage.setItem(SAVES_INDEX_KEY, idList);
 };
 
 const buildMeta = (content) => ({
-  length: typeof content === "string" ? content.length : (content ? String(content).length : 0),
-  preview: typeof content === "string" ? content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100) : "",
+  length:
+    typeof content === "string"
+      ? content.length
+      : content
+        ? String(content).length
+        : 0,
+  preview:
+    typeof content === "string"
+      ? content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100)
+      : "",
   updatedAt: Date.now(),
   language: cmStore.activeLanguage,
   manualLanguage: cmStore.manualLanguage || "",
 });
 
-const itemUpdatedAt = (item) => Number(item.gist?.updatedAt || item.updatedAt || 0);
+const itemUpdatedAt = (item) =>
+  Number(item.gist?.updatedAt || item.updatedAt || 0);
 const gistPath = (item) => {
-  const folderName = item.gist?.description || item.gist?.folderName || item.gist?.filename || item.name;
+  const folderName =
+    item.gist?.description ||
+    item.gist?.folderName ||
+    item.gist?.filename ||
+    item.name;
   const fileName = item.gist?.filename || item.name;
   return folderName === fileName ? fileName : `${folderName}/${fileName}`;
 };
 const hasLocalContent = (item) => item.gist?.downloaded === true;
 const hasUrlAndGist = (item) => Boolean(item.url && item.gist?.rawUrl);
 
-const groupKey = (it) => (it?.gist?.id ? `g:${it.gist.id}` : it?.localGroupId ? `l:${it.localGroupId}` : null);
+const groupKey = (it) =>
+  it?.gist?.id
+    ? `g:${it.gist.id}`
+    : it?.localGroupId
+      ? `l:${it.localGroupId}`
+      : null;
 
 const groupIndex = computed(() => {
   const map = new Map();
@@ -947,7 +1493,8 @@ const groupIndex = computed(() => {
   return map;
 });
 
-const gistItems = (gistId) => (gistId ? groupIndex.value.get(`g:${gistId}`) || [] : []);
+const gistItems = (gistId) =>
+  gistId ? groupIndex.value.get(`g:${gistId}`) || [] : [];
 const groupItems = (item) => {
   const key = groupKey(item);
   return key ? groupIndex.value.get(key) || [item] : [item];
@@ -975,9 +1522,14 @@ const childrenIndex = computed(() => {
 const gistChildItems = (item) => childrenIndex.value.get(item.id) || [];
 const getItemChildrenCount = (item) => gistChildItems(item).length;
 const shouldShowSavedItem = (item) => isGistPrimary(item);
-const primarySavedItems = computed(() => sortedSavedItems.value.filter(isGistPrimary));
+const primarySavedItems = computed(() =>
+  sortedSavedItems.value.filter(isGistPrimary),
+);
 const localExpansionId = (item) => item.localGroupId || item.id;
-const isItemExpanded = (item) => (item.gist?.id ? expandedGistIds.value.has(item.gist.id) : expandedItemIds.value.has(localExpansionId(item)));
+const isItemExpanded = (item) =>
+  item.gist?.id
+    ? expandedGistIds.value.has(item.gist.id)
+    : expandedItemIds.value.has(localExpansionId(item));
 
 const toggleGistFiles = (gistId) => {
   if (expandedGistIds.value.has(gistId)) {
@@ -1090,10 +1642,14 @@ const getGistCredentials = () => {
   }
 };
 
-const toGistFileName = (name) => (name || "CodeHub.txt").replace(/[\\/:*?"<>|]/g, "_");
+const toGistFileName = (name) =>
+  (name || "CodeHub.txt").replace(/[\\/:*?"<>|]/g, "_");
 
 const confirmUploadToGist = async (item) => {
-  const description = await askConfirm("上传到 Gist 会覆盖远端 Gist", item.gist?.description || "");
+  const description = await askConfirm(
+    "上传到 Gist 会覆盖远端 Gist",
+    item.gist?.description || "",
+  );
   if (description === null) return;
   await uploadItemToGist(item, description.trim());
 };
@@ -1131,7 +1687,13 @@ const uploadItemToGist = async (item, description) => {
   syncingItemId.value = item.id;
   syncingAction.value = "upload";
   try {
-    const content = (await idbStorage.getItem(contentKey(item.id))) || "";
+    if (currentItemId.value === item.id) {
+      cmViewRef.value?.flushStoreSync?.();
+    }
+    const content =
+      currentItemId.value === item.id
+        ? cmStore.CmCode || ""
+        : (await idbStorage.getItem(contentKey(item.id))) || "";
     if (!content.trim()) {
       showToast("上传文件内容为空");
       return;
@@ -1150,16 +1712,29 @@ const uploadItemToGist = async (item, description) => {
     }
     const response = await sendReq(
       gistId ? "PATCH" : "POST",
-      gistId ? `https://api.github.com/gists/${gistId}` : "https://api.github.com/gists",
-      { Authorization: `token ${token}`, Accept: "application/vnd.github.v3+json" },
-      JSON.stringify({ description: item.gist?.description || `Code Hub`, public: false, files }),
+      gistId
+        ? `https://api.github.com/gists/${gistId}`
+        : "https://api.github.com/gists",
+      {
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+      JSON.stringify({
+        description: item.gist?.description || `Code Hub`,
+        public: false,
+        files,
+      }),
     );
-    if (response.status !== 200 && response.status !== 201) throw new Error(response.status || "请求失败");
+    if (response.status !== 200 && response.status !== 201)
+      throw new Error(response.status || "请求失败");
 
     const remoteFile = response.data?.files?.[filename];
     item.gist = {
       id: response.data?.id || gistId,
-      folderName: response.data?.description || Object.keys(response.data?.files || {})[0] || filename,
+      folderName:
+        response.data?.description ||
+        Object.keys(response.data?.files || {})[0] ||
+        filename,
       filename,
       rawUrl: toStableGistRawUrl(remoteFile?.raw_url || item.gist?.rawUrl),
       htmlUrl: response.data?.html_url || item.gist?.htmlUrl || "",
@@ -1167,7 +1742,12 @@ const uploadItemToGist = async (item, description) => {
       updatedAt: new Date(response.data?.updated_at || Date.now()).getTime(),
       downloaded: true,
     };
-    item.tags = normalizeTags([...normalizeTags(item.tags).filter((tag) => tag !== "CH" && tag !== "Url"), "Gist"]);
+    item.tags = normalizeTags([
+      ...normalizeTags(item.tags).filter(
+        (tag) => tag !== "CH" && tag !== "Url",
+      ),
+      "Gist",
+    ]);
     item.name = filename;
     const previousId = item.id;
     const nextId = getGistItemId(item.gist.id, filename);
@@ -1184,28 +1764,54 @@ const uploadItemToGist = async (item, description) => {
     await prependGistFileToCache(response.data, filename, remoteFile);
     await saveMeta(item);
     await persistIndex();
-    showToast(gistId ? (previousFilename && previousFilename !== filename ? "已重命名并更新 Gist" : "已更新到 Gist") : "已上传到 Gist");
+    await scrollToSavedItem(item.id);
+    showToast(
+      gistId
+        ? previousFilename && previousFilename !== filename
+          ? "已重命名并更新 Gist"
+          : "已更新到 Gist"
+        : "已上传到 Gist",
+    );
   } catch (error) {
     console.error("上传 Gist 失败", error);
-    showToast(String(error?.message) === "422" ? "上传文件内容为空 Err 422" : "上传 Gist 失败");
+    showToast(
+      String(error?.message) === "422"
+        ? "上传文件内容为空 Err 422"
+        : "上传 Gist 失败",
+    );
   } finally {
     syncingItemId.value = null;
     syncingAction.value = "";
   }
 };
 
-const downloadGistItem = async (item, loadAfterDownload = false, { notify = true } = {}) => {
+const downloadGistItem = async (
+  item,
+  loadAfterDownload = false,
+  { notify = true } = {},
+) => {
   if (!item.gist?.rawUrl) return;
   syncingItemId.value = item.id;
   syncingAction.value = "gist";
   try {
+    if (loadAfterDownload && currentItemId.value === item.id && isDirty) {
+      await syncCurrentItemContent();
+      isDirty = false;
+    }
     const rawUrl = toStableGistRawUrl(item.gist.rawUrl);
     if (item.gist.rawUrl !== rawUrl) item.gist.rawUrl = rawUrl;
     const response = await sendReq("GET", rawUrl);
     if (response.status !== 200) throw new Error(response.status || "请求失败");
-    const content = typeof response.data === "string" ? response.data : JSON.stringify(response.data, null, 2);
+    const content =
+      typeof response.data === "string"
+        ? response.data
+        : JSON.stringify(response.data, null, 2);
     await idbStorage.setItem(contentKey(item.id), content);
-    Object.assign(item, buildMeta(content), { updatedAt: Date.now() });
+    Object.assign(item, {
+      length: content.length,
+      preview: content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100),
+      updatedAt: Date.now(),
+    });
     item.gist.downloaded = true;
     await saveMeta(item);
     await persistIndex();
@@ -1239,31 +1845,47 @@ const downloadAllGists = async () => {
   syncingAllGists.value = true;
   try {
     const gists = [];
-    for (let page = 1; page < 10; page++) {
-      const response = await sendReq("GET", `https://api.github.com/users/${username}/gists?per_page=60&page=${page}`, {
-        Authorization: `token ${token}`,
-        Accept: "application/vnd.github.v3+json",
-      });
-      if (response.status !== 200 || !Array.isArray(response.data)) throw new Error(response.status || "请求失败");
+    for (let page = 1; ; page++) {
+      const response = await sendReq(
+        "GET",
+        `https://api.github.com/users/${username}/gists?per_page=100&page=${page}`,
+        {
+          Authorization: `token ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      );
+      if (response.status !== 200 || !Array.isArray(response.data))
+        throw new Error(response.status || "请求失败");
       if (response.data.length === 0) break;
 
       gists.push(
-        ...response.data.map(({ id, html_url, files, public: isPublic, created_at, updated_at, description, owner }) => ({
-          id,
-          html_url,
-          files,
-          filesNames: Object.keys(files || {}),
-          primaryFilename: Object.keys(files || {})[0] || "",
-          public: isPublic,
-          created_at,
-          updated_at,
-          updatedAt: new Date(updated_at).getTime(),
-          desc: description,
-          description,
-          user: owner?.login || username,
-        })),
+        ...response.data.map(
+          ({
+            id,
+            html_url,
+            files,
+            public: isPublic,
+            created_at,
+            updated_at,
+            description,
+            owner,
+          }) => ({
+            id,
+            html_url,
+            files,
+            filesNames: Object.keys(files || {}),
+            primaryFilename: Object.keys(files || {})[0] || "",
+            public: isPublic,
+            created_at,
+            updated_at,
+            updatedAt: new Date(updated_at).getTime(),
+            desc: description,
+            description,
+            user: owner?.login || username,
+          }),
+        ),
       );
-      if (response.data.length < 60) break;
+      if (response.data.length < 100) break;
     }
     await syncGistFilesToCodeHub(gists, { replace: true });
     await idbStorage.setItem(GIST_LIST_KEY, gists);
@@ -1377,18 +1999,37 @@ const deleteSingleItem = async (item) => {
       const response = await sendReq(
         isLastGistFile ? "DELETE" : "PATCH",
         `https://api.github.com/gists/${item.gist.id}`,
-        { Authorization: `token ${token}`, Accept: "application/vnd.github.v3+json" },
-        isLastGistFile ? undefined : JSON.stringify({ files: { [item.gist.filename]: null } }),
+        {
+          Authorization: `token ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+        isLastGistFile
+          ? undefined
+          : JSON.stringify({ files: { [item.gist.filename]: null } }),
       );
       const remoteMissing = response.status === 404;
-      if (response.status !== 204 && response.status !== 200 && !remoteMissing) throw new Error(response.status || "请求失败");
-      const deletedFiles = remoteMissing || isLastGistFile ? undefined : [item.gist.filename];
-      const removedIds = await removeGistFilesFromCodeHub(item.gist.id, deletedFiles);
+      if (response.status !== 204 && response.status !== 200 && !remoteMissing)
+        throw new Error(response.status || "请求失败");
+      const deletedFiles =
+        remoteMissing || isLastGistFile ? undefined : [item.gist.filename];
+      const removedIds = await removeGistFilesFromCodeHub(
+        item.gist.id,
+        deletedFiles,
+      );
       await removeGistFilesFromCache(item.gist.id, deletedFiles);
       const removed = new Set(removedIds);
-      savedItems.value = savedItems.value.filter((savedItem) => !removed.has(savedItem.id));
-      if (currentItemId.value && removed.has(currentItemId.value)) await setCurrentItem(null, "");
-      showToast(remoteMissing ? "远程 Gist 不存在，已清理本地数据" : isLastGistFile ? "已删除远程 Gist" : "已删除远程 Gist 文件");
+      savedItems.value = savedItems.value.filter(
+        (savedItem) => !removed.has(savedItem.id),
+      );
+      if (currentItemId.value && removed.has(currentItemId.value))
+        await setCurrentItem(null, "");
+      showToast(
+        remoteMissing
+          ? "远程 Gist 不存在，已清理本地数据"
+          : isLastGistFile
+            ? "已删除远程 Gist"
+            : "已删除远程 Gist 文件",
+      );
       return;
     } catch (error) {
       console.error("删除远程 Gist 失败", error);
@@ -1417,24 +2058,40 @@ const deleteSelected = async () => {
     return;
   }
   const ids = [...checkedIds.value];
-  const ok = await askConfirm(`确定要删除选中的 ${ids.length} 项吗？此操作不可恢复。`);
+  const ok = await askConfirm(
+    `确定要删除选中的 ${ids.length} 项吗？此操作不可恢复。`,
+  );
   if (!ok) return;
 
-  const items = savedItems.value.filter((item) => checkedIds.value.has(item.id));
+  const items = savedItems.value.filter((item) =>
+    checkedIds.value.has(item.id),
+  );
+  const currentItemWasDeleted = currentItemId.value
+    ? ids.includes(currentItemId.value)
+    : false;
   if (items.some((item) => item.gist?.id)) {
     showToast("远程 Gist 文件请使用单条删除");
     return;
   }
   try {
-    await Promise.all(ids.map((id) => Promise.all([idbStorage.removeItem(contentKey(id)), idbStorage.removeItem(metaKey(id))])));
+    await Promise.all(
+      ids.map((id) =>
+        Promise.all([
+          idbStorage.removeItem(contentKey(id)),
+          idbStorage.removeItem(metaKey(id)),
+        ]),
+      ),
+    );
   } catch (error) {
     console.error("删除内容失败", error);
   }
-  savedItems.value = savedItems.value.filter((item) => !checkedIds.value.has(item.id));
+  savedItems.value = savedItems.value.filter(
+    (item) => !checkedIds.value.has(item.id),
+  );
   checkedIds.value.clear();
   await persistIndex();
 
-  if (currentItemId.value && checkedIds.value.has(currentItemId.value)) {
+  if (currentItemWasDeleted) {
     await setCurrentItem(null, "");
   }
 
@@ -1465,7 +2122,7 @@ const loadItem = async (item) => {
 
     // 🔥 切换期间抑制自动保存 watch，避免内容设置触发 isDirty / 错误保存
     isSwitchingItem = true;
-    cmViewRef.value?.loadContent?.(content || EMPTY_CONTENT, {
+    await cmViewRef.value?.loadContent?.(content || EMPTY_CONTENT, {
       fileName: item.name,
       manualLanguage: item.manualLanguage || "",
       skipHistory: true,
@@ -1491,11 +2148,27 @@ const loadItem = async (item) => {
 };
 
 async function copyUrl(item, type) {
-  const text = type === "html" ? item.gist?.htmlUrl : type === "gist" ? item.gist?.rawUrl : type === "blob" ? item.blobUrl : item.url;
+  const text =
+    type === "html"
+      ? item.gist?.htmlUrl
+      : type === "gist"
+        ? item.gist?.rawUrl
+        : type === "blob"
+          ? item.blobUrl
+          : item.url;
   if (!text) return;
   try {
     await toClipboard(text);
-    const label = type === "html" ? "Html URL" : type === "blob" ? "Blob URL" : type === "gist" ? "Gist URL" : item.blobUrl ? "Raw URL" : "URL";
+    const label =
+      type === "html"
+        ? "Html URL"
+        : type === "blob"
+          ? "Blob URL"
+          : type === "gist"
+            ? "Gist URL"
+            : item.blobUrl
+              ? "Raw URL"
+              : "URL";
     showToast(`已复制 ${label}`);
   } catch {
     showToast("复制失败");
@@ -1508,7 +2181,9 @@ const SCRIPT_HUB_USER_AGENT = "script-hub/1.0.0";
 function getForwardRequestUrl(url, userAgent = "") {
   const ts = Date.now();
   if (!userAgent) return `https://fetch${ts}.linkey.com/api/fetch?url=${url}`;
-  const linkeyHeaders = encodeURIComponent(JSON.stringify({ "User-Agent": userAgent }));
+  const linkeyHeaders = encodeURIComponent(
+    JSON.stringify({ "User-Agent": userAgent }),
+  );
   return `https://fetch${ts}.linkey.com/api/fetch?url=${url}&linkeyheaders=${linkeyHeaders}`;
 }
 
@@ -1517,7 +2192,11 @@ async function refreshUrlItem(item) {
   refreshingUrlItemId.value = item.id;
   try {
     let currentURL = item.url;
-    const userAgent = item.userAgent || (SCRIPT_HUB_LPX_URL_PATTERN.test(currentURL) ? SCRIPT_HUB_USER_AGENT : "");
+    const userAgent =
+      item.userAgent ||
+      (SCRIPT_HUB_LPX_URL_PATTERN.test(currentURL)
+        ? SCRIPT_HUB_USER_AGENT
+        : "");
     let res = userAgent ? null : await sendReq("GET", currentURL);
     if (!res || !res.data) {
       const localURL = getForwardRequestUrl(currentURL, userAgent);
@@ -1536,7 +2215,6 @@ async function refreshUrlItem(item) {
     item.length = content.length;
     item.preview = content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100);
     item.updatedAt = Date.now();
-    item.manualLanguage = cmStore.manualLanguage || "";
     await saveMeta(item);
     await persistIndex();
 
@@ -1544,7 +2222,7 @@ async function refreshUrlItem(item) {
     const urlFileName = getFileNameFromUrl(item.url || "");
 
     isSwitchingItem = true;
-    cmViewRef.value?.loadContent?.(content, {
+    await cmViewRef.value?.loadContent?.(content, {
       fileName: urlFileName,
       manualLanguage: item.manualLanguage || "",
       skipHistory: true,
@@ -1583,14 +2261,18 @@ const renameItem = async (item) => {
       const response = await sendReq(
         "PATCH",
         `https://api.github.com/gists/${item.gist.id}`,
-        { Authorization: `token ${token}`, Accept: "application/vnd.github.v3+json" },
+        {
+          Authorization: `token ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
         JSON.stringify({
           files: {
             [previousFilename]: { filename: name },
           },
         }),
       );
-      if (response.status !== 200) throw new Error(response.status || "请求失败");
+      if (response.status !== 200)
+        throw new Error(response.status || "请求失败");
       const remoteFile = response.data?.files?.[name];
       if (!remoteFile?.raw_url) throw new Error("未获取到文件地址");
       await renameGistFileInCodeHub(item.gist.id, previousFilename, name);
@@ -1620,9 +2302,15 @@ const renameItem = async (item) => {
   showToast("已重命名为 " + newName);
 };
 
-const allChecked = computed(() => savedItems.value.length > 0 && checkedIds.value.size === savedItems.value.length);
+const allChecked = computed(
+  () =>
+    savedItems.value.length > 0 &&
+    checkedIds.value.size === savedItems.value.length,
+);
 const toggleCheckAll = () => {
-  checkedIds.value = allChecked.value ? new Set() : new Set(savedItems.value.map((i) => i.id));
+  checkedIds.value = allChecked.value
+    ? new Set()
+    : new Set(savedItems.value.map((i) => i.id));
 };
 
 function truncateUrl(url) {
@@ -1668,6 +2356,7 @@ const LAST_OPENED_KEY = "codehub_last_opened_id";
 const currentItemId = ref(null);
 
 const setCurrentItem = async (id, fileName = "") => {
+  saveRequestId++;
   currentItemId.value = id;
   cmStore.setCurrentFileName(fileName);
   try {
@@ -1682,14 +2371,18 @@ const setCurrentItem = async (id, fileName = "") => {
 };
 
 let isDirty = false;
+let saveRequestId = 0;
 
 const hasCurrentItemChanges = (item, content) =>
-  content !== lastSavedContent.value || (cmStore.currentFileName || item.name) !== item.name || (cmStore.manualLanguage || "") !== (item.manualLanguage || "");
+  content !== lastSavedContent.value ||
+  (cmStore.currentFileName || item.name) !== item.name ||
+  (cmStore.manualLanguage || "") !== (item.manualLanguage || "");
 
 const syncCurrentItemContent = async () => {
   const id = currentItemId.value;
   if (!id) return;
   if (!isDirty) return;
+  const requestId = ++saveRequestId;
 
   // ★ 大文件编辑后先刷新 store，确保拿到最新的编辑内容
   cmViewRef.value?.flushStoreSync?.();
@@ -1699,6 +2392,7 @@ const syncCurrentItemContent = async () => {
   try {
     const idx = savedItems.value.findIndex((i) => i.id === id);
     if (idx === -1) return;
+    if (requestId !== saveRequestId || currentItemId.value !== id) return;
     if (!hasCurrentItemChanges(savedItems.value[idx], content)) {
       isDirty = false;
       return;
@@ -1706,6 +2400,7 @@ const syncCurrentItemContent = async () => {
 
     if (content !== lastSavedContent.value) {
       await idbStorage.setItem(contentKey(id), content);
+      if (requestId !== saveRequestId || currentItemId.value !== id) return;
       lastSavedContent.value = content;
     }
 
@@ -1716,6 +2411,8 @@ const syncCurrentItemContent = async () => {
       name: cmStore.currentFileName || savedItems.value[idx].name,
       ...buildMeta(content),
     };
+
+    if (requestId !== saveRequestId || currentItemId.value !== id) return;
 
     await saveMeta(savedItems.value[idx]);
     await persistIndex();
@@ -1801,7 +2498,11 @@ const flushCurrentSave = async () => {
         lastSavedContent.value = content;
       }
       isDirty = false;
-      savedItems.value[idx] = { ...savedItems.value[idx], name: cmStore.currentFileName || savedItems.value[idx].name, ...buildMeta(content) };
+      savedItems.value[idx] = {
+        ...savedItems.value[idx],
+        name: cmStore.currentFileName || savedItems.value[idx].name,
+        ...buildMeta(content),
+      };
       await saveMeta(savedItems.value[idx]);
       await persistIndex();
     }
@@ -1850,9 +2551,24 @@ const backupDatabase = async () => {
     await flushCurrentSave();
     const entries = await idbStorage.getAllEntries();
     const zip = new JSZip();
-    zip.file(CODEHUB_BACKUP_FILE, JSON.stringify({ format: "LinKey-CodeHub-Backup", version: CODEHUB_BACKUP_VERSION, createdAt: new Date().toISOString(), entries }));
-    const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
-    downloadBlob(`CodeHub_backup_${new Date().toISOString().replace(/[:.]/g, "-")}.zip`, blob);
+    zip.file(
+      CODEHUB_BACKUP_FILE,
+      JSON.stringify({
+        format: "LinKey-CodeHub-Backup",
+        version: CODEHUB_BACKUP_VERSION,
+        createdAt: new Date().toISOString(),
+        entries,
+      }),
+    );
+    const blob = await zip.generateAsync({
+      type: "blob",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
+    downloadBlob(
+      `CodeHub_backup_${new Date().toISOString().replace(/[:.]/g, "-")}.zip`,
+      blob,
+    );
     showToast(`已备份 ${entries.length} 项数据库数据`);
   } catch (error) {
     console.error("备份数据库失败", error);
@@ -1870,7 +2586,8 @@ const onBackupRestoreFileChange = async (event) => {
   const file = event.target.files?.[0];
   event.target.value = "";
   if (!file) return;
-  if (!(await askConfirm("恢复备份会覆盖当前所有 Code Hub 数据，是否继续？"))) return;
+  if (!(await askConfirm("恢复备份会覆盖当前所有 Code Hub 数据，是否继续？")))
+    return;
 
   restoreInProgress.value = true;
   try {
@@ -1878,8 +2595,15 @@ const onBackupRestoreFileChange = async (event) => {
     const backupFile = zip.file(CODEHUB_BACKUP_FILE);
     if (!backupFile) throw new Error("不是 Code Hub 备份文件");
     const backup = JSON.parse(await backupFile.async("string"));
-    const isValid = backup?.format === "LinKey-CodeHub-Backup" && backup.version === CODEHUB_BACKUP_VERSION && Array.isArray(backup.entries);
-    if (!isValid || backup.entries.some((entry) => !entry || typeof entry.key !== "string")) throw new Error("备份文件格式无效");
+    const isValid =
+      backup?.format === "LinKey-CodeHub-Backup" &&
+      backup.version === CODEHUB_BACKUP_VERSION &&
+      Array.isArray(backup.entries);
+    if (
+      !isValid ||
+      backup.entries.some((entry) => !entry || typeof entry.key !== "string")
+    )
+      throw new Error("备份文件格式无效");
 
     await flushCurrentSave();
     await idbStorage.replaceAllEntries(backup.entries);
@@ -1890,7 +2614,12 @@ const onBackupRestoreFileChange = async (event) => {
     showToast(`已恢复 ${backup.entries.length} 项数据库数据`);
   } catch (error) {
     console.error("恢复数据库备份失败", error);
-    showToast(error?.message === "不是 Code Hub 备份文件" || error?.message === "备份文件格式无效" ? error.message : "恢复失败");
+    showToast(
+      error?.message === "不是 Code Hub 备份文件" ||
+        error?.message === "备份文件格式无效"
+        ? error.message
+        : "恢复失败",
+    );
   } finally {
     restoreInProgress.value = false;
   }
@@ -1906,7 +2635,12 @@ const onImportFileChange = async (e) => {
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     await idbStorage.setItem(contentKey(id), text);
-    savedItems.value.unshift({ id, name: file.name, ...buildMeta(text), tags: ["CH"] });
+    savedItems.value.unshift({
+      id,
+      name: file.name,
+      ...buildMeta(text),
+      tags: ["CH"],
+    });
     await saveMeta(savedItems.value[0]);
     await persistIndex();
 
@@ -1918,7 +2652,7 @@ const onImportFileChange = async (e) => {
     await nextTick();
 
     isSwitchingItem = true;
-    cmViewRef.value?.loadContent?.(text, {
+    await cmViewRef.value?.loadContent?.(text, {
       fileName: file.name,
       manualLanguage: "",
       skipHistory: true,
@@ -1978,7 +2712,9 @@ const exportCurrent = () => {
     .toLocaleString("zh-CN")
     .replace(/[^\d\s]/g, "")
     .replace(/\D/g, "_")}`;
-  const finalName = buildExportFilename(cmStore.currentFileName || fallbackName);
+  const finalName = buildExportFilename(
+    cmStore.currentFileName || fallbackName,
+  );
   downloadTextFile(finalName, content);
   showToast("已导出");
 };
@@ -1989,7 +2725,9 @@ const exportSelected = async () => {
     return;
   }
   const ids = [...checkedIds.value];
-  const items = savedItems.value.filter((item) => checkedIds.value.has(item.id));
+  const items = savedItems.value.filter((item) =>
+    checkedIds.value.has(item.id),
+  );
 
   if (items.length === 1) {
     const item = items[0];
@@ -2169,12 +2907,18 @@ async function loadUrlContent(inputUrl, inputUserAgent = "") {
 
     if (/^https:\/\/github\.com\/.+?\/(blob|raw)\//.test(currentURL)) {
       bloburl = currentURL;
-      currentURL = currentURL.replace(/\/(blob|raw)/, "").replace("github.com", "raw.githubusercontent.com");
+      currentURL = currentURL
+        .replace(/\/(blob|raw)/, "")
+        .replace("github.com", "raw.githubusercontent.com");
     } else if (/^https:\/\/raw\.githubusercontent\.com\//.test(currentURL)) {
       bloburl = extractAndFormatUrl(currentURL);
     }
 
-    const userAgent = inputUserAgent || (SCRIPT_HUB_LPX_URL_PATTERN.test(currentURL) ? SCRIPT_HUB_USER_AGENT : "");
+    const userAgent =
+      inputUserAgent ||
+      (SCRIPT_HUB_LPX_URL_PATTERN.test(currentURL)
+        ? SCRIPT_HUB_USER_AGENT
+        : "");
     showToast("请求中");
 
     let res = userAgent ? null : await sendReq("GET", currentURL);
@@ -2222,7 +2966,7 @@ async function loadUrlContent(inputUrl, inputUserAgent = "") {
     await nextTick();
 
     isSwitchingItem = true;
-    cmViewRef.value?.loadContent?.(content, {
+    await cmViewRef.value?.loadContent?.(content, {
       fileName,
       manualLanguage: "",
       skipHistory: true,
@@ -2325,7 +3069,9 @@ onMounted(async () => {
       console.error("读取最后打开项失败", error);
     }
 
-    let lastItem = lastId ? savedItems.value.find((item) => item.id === lastId) : null;
+    let lastItem = lastId
+      ? savedItems.value.find((item) => item.id === lastId)
+      : null;
     let lastContent = null;
     if (lastItem) {
       try {
@@ -2336,15 +3082,21 @@ onMounted(async () => {
     }
 
     if (lastItem) {
-      initialCode = typeof lastContent === "string" ? lastContent : EMPTY_CONTENT;
+      initialCode =
+        typeof lastContent === "string" ? lastContent : EMPTY_CONTENT;
       currentItemId.value = lastId;
       cmStore.setCurrentFileName(lastItem.name);
       cmStore.setManualLanguage(lastItem.manualLanguage || "");
       console.log("0 已默认载入最后打开的内容");
     } else if (savedItems.value.length > 0) {
-      const fallbackItem = [...savedItems.value].sort((a, b) => itemUpdatedAt(b) - itemUpdatedAt(a))[0];
-      const fallbackContent = await idbStorage.getItem(contentKey(fallbackItem.id));
-      initialCode = typeof fallbackContent === "string" ? fallbackContent : EMPTY_CONTENT;
+      const fallbackItem = [...savedItems.value].sort(
+        (a, b) => itemUpdatedAt(b) - itemUpdatedAt(a),
+      )[0];
+      const fallbackContent = await idbStorage.getItem(
+        contentKey(fallbackItem.id),
+      );
+      initialCode =
+        typeof fallbackContent === "string" ? fallbackContent : EMPTY_CONTENT;
       await setCurrentItem(fallbackItem.id, fallbackItem.name);
       cmStore.setManualLanguage(fallbackItem.manualLanguage || "");
       console.log("0 最后打开项不存在，已载入列表中的最近文件");
@@ -2418,16 +3170,21 @@ watch(showSaves, (visible) => {
 });
 
 function scrollToCurrentItem() {
-  const id = currentItemId.value;
+  scrollToSavedItem(currentItemId.value);
+}
+
+async function scrollToSavedItem(id) {
   if (!id || !savesListRef.value) return;
-  nextTick(() => {
-    const el = savesListRef.value.querySelector(".saves-item-current");
-    el?.scrollIntoView?.({ block: "nearest", behavior: "auto" });
-  });
+  await nextTick();
+  const el = [...savesListRef.value.querySelectorAll("[data-save-id]")].find(
+    (item) => item.dataset.saveId === id,
+  );
+  el?.scrollIntoView?.({ block: "nearest", behavior: "auto" });
 }
 
 function extractAndFormatUrl(rawUrl) {
-  const regex = /https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)/;
+  const regex =
+    /https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)/;
   const match = rawUrl.match(regex);
   if (match) {
     return `https://github.com/${match[1]}/${match[2]}/blob/${match[3]}/${match[4]}`;
@@ -2437,7 +3194,9 @@ function extractAndFormatUrl(rawUrl) {
 let _sandboxWorker = null;
 function getSandboxWorker() {
   if (!_sandboxWorker) {
-    const w = new Worker(new URL("./sandboxWorker.js", import.meta.url), { type: "module" });
+    const w = new Worker(new URL("./sandboxWorker.js", import.meta.url), {
+      type: "module",
+    });
     _sandboxWorker = { worker: w, pending: null };
     w.onmessage = (e) => {
       _sandboxWorker.pending?.resolve(e.data);
@@ -2467,7 +3226,8 @@ function executeInMainThread(code, onLog) {
       return function (arg) {
         if (arg === null) return "null";
         if (arg === undefined) return "undefined";
-        if (arg instanceof Error) return arg.stack || arg.name + ": " + arg.message;
+        if (arg instanceof Error)
+          return arg.stack || arg.name + ": " + arg.message;
         if (typeof arg === "object") {
           if (_visited.has(arg)) return "[circular]";
           _visited.add(arg);
@@ -2494,7 +3254,10 @@ function executeInMainThread(code, onLog) {
       dir: (obj) => emit(formatArg(obj)),
       table: (data) => {
         if (Array.isArray(data)) {
-          emit("[Table]\n" + data.map((row, i) => `  ${i}: ${formatArg(row)}`).join("\n"));
+          emit(
+            "[Table]\n" +
+              data.map((row, i) => `  ${i}: ${formatArg(row)}`).join("\n"),
+          );
         } else {
           emit("[Table]\n" + formatArg(data));
         }
@@ -2507,7 +3270,10 @@ function executeInMainThread(code, onLog) {
       },
       timeEnd: (label) => {
         const key = String(label);
-        const elapsed = timers[key] != null ? (performance.now() - timers[key]).toFixed(2) : "?";
+        const elapsed =
+          timers[key] != null
+            ? (performance.now() - timers[key]).toFixed(2)
+            : "?";
         emit(`${key}: ${elapsed} ms`);
         delete timers[key];
       },
@@ -2525,7 +3291,11 @@ function executeInMainThread(code, onLog) {
     var _savedConsole = window.console;
     window.console = mockConsole;
     try {
-      _execResult = (0, eval)("(async function(console){try{\n" + code + "\n}catch(e){try{console.error('[Uncaught] '+(e&&e.stack?e.stack:(e&&e.message?e.message:e)))}catch(_){}}})")(mockConsole);
+      _execResult = (0, eval)(
+        "(async function(console){try{\n" +
+          code +
+          "\n}catch(e){try{console.error('[Uncaught] '+(e&&e.stack?e.stack:(e&&e.message?e.message:e)))}catch(_){}}})",
+      )(mockConsole);
     } catch (e) {
       _execError = e;
     }
@@ -2631,7 +3401,8 @@ const goFunction = async () => {
       logAllReactive.value = "· (无输出)\n";
     }
   } catch (error) {
-    logAllReactive.value += "· [Exception] " + (error.message || "执行失败") + "\n";
+    logAllReactive.value +=
+      "· [Exception] " + (error.message || "执行失败") + "\n";
   }
 
   // 最终滚动到底部
@@ -2656,7 +3427,13 @@ const copyText = async (i) => {
 const updateEditorPageBackground = () => {
   if (isDarkModeEnabled.value) {
     const background = localStorage.getItem("EditorDarkBackground");
-    document.body.style.backgroundColor = ["#282c34", "#141414", "#000000"].includes(background) ? background : "#282c34";
+    document.body.style.backgroundColor = [
+      "#282c34",
+      "#141414",
+      "#000000",
+    ].includes(background)
+      ? background
+      : "#282c34";
     // document.documentElement.style.backgroundColor = "#282c34";
   } else {
     document.body.style.backgroundColor = "#f3f3f3";
@@ -2700,6 +3477,66 @@ onBeforeUnmount(() => {
   padding-top: 30px;
 }
 
+.edit-code-editor-toggle {
+  display: inline-block;
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.4;
+  cursor: pointer;
+}
+
+.edit-code-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  color: var(--text);
+}
+
+.edit-code-editor-add {
+  width: 30px;
+  height: 30px;
+  padding: 1px 0 5px 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1;
+  opacity: 0.55;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .edit-code-editor-add:hover {
+    background: #8f98c61a;
+    opacity: 0.9;
+  }
+}
+
+.edit-code-editor-add:active {
+  animation: edit-code-editor-add-press 300ms ease-out;
+}
+
+@keyframes edit-code-editor-add-press {
+  0% {
+    background: #8f98c61a;
+    opacity: 0.9;
+    transform: scale(0.9);
+  }
+  100% {
+    background: transparent;
+    opacity: 0.55;
+    transform: scale(1);
+  }
+}
+
 .saves-panel {
   /* width: 92%; */
   margin: 0 1% 4% 1%;
@@ -2740,11 +3577,16 @@ onBeforeUnmount(() => {
 .saves-btn {
   font-size: 13px;
   padding: 5px;
+  height: 29px;
+  line-height: 19px;
+  box-sizing: border-box;
   border-radius: 14px;
   border: 0px;
   background: #8f98c60e;
   color: var(--text);
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .saves-toolbar-actions {
@@ -2752,9 +3594,18 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   flex: 1 0 100%;
+  min-width: 0;
 }
 
-.saves-toolbar-search,
+.saves-toolbar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 4 1 0;
+  min-width: 0;
+  position: relative;
+}
+
 .saves-toolbar-filters {
   display: flex;
   align-items: center;
@@ -2765,7 +3616,7 @@ onBeforeUnmount(() => {
 .saves-search-input {
   flex: 1;
   min-width: 0;
-  padding: 6px 10px;
+  padding: 6px 76px 6px 10px;
   border: 0;
   border-radius: 14px;
   outline: none;
@@ -2774,7 +3625,17 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 
-.saves-search-status,
+.saves-search-status {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+  font-size: 12px;
+  opacity: 0.65;
+}
+
 .saves-filter-label {
   flex: 0 0 auto;
   font-size: 12px;
@@ -2807,10 +3668,37 @@ onBeforeUnmount(() => {
   display: inline-block;
   width: fit-content;
   margin-left: 5px;
-  padding: 1.5px 5px;
   margin-top: 2px;
   vertical-align: middle;
   opacity: 0.72;
+}
+
+.saves-item-tag {
+  display: inline-block;
+  margin-right: 3px;
+  padding: 1.5px 5px;
+  border-radius: 8px;
+  background: #8f98c61a;
+  color: var(--text);
+}
+
+.saves-item-tag:last-child {
+  margin-right: 0;
+}
+
+.saves-item-tag-gist {
+  background: rgba(211, 146, 74, 0.2);
+  color: #c27a2e;
+}
+
+.saves-item-tag-ch {
+  background: rgba(82, 118, 181, 0.2);
+  color: #5276b5;
+}
+
+.saves-item-tag-url {
+  background: rgba(67, 156, 113, 0.2);
+  color: #348d61;
 }
 
 .saves-item-child-count {
@@ -2975,6 +3863,7 @@ onBeforeUnmount(() => {
   white-space: normal;
   /* ★ 超长文件名/标签允许断行，避免撑出屏幕 */
   overflow-wrap: anywhere;
+  /* font-family: "SF Mono", "Fira Code", "Consolas", monospace; */
 }
 
 .saves-item-source {
@@ -2983,8 +3872,8 @@ onBeforeUnmount(() => {
   max-width: 100%;
   padding: 1px 5px;
   border-radius: 8px;
-  background: rgba(92, 125, 190, 0.16);
-  color: #5276b5;
+  background: rgba(211, 146, 74, 0.1);
+  color: #c27a2e9c;
   font-size: 9px;
   font-weight: 600;
   line-height: 1.1;
@@ -3010,6 +3899,7 @@ onBeforeUnmount(() => {
   /* ★ 长内容一律在容器内截断，防止超出屏幕 */
   max-width: 100%;
   min-width: 0;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
 }
 
 .saves-item-preview:has(.saves-url-line) {
@@ -3046,6 +3936,7 @@ onBeforeUnmount(() => {
 .saves-item-meta {
   margin-top: 2px;
   font-size: 10.5px;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
   opacity: 0.5;
 }
 
@@ -3541,22 +4432,22 @@ onBeforeUnmount(() => {
   .cmviewRef.saves-open {
     margin-left: var(--saves-width, 400px);
   } */
-.cmviewRef {
-  width: auto;
-  max-width: none;
-  min-width: 0;
-  margin: 0 2% 0 0;
-  box-sizing: border-box;
-}
+  .cmviewRef {
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    margin: 0 2% 0 0;
+    box-sizing: border-box;
+  }
 
-.cmviewRef.saves-open {
-  width: auto !important;
-  max-width: none !important;
-  min-width: 0;
-  margin-left: var(--saves-width, 400px);
-  margin-right: 0;
-  box-sizing: border-box;
-}
+  .cmviewRef.saves-open {
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0;
+    margin-left: var(--saves-width, 400px);
+    margin-right: 0;
+    box-sizing: border-box;
+  }
   /* 宽度拖拽手柄 + 1px 半透明分隔线 */
   .saves-vresize-handle {
     display: flex;

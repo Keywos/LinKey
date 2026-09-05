@@ -369,6 +369,7 @@ import undoimg from "@/img/svg/undo.svg";
 import { useTheme } from "@/hooks/theme";
 import { useCmStore } from "@/store/cmCodeStore.js";
 import { getCmSettings, CM_SETTINGS_EVENT } from "@/EditCode/editorSettings.js";
+import { documentMatchesContent } from "./documentSync.js";
 
 // ★ iOS 上滚动事件在惯性滚动期间会被浏览器降级/延迟调度，
 //   直接在 updateListener 里做 forceParsing 可能追不上；
@@ -934,9 +935,10 @@ let _skipNextFileRename = false;
 
 let lastAppliedFileName = "";
 let applyContentToEditor = null;
+let applyContentId = 0;
 
 defineExpose({
-  loadContent(content, options = {}) {
+  async loadContent(content, options = {}) {
     const { fileName, manualLanguage, skipHistory = true } = options;
     if (fileName !== undefined) {
       cmStore.setCurrentFileName(fileName);
@@ -947,7 +949,7 @@ defineExpose({
     }
     _skipNextHistory = skipHistory;
     const nextVal = content ?? "";
-    applyContentToEditor?.(nextVal);
+    return applyContentToEditor?.(nextVal);
   },
   skipNextLanguageSync() {
     _skipNextLangSync = true;
@@ -1014,14 +1016,17 @@ const flushStoreSync = () => {
     _storeSyncTimer = null;
   }
   if (_pendingStoreContent != null) {
-    docUpdate = true;
     const content =
       typeof _pendingStoreContent === "function"
         ? _pendingStoreContent()
         : _pendingStoreContent;
-    cmStore.setCmCode(content);
-    docUpdate = false;
     _pendingStoreContent = null;
+    docUpdate = true;
+    try {
+      cmStore.setCmCode(content);
+    } finally {
+      docUpdate = false;
+    }
   }
 };
 
@@ -1085,7 +1090,8 @@ const CreateView = () => {
           if (!update.docChanged || _chunkedLoading) return;
 
           // 仅文档真正改变时才复制整份文档到 store；滚动不是编辑。
-          debouncedStoreSync(() => update.state.doc.toString());
+          const document = update.state.doc;
+          debouncedStoreSync(() => document.toString());
           // 文档超过 4KB 且已识别出语言后，跳过无谓的重新探测。
           const docLen = update.state.doc.length;
           const needDetect =
@@ -1107,13 +1113,20 @@ const CreateView = () => {
     parent: viewRef.value,
   });
 
-  let applyContentId = 0;
-
   applyContentToEditor = async (nextValue) => {
     console.log("Code更新到文档");
     stopParseLoop(); // ★ 新内容替换旧文档时，先停掉旧的追赶循环
     if (!view) return;
     const currentId = ++applyContentId;
+    _chunkedLoading = false;
+    clearTimeout(_storeSyncTimer);
+    _storeSyncTimer = null;
+    _pendingStoreContent = null;
+    clearTimeout(syncTimer);
+    if (syncIdleId != null && typeof cancelIdleCallback !== "undefined") {
+      cancelIdleCallback(syncIdleId);
+      syncIdleId = null;
+    }
     editorLoading.value = true;
     try {
       const isLargeFile = isRuntimeLargeFile(nextValue.length);
@@ -1271,23 +1284,13 @@ const CreateView = () => {
     () => cmStore.CmCode,
     (newValue) => {
       const nextValue = newValue || "";
-      if (docUpdate) return; // 来自编辑器自身的更新，跳过
-
-      // ★ 大文件优化：先比较长度（O(1)），长度不同直接替换，避免 toString() 复制整个文档
-      const docLen = view.state.doc.length;
-      if (nextValue.length !== docLen) {
-        lastAppliedFileName = cmStore.currentFileName;
-        applyContentToEditor(nextValue);
-        return;
-      }
-
-      // 长度相同时才做完整比较（大于50KB长度相同认为内容相同，避免toString巨大开销）
-      if (nextValue.length === 0 && docLen === 0) return; // 都为空，跳过
-      if (docLen < 50000 && nextValue !== view.state.doc.toString()) {
+      if (docUpdate || !view) return;
+      if (!documentMatchesContent(view.state.doc, nextValue)) {
         lastAppliedFileName = cmStore.currentFileName;
         applyContentToEditor(nextValue);
       }
     },
+    { flush: "sync" },
   );
 
   // ★ 监听当前文件名切换，仅重新计算/同步语言，不再重新加载编辑器文档内容
@@ -1320,8 +1323,7 @@ const CreateView = () => {
   const existing = cmStore.CmCode;
   if (
     existing &&
-    (existing.length !== view.state.doc.length ||
-      (existing.length < 50000 && existing !== view.state.doc.toString()))
+    !documentMatchesContent(view.state.doc, existing)
   ) {
     lastAppliedFileName = cmStore.currentFileName;
     applyContentToEditor(existing);
@@ -1375,12 +1377,13 @@ const refreshEditorTheme = () => {
 };
 
 onBeforeUnmount(() => {
+  applyContentId++;
+  languageRequestId++;
+  applyContentToEditor = null;
+  flushStoreSync();
   stopParseLoop();
   clearLanguageDetectionTimer();
   clearTimeout(syncTimer);
-  clearTimeout(_storeSyncTimer);
-  _storeSyncTimer = null;
-  _pendingStoreContent = null;
   clearTimeout(replaceAllArmTimer);
   window.removeEventListener("resize", keepSearchFabInViewport);
   window.removeEventListener("resize", refreshEditorLayout);
@@ -1404,6 +1407,7 @@ onBeforeUnmount(() => {
   }
   // ★ 清理格式化 Worker
   if (formatWorker) {
+    rejectFormatWorkerRequests(new Error("编辑器已销毁"));
     formatWorker.terminate();
     formatWorker = null;
   }
@@ -1467,6 +1471,7 @@ const searchSheetStyle = computed(() => {
     transform: "none",
   };
 });
+let searchDispatchRafId = null;
 let searchSheetDragState = null;
 
 const clampSearchSheetPosition = (x, y) => {
@@ -1521,6 +1526,7 @@ const endSearchSheetDrag = () => {
 
 const startSearchSheetDrag = (e) => {
   if (e.button !== undefined && e.button !== 0) return;
+  if (e.target.closest("input, button, select, textarea")) return;
   initSearchSheetPos();
   searchSheetDragState = {
     startX: e.clientX,
@@ -1620,9 +1626,15 @@ const disarmReplaceAll = () => {
   replaceAllArmTimer = null;
 };
 
-const dispatchSearch = () => {
+const dispatchSearchNow = () => {
+  searchDispatchRafId = null;
   if (!view) return;
   view.dispatch({ effects: setSearchQuery.of(buildSearchQuery()) });
+};
+
+const dispatchSearch = () => {
+  if (searchDispatchRafId != null) return;
+  searchDispatchRafId = requestAnimationFrame(dispatchSearchNow);
 };
 
 const toggleCaseSensitive = () => {
@@ -1674,6 +1686,10 @@ const toggleSearch = () => {
 };
 
 const closeSearch = () => {
+  if (searchDispatchRafId != null) {
+    cancelAnimationFrame(searchDispatchRafId);
+    searchDispatchRafId = null;
+  }
   searchOpen.value = false;
   disarmReplaceAll();
   if (document.activeElement instanceof HTMLElement) {
@@ -1695,7 +1711,12 @@ const onSearchInput = () => {
 
 const onSearchEnter = (e) => {
   if (!canSearch.value || !view) return;
-  dispatchSearch();
+  if (searchDispatchRafId != null) {
+    cancelAnimationFrame(searchDispatchRafId);
+    dispatchSearchNow();
+  } else {
+    dispatchSearchNow();
+  }
   if (e.shiftKey) {
     cmFindPrev(view);
   } else {
@@ -1705,14 +1726,14 @@ const onSearchEnter = (e) => {
 
 const findNext = () => {
   if (canSearch.value && view) {
-    dispatchSearch();
+    dispatchSearchNow();
     cmFindNext(view);
   }
 };
 
 const findPrev = () => {
   if (canSearch.value && view) {
-    dispatchSearch();
+    dispatchSearchNow();
     cmFindPrev(view);
   }
 };
@@ -1720,14 +1741,14 @@ const findPrev = () => {
 const replaceNext = () => {
   if (canSearch.value && view) {
     disarmReplaceAll();
-    dispatchSearch();
+    dispatchSearchNow();
     cmReplaceNext(view);
   }
 };
 
 const replaceAll = () => {
   if (canSearch.value && view) {
-    dispatchSearch();
+    dispatchSearchNow();
     cmReplaceAll(view);
     disarmReplaceAll();
   }
@@ -1827,9 +1848,17 @@ function callFormatWorker(type, payload) {
   });
 }
 
+const rejectFormatWorkerRequests = (error) => {
+  for (const request of formatWorkerPending.values()) request.reject(error);
+  formatWorkerPending.clear();
+};
+
 async function doCompress() {
   if (isFormatting.value) return;
-  const code = cmStore.CmCode || "";
+  const currentView = view;
+  if (!currentView) return;
+  const sourceDocument = currentView.state.doc;
+  const code = sourceDocument.toString();
   if (!code) return;
   isFormatting.value = true;
   closeCompressDialog();
@@ -1854,6 +1883,8 @@ async function doCompress() {
         },
       },
     });
+    if (!currentView || currentView !== view || view.state.doc !== sourceDocument)
+      return;
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: result.code },
     });
@@ -1861,6 +1892,7 @@ async function doCompress() {
     const ms = (performance.now() - start).toFixed(1);
     showToast("已压缩 JS (" + ms + "ms)");
   } catch (e) {
+    if (currentView !== view) return;
     console.error(e);
     showToast("压缩失败: " + e.message);
   } finally {
@@ -1871,7 +1903,10 @@ async function doCompress() {
 // ★ 格式化 — 使用 Web Worker 中的 js-beautify
 async function doFormat() {
   if (isFormatting.value) return;
-  const code = cmStore.CmCode || "";
+  const currentView = view;
+  if (!currentView) return;
+  const sourceDocument = currentView.state.doc;
+  const code = sourceDocument.toString();
   if (!code) return;
   isFormatting.value = true;
   closeCompressDialog();
@@ -1885,6 +1920,8 @@ async function doFormat() {
       lang,
       options: { indent_size: 2 },
     });
+    if (!currentView || currentView !== view || view.state.doc !== sourceDocument)
+      return;
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: formatted },
     });
@@ -1892,6 +1929,7 @@ async function doFormat() {
     const ms = (performance.now() - start).toFixed(1);
     showToast("已格式化 (" + ms + "ms)");
   } catch (e) {
+    if (currentView !== view) return;
     console.error(e);
     showToast("格式化失败: " + (e.message || "未知错误"));
   } finally {
@@ -2003,6 +2041,10 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (searchDispatchRafId != null) {
+    cancelAnimationFrame(searchDispatchRafId);
+    searchDispatchRafId = null;
+  }
   window.removeEventListener(CM_SETTINGS_EVENT, handleSettingsChange);
 });
 </script>
@@ -2033,6 +2075,7 @@ onBeforeUnmount(() => {
 
 .cmviewRef {
   width: 100%;
+  /* height: 60dvh; */
   height: 120dvh;
   min-height: 0;
   display: flex;
