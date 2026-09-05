@@ -33,10 +33,10 @@
 
 
 
-.cmviewRef {
-  //   background-color: #fff;
-  border-radius: 16px;
-}
+// .cmviewRef {
+//   //   background-color: #fff;
+//   border-radius: 16px;
+// }
 
 // @media (prefers-color-scheme: dark) {
 //   .cmviewRef {
@@ -394,26 +394,40 @@ input[type="checkbox"]:checked {
   min-width: max-content;
 }
 
-.cm-collapse-btn {
-  display: grid;
-  place-items: center;
-  flex: 0 0 31px;
-  width: 31px;
-  height: 34px;
-  margin-right: 10px;
-  margin-left: auto;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  border-radius: 10px;
-  transition: background 0.2s;
-  opacity: 0.7;
-}
-.cm-collapse-btn:hover {
-  background: rgba(128, 128, 128, 0.1);
-}
+// .cm-collapse-btn {
+//   display: grid;
+//   place-items: center;
+//   flex: 0 0 31px;
+//   width: 31px;
+//   height: 34px;
+//   margin-right: 10px;
+//   margin-left: auto;
+//   padding: 0;
+//   border: none;
+//   background: transparent;
+//   color: var(--text);
+//   cursor: pointer;
+//   border-radius: 10px;
+//   transition: background 0.2s;
+//   opacity: 0.7;
+//    -webkit-tap-highlight-color: transparent;
+// }
+// .cm-collapse-btn:hover {
+//   background: rgba(128, 128, 128, 0.1);
+// }
+
+/* 只有真正支持 hover 的设备才显示 hover 高亮 */
+// @media (hover: hover) and (pointer: fine) {
+//   .cm-collapse-btn:hover {
+//     background: rgba(128, 128, 128, 0.1);
+//   }
+// }
+
+/* 点击时才显示高亮 */
+// .cm-collapse-btn:active {
+//   background: rgba(128, 128, 128, 0.1);
+//   transform: scale(0.8);
+// }
 
 /* ★ 折叠按钮图标（放在媒体查询外，保证宽屏也显示） */
 .cm-toolbar-more {
@@ -455,35 +469,36 @@ input[type="checkbox"]:checked {
     color: var(--text);
   }
 
-  .cm-collapse-btn {
-    position: relative;
-    z-index: 2;
-    display: grid;
-    place-items: center;
-    align-self: stretch;
-    margin-right: 10px;
-    margin-left: auto;
-    width: 31px;
-    height: 34px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    color: var(--text);
-    cursor: pointer;
-    border-radius: 50%;
-    opacity: 0.7;
-    transition:
-      background 0.2s,
-      transform 0.2s;
-  }
+  // .cm-collapse-btn {
+  //   position: relative;
+  //   z-index: 2;
+  //   display: grid;
+  //   place-items: center;
+  //   align-self: stretch;
+  //   margin-right: 10px;
+  //   margin-left: auto;
+  //   width: 34px;
+  //   height: 34px;
+  //   padding: 0;
+  //   border: none;
+  //   background: transparent;
+  //   color: var(--text);
+  //   cursor: pointer;
+  //   border-radius: 50%;
+  //   opacity: 0.7;
+  //   transition:
+  //     background 0.2s,
+  //     transform 0.2s;
+  // }
 
-  .cm-collapse-btn:hover {
-    background: rgba(128, 128, 128, 0.1);
-  }
+  // .cm-collapse-btn:hover {
+  //   background: rgba(128, 128, 128, 0.1);
+  // }
 
-  .cm-collapse-btn:active {
-    transform: scale(0.8);
-  }
+  // .cm-collapse-btn:active {
+  //   transform: scale(0.8);
+  // }
+ 
 
   .cm-toolbar-row {
     display: flex;
@@ -1103,71 +1118,4 @@ input[type="checkbox"]:checked {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.463);
   }
 }
-/* 不要用超大 min-height 把编辑器撑到 body；滚动必须属于 CmView 内部。 */
-.cmviewRef {
-  width: 100%;
-  max-width: 100%;
-  /*
-   * 优先填满父容器；父容器没有明确高度时至少占满当前 iOS 视口。
-   * 仅使用 100dvh 会让嵌入在更高容器中的 CmView 看起来偏矮。
-   */
-  // height: max(100%, 100dvh);
-  // min-height: max(100%, 100dvh);
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  overflow: hidden;
-  position: relative;
-}
-
-.cmviewRef > .cmview-editor-host {
-  flex: 1 1 0;
-  width: 100% !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  height: auto !important;
-  max-height: none !important;
-  overflow: hidden !important;
-}
-
-.cmviewRef > .cm-toolbar-row--locked-y {
-  position: relative;
-  top: auto;
-  left: auto;
-  right: auto;
-  flex: 0 0 40px;
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  overflow-y: hidden !important;
-  overscroll-behavior-y: none;
-  touch-action: pan-x;
-}
-
-.cmviewRef > .cm-toolbar-row--locked-y .cm-toolbar-wrapper,
-.cmviewRef > .cm-toolbar-row--locked-y .cm-img-button {
-  flex: 1 1 auto;
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  height: 40px;
-  min-height: 40px;
-  max-height: 40px;
-  box-sizing: border-box;
-  overflow-y: hidden !important;
-}
-
-.cmviewRef .cm-editor {
-  min-height: 0 !important;
-  height: 100% !important;
-  max-height: 100% !important;
-}
-
-.cmviewRef .cm-scroller {
-  min-height: 0 !important;
-  height: 100% !important;
-  max-height: 100% !important;
-}
-
-  //  cmview scss 2
+  

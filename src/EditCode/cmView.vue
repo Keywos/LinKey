@@ -2,7 +2,7 @@
   <div class="cmviewRef">
     <div class="cm-toolbar-row cm-toolbar-row--locked-y">
       <!-- 展开态：完整工具栏 -->
-      <div v-if="!collapsed" class="cm-toolbar-wrapper">
+      <div class="cm-toolbar-wrapper">
         <div class="cm-img-button">
           <div>
             <div class="editor-background-select-wrap">
@@ -45,35 +45,21 @@
             </div>
             <button @click="undoCode"><img :src="undoimg" /></button>
             <button @click="redoCode"><img :src="redoimg" /></button>
-            <button @click="formatCode" title="JS 选项">
+            <button title="JS 压缩 / 格式化" @click="formatCode">
               <img :src="format" />
             </button>
-            <button @click="copyText"><img :src="copyimg" /></button>
-            <button @click="delAllCode"><img :src="del" /></button>
-            <button @click="pasteNav"><img :src="paste" /></button>
+            <button title="复制" @click="copyText">
+              <img :src="copyimg" />
+            </button>
+            <button title="清空" @click="delAllCode"><img :src="del" /></button>
+            <button title="粘贴" @click="pasteNav"><img :src="paste" /></button>
+
+            <button title="回到最上方" @click="scrollToTop">
+              <img :src="upsvg" />
+            </button>
           </div>
         </div>
       </div>
-      <button
-        class="cm-collapse-btn"
-        :class="{ 'is-collapsed': collapsed }"
-        type="button"
-        :title="collapsed ? '展开工具栏' : '折叠工具栏'"
-        :aria-label="collapsed ? '展开工具栏' : '折叠工具栏'"
-        @click="toggleCollapsed"
-      >
-        <span class="cm-toolbar-more" aria-hidden="true">
-          <svg
-            class="icon"
-            viewBox="0 0 1024 1024"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M203.1 599.3c-48.9 0-88.6-39.6-88.6-88.5s39.6-88.5 88.6-88.5c48.9 0 88.6 39.6 88.6 88.5-0.1 48.9-39.7 88.5-88.6 88.5z m309.9 0c-48.9 0-88.6-39.6-88.6-88.5s39.6-88.5 88.6-88.5c48.9 0 88.6 39.6 88.6 88.5s-39.7 88.5-88.6 88.5z m309.9 0c-48.9 0-88.6-39.6-88.6-88.5s39.6-88.5 88.6-88.5c48.9 0 88.6 39.6 88.6 88.5s-39.6 88.5-88.6 88.5z"
-            />
-          </svg>
-        </span>
-      </button>
     </div>
 
     <Teleport to="body">
@@ -375,6 +361,7 @@ import { showToast } from "vant";
 import copyimg from "@/img/svg/copy.svg";
 import del from "@/img/svg/del.svg";
 import paste from "@/img/svg/zt.svg";
+import upsvg from "@/img/svg/up.svg";
 // import searchimg from "@/img/svg/search.svg";
 import format from "@/img/svg/format.svg";
 import redoimg from "@/img/svg/redo.svg";
@@ -571,6 +558,7 @@ const props = defineProps({
 });
 
 const viewRef = ref(null);
+
 const langs = new Compartment();
 const editorTheme = new Compartment();
 const shikiSyntax = new Compartment();
@@ -825,7 +813,10 @@ const syncLanguageForDocument = async (docContent, force = false) => {
       // 头部 32KB 采样，避免对巨大文档做全量正则检测
       let sample = "";
       if (typeof docContent === "string") {
-        sample = docContent.length > 32 * 1024 ? docContent.slice(0, 32 * 1024) : docContent;
+        sample =
+          docContent.length > 32 * 1024
+            ? docContent.slice(0, 32 * 1024)
+            : docContent;
       } else if (view) {
         sample = view.state.doc.sliceString(0, 32 * 1024);
       }
@@ -986,9 +977,9 @@ let _pendingStoreContent = null;
 const iosScrollStabilityTheme = EditorView.theme({
   "&": {
     // 高度由外层 cmview-editor-host 提供，编辑器本身填满宿主。
-    height: "100%",
+    // height: "100%",
     minHeight: 0,
-    maxHeight: "100%",
+    // maxHeight: "100%",
     minWidth: 0,
     display: "flex",
     flexDirection: "column",
@@ -998,8 +989,8 @@ const iosScrollStabilityTheme = EditorView.theme({
     // 关键：让滚动条属于 CmView 内部，而不是 body/页面右侧。
     flex: "1 1 0",
     minHeight: 0,
-    height: "100%",
-    maxHeight: "100%",
+    // height: "100%",
+    // maxHeight: "100%",
     minWidth: 0,
     overflowY: "scroll",
     overflowX: "auto",
@@ -1127,8 +1118,7 @@ const CreateView = () => {
     try {
       const isLargeFile = isRuntimeLargeFile(nextValue.length);
       const needChunked =
-        nextValue.length > CHUNKED_LOAD_THRESHOLD ||
-        (IS_IOS && isLargeFile);
+        nextValue.length > CHUNKED_LOAD_THRESHOLD || (IS_IOS && isLargeFile);
 
       // ★ 1. 只决定目标语言，不在这里 applyLanguage（此时 view 里还是旧文档）
       let lockedLang = null;
@@ -1419,8 +1409,8 @@ onBeforeUnmount(() => {
   }
 });
 
-const collapsed = ref(localStorage.getItem("cm_collapsed") === "true");
-watch(collapsed, (v) => localStorage.setItem("cm_collapsed", v));
+// const collapsed = ref(localStorage.getItem("cm_collapsed") === "true");
+// watch(collapsed, (v) => localStorage.setItem("cm_collapsed", v));
 const searchOpen = ref(false);
 const replaceOpen = ref(false);
 const searchQuery = ref("");
@@ -1957,8 +1947,17 @@ const pasteNav = async () => {
 // const onCollapseClick = () => {
 //   collapsed.value = true;
 // };
-const toggleCollapsed = () => {
-  collapsed.value = !collapsed.value;
+// const toggleCollapsed = () => {
+//   collapsed.value = !collapsed.value;
+// };
+
+const scrollToTop = () => {
+  if (!view) return;
+  view.scrollDOM.scrollTop = 1;
+  view.dispatch({
+    selection: { anchor: 0 },
+    effects: EditorView.scrollIntoView(0, { y: "start" }),
+  });
 };
 
 // ★ 监听设置变更事件，实时重配 Compartment
@@ -2020,9 +2019,6 @@ onBeforeUnmount(() => {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  overflow-y: hidden !important;
-  overscroll-behavior-y: none;
-  touch-action: pan-x;
 }
 
 .cmviewRef > .cm-toolbar-row--locked-y .cm-toolbar-wrapper {
@@ -2033,62 +2029,174 @@ onBeforeUnmount(() => {
   height: 40px;
   min-height: 40px;
   max-height: 40px;
-  overflow-y: hidden !important;
-  overscroll-behavior-y: none;
 }
 
-/* CmView 自己占满视口，页面 body 不再承担编辑器滚动。 */
 .cmviewRef {
   width: 100%;
-  max-width: 100%;
-  height: 100dvh;
-  min-height: 100dvh;
-  min-width: 0;
+  height: 120dvh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  overflow: hidden;
-  position: relative;
+}
+
+.cmviewRef > .cm-toolbar-row--locked-y {
+  flex: 0 0 40px;
 }
 
 .cmviewRef > .cmview-editor-host {
   flex: 1 1 0;
-  width: 100% !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
-  height: auto !important;
-  max-height: none !important;
-  overflow: hidden !important;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.cmviewRef > .cm-toolbar-row--locked-y .cm-toolbar-wrapper,
-.cmviewRef > .cm-toolbar-row--locked-y .cm-img-button {
-  flex: 1 1 auto;
+.cmviewRef :deep(.cm-editor) {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
+.cmviewRef :deep(.cm-scroller) {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+}
+.cmviewRef > .cmview-editor-host {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cmviewRef :deep(.cm-scroller) {
+  overflow-y: auto;
+  overscroll-behavior-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cmviewRef {
+  display: flex;
+  flex: 1 1 0;
+  flex-basis: 0;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  box-sizing: border-box;
+}
+
+.cmviewRef > .cm-toolbar-row {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cmviewRef > .cm-toolbar-row--locked-y {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cmviewRef > .cm-toolbar-row--locked-y > .cm-toolbar-wrapper {
+  flex: 1 1 0;
+  flex-basis: 0;
   width: 100%;
   min-width: 0;
   max-width: 100%;
   height: 40px;
   min-height: 40px;
   max-height: 40px;
+}
+
+.cmviewRef > .cmview-editor-host {
+  flex: 1 1 0;
+  flex-basis: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  min-height: 0;
   box-sizing: border-box;
-  overflow-y: hidden !important;
 }
 
 .cmviewRef :deep(.cm-editor) {
-  min-height: 0 !important;
-  height: 1000px !important;
-  /* 100% !important; */
-  max-height: 1000px !important;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .cmviewRef :deep(.cm-scroller) {
-  min-height: 0 !important;
-  height:1000px !important;
-  max-height: 1000px !important;
-}
-.cmviewRef {
-  height: 130dvh;
-  min-height: 130dvh;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
+.cmviewRef > .cm-toolbar-row--locked-y .cm-img-button {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 40px;
+  min-height: 40px;
+  box-sizing: border-box;
+  justify-content: flex-start;
+  padding: 5px 7px;
+  cursor: grab;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+}
+
+.cmviewRef > .cm-toolbar-row--locked-y .cm-img-button.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.cmviewRef > .cm-toolbar-row--locked-y .cm-img-button > div:first-child {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  /* 内容不足一行时右对齐；内容超出时仍从左侧开始滚动 */
+  justify-content: flex-end;
+  width: max-content;
+  min-width: 100%;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.cmviewRef > .cm-toolbar-row--locked-y .cm-img-button button,
+.cmviewRef > .cm-toolbar-row--locked-y .editor-background-select-wrap {
+  flex: 0 0 auto;
+}
+
+.cmviewRef > .cm-toolbar-row--locked-y .cm-img-button::-webkit-scrollbar {
+  display: block;
+  height: 5px;
+}
+
+.cmviewRef > .cm-toolbar-row--locked-y .cm-img-button::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.45);
+  border-radius: 5px;
+}
+
+@media (hover: none) {
+  .cmviewRef > .cm-toolbar-row--locked-y .cm-img-button {
+    scrollbar-width: none;
+  }
+
+  .cmviewRef > .cm-toolbar-row--locked-y .cm-img-button::-webkit-scrollbar {
+    display: none;
+  }
+}
 </style>

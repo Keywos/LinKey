@@ -3534,14 +3534,29 @@ onBeforeUnmount(() => {
     display: none; /* 侧边栏固定全高，无需垂直拖拽手柄 */
   }
 
-  .cmviewRef {
+  /* .cmviewRef {
     margin: 0 2% 0 0;
     transition: margin-left 0.2s ease;
   }
   .cmviewRef.saves-open {
     margin-left: var(--saves-width, 400px);
-  }
+  } */
+.cmviewRef {
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  margin: 0 2% 0 0;
+  box-sizing: border-box;
+}
 
+.cmviewRef.saves-open {
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0;
+  margin-left: var(--saves-width, 400px);
+  margin-right: 2%;
+  box-sizing: border-box;
+}
   /* 宽度拖拽手柄 + 1px 半透明分隔线 */
   .saves-vresize-handle {
     display: flex;
