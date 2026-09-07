@@ -8,24 +8,77 @@
       <van-cell title="重置 首页 快捷方式缓存" @click="reHome()" is-link />
     </van-cell-group>
 
+    <van-cell-group inset title="Code Hub CF 云同步">
+      <van-field
+        v-model="codeHubSyncUrl"
+        label="Worker 地址"
+        placeholder="https://xxx.workers.dev"
+        clearable
+      />
+      <van-field
+        v-model="codeHubSyncToken"
+       
+        label="访问令牌"
+        placeholder="Worker SYNC_TOKEN 鉴权"
+        clearable
+      />
+      <van-field
+        v-model="codeHubSyncKey"
+        
+        label="加密密钥"
+        placeholder="本地端到端加解密密钥"
+        clearable
+      />
+      <van-cell title="保存配置" is-link @click="saveCodeHubSyncConfig" />
+    </van-cell-group>
+    <div style="padding: 0 22px; opacity: 0.6; font-size: 12px">
+      <p>
+        令牌用于请求 Worker
+        接口；加密密钥仅在本地用于数据解密与加密，不经过网络传输，实现真正的零知识加密
+      </p>
+      <p>本地端到端加解密密钥 (选填，留空默认同令牌)</p>
+    </div>
+
     <van-cell-group inset title="默认启动页设置">
-      <van-field v-model="fieldValue" is-link readonly label="首页" placeholder="选择启动页" @click="showPicker = true" />
+      <van-field
+        v-model="fieldValue"
+        is-link
+        readonly
+        label="首页"
+        placeholder="选择启动页"
+        @click="showPicker = true"
+      />
       <van-popup v-model:show="showPicker" round position="bottom">
-        <van-picker :columns="columns" @cancel="showPicker = false" @confirm="onConfirm" />
+        <van-picker
+          :columns="columns"
+          @cancel="showPicker = false"
+          @confirm="onConfirm"
+        />
       </van-popup>
-    <!-- </van-cell-group>
+      <!-- </van-cell-group>
     <van-cell-group inset title="界面设置"> -->
-      <van-cell class="van-cell-sw" center title="隐藏页面返回按钮" label="关闭后，带返回功能的页面左下角不显示返回按钮">
+      <van-cell
+        class="van-cell-sw"
+        center
+        title="隐藏页面返回按钮"
+        label="关闭后，带返回功能的页面左下角不显示返回按钮"
+      >
         <template #right-icon>
           <van-switch v-model="hideBackButton" @change="setHideBackButton" />
         </template>
       </van-cell>
     </van-cell-group>
     <van-cell-group inset title="搜索引擎快捷切换">
-      <van-cell title="选择搜索框下方显示的引擎" label="可在首页搜索框下方点击切换，也可以拖动排序" />
+      <van-cell
+        title="选择搜索框下方显示的引擎"
+        label="可在首页搜索框下方点击切换，也可以拖动排序"
+      />
       <van-cell v-for="item in searchEngines" :key="item" :title="item" center>
         <template #right-icon>
-          <van-switch :model-value="searchTabs.includes(item)" @update:model-value="(enabled) => toggleSearchEngine(item, enabled)" />
+          <van-switch
+            :model-value="searchTabs.includes(item)"
+            @update:model-value="(enabled) => toggleSearchEngine(item, enabled)"
+          />
         </template>
       </van-cell>
     </van-cell-group>
@@ -52,7 +105,11 @@
       <van-cell title="添加快捷方式" is-link @click="openAddShortcut" />
     </van-cell-group> -->
 
-    <AddShortcut v-model:show="showShortcutPopup" :card="editingShortcut" @saved="onShortcutSaved" />
+    <AddShortcut
+      v-model:show="showShortcutPopup"
+      :card="editingShortcut"
+      @saved="onShortcutSaved"
+    />
 
     <!-- <van-cell-group inset title="编辑器主题">
       <van-field class="editor-theme-field" label="背景颜色">
@@ -67,25 +124,65 @@
     </van-cell-group> -->
 
     <van-cell-group inset title="Gist 相关设置" id="Gistsetting">
-      <van-field v-model="username" type="textarea" rows="1" label="" :readonly="isreadonlysName" :autosize="{ maxHeight: 50, minHeight: 10 }" placeholder="请输入 Name" id="keyfroms">
+      <van-field
+        v-model="username"
+        type="textarea"
+        rows="1"
+        label=""
+        :readonly="isreadonlysName"
+        :autosize="{ maxHeight: 50, minHeight: 10 }"
+        placeholder="请输入 Name"
+        id="keyfroms"
+      >
         <template #button>
-          <van-button v-if="!iseditsname" size="small" type="primary" @click="editisn">编辑</van-button>
+          <van-button
+            v-if="!iseditsname"
+            size="small"
+            type="primary"
+            @click="editisn"
+            >编辑</van-button
+          >
 
           <div v-else>
             &nbsp;
-            <van-button size="small" type="primary" @click="saveisn">保存</van-button>
+            <van-button size="small" type="primary" @click="saveisn"
+              >保存</van-button
+            >
           </div>
         </template>
       </van-field>
 
-      <van-field v-model="gistid" type="textarea" rows="1" label="" :readonly="isreadonlys" :autosize="{ maxHeight: 50, minHeight: 10 }" placeholder="请输入 Token" id="keyfroms">
+      <van-field
+        v-model="gistid"
+        type="textarea"
+        rows="1"
+        label=""
+        :readonly="isreadonlys"
+        :autosize="{ maxHeight: 50, minHeight: 10 }"
+        placeholder="请输入 Token"
+        id="keyfroms"
+      >
         <template #button>
-          <van-button v-if="!isedits" size="small" type="primary" @click="editis">编辑</van-button>
+          <van-button
+            v-if="!isedits"
+            size="small"
+            type="primary"
+            @click="editis"
+            >编辑</van-button
+          >
           <div v-else>
-            <van-button v-if="isclearbutton" size="small" type="primary" @click="cleartks()">清空</van-button>
+            <van-button
+              v-if="isclearbutton"
+              size="small"
+              type="primary"
+              @click="cleartks()"
+              >清空</van-button
+            >
             &nbsp;
 
-            <van-button size="small" type="primary" @click="saveis">保存</van-button>
+            <van-button size="small" type="primary" @click="saveis"
+              >保存</van-button
+            >
           </div>
         </template>
       </van-field>
@@ -152,25 +249,37 @@
 
       <van-cell class="van-cell-sw" center title="启用链接装饰" inset>
         <template #right-icon>
-          <van-switch v-model="enableHyperlink" @change="onEnableHyperlinkChange" />
+          <van-switch
+            v-model="enableHyperlink"
+            @change="onEnableHyperlinkChange"
+          />
         </template>
       </van-cell>
 
       <van-cell class="van-cell-sw" center title="启用自动补全" inset>
         <template #right-icon>
-          <van-switch v-model="enableAutocomplete" @change="onEnableAutocompleteChange" />
+          <van-switch
+            v-model="enableAutocomplete"
+            @change="onEnableAutocompleteChange"
+          />
         </template>
       </van-cell>
 
       <van-cell class="van-cell-sw" center title="启用括号匹配" inset>
         <template #right-icon>
-          <van-switch v-model="enableBracketMatching" @change="onEnableBracketMatchingChange" />
+          <van-switch
+            v-model="enableBracketMatching"
+            @change="onEnableBracketMatchingChange"
+          />
         </template>
       </van-cell>
 
       <van-cell class="van-cell-sw" center title="启用自动闭合" inset>
         <template #right-icon>
-          <van-switch v-model="enableCloseBrackets" @change="onEnableCloseBracketsChange" />
+          <van-switch
+            v-model="enableCloseBrackets"
+            @change="onEnableCloseBracketsChange"
+          />
         </template>
       </van-cell>
     </van-cell-group>
@@ -216,6 +325,11 @@ import { sendReq } from "@/http/http.js";
 import { showConfirmDialog, showToast } from "vant";
 import { useGistStore } from "@/store/gistStore";
 import { codehubStorage, GIST_LIST_KEY } from "@/storage/codehubStorage.js";
+import {
+  CODEHUB_SYNC_KEY_KEY,
+  CODEHUB_SYNC_TOKEN_KEY,
+  CODEHUB_SYNC_URL_KEY,
+} from "@/storage/codehubSync.js";
 // import { defaultHomeCards, getHomeCards, saveHomeCards } from "@/homeCards.js";
 import AddShortcut from "@/AddShortcut.vue";
 import {
@@ -226,6 +340,21 @@ import {
 } from "@/EditCode/editorSettings.js";
 
 const useGStore = useGistStore();
+const codeHubSyncUrl = ref(localStorage.getItem(CODEHUB_SYNC_URL_KEY) || "");
+const codeHubSyncToken = ref(
+  localStorage.getItem(CODEHUB_SYNC_TOKEN_KEY) || "",
+);
+const codeHubSyncKey = ref(localStorage.getItem(CODEHUB_SYNC_KEY_KEY) || "");
+const saveCodeHubSyncConfig = () => {
+  localStorage.setItem(
+    CODEHUB_SYNC_URL_KEY,
+    codeHubSyncUrl.value.trim().replace(/\/$/, ""),
+  );
+  localStorage.setItem(CODEHUB_SYNC_TOKEN_KEY, codeHubSyncToken.value);
+  localStorage.setItem(CODEHUB_SYNC_KEY_KEY, codeHubSyncKey.value);
+  window.dispatchEvent(new Event("codehub-sync-config-change"));
+  showToast("配置已保存");
+};
 // const homeCards = ref(getHomeCards());
 const showShortcutPopup = ref(false);
 const editingShortcut = ref(null);
@@ -233,13 +362,19 @@ const editingShortcut = ref(null);
 const hideBackButton = ref(localStorage.getItem("HideBackButton") === "1");
 const setHideBackButton = (value) => {
   localStorage.setItem("HideBackButton", value ? "1" : "0");
-  window.dispatchEvent(new CustomEvent("back-button-visibility-change", { detail: { hidden: value } }));
+  window.dispatchEvent(
+    new CustomEvent("back-button-visibility-change", {
+      detail: { hidden: value },
+    }),
+  );
 };
 const searchEngines = ["Bing", "Google", "Baidu", "GitHub", "BiliBili"];
 const getSearchTabs = () => {
   try {
     const saved = JSON.parse(localStorage.getItem("SearchTabSort") || "null");
-    return Array.isArray(saved) ? saved.filter((item) => searchEngines.includes(item)) : searchEngines.slice(0, 3);
+    return Array.isArray(saved)
+      ? saved.filter((item) => searchEngines.includes(item))
+      : searchEngines.slice(0, 3);
   } catch {
     return searchEngines.slice(0, 3);
   }
@@ -364,10 +499,14 @@ const saveis = async () => {
         t: tk,
       };
       showToast("请求验证中...");
-      const res = await sendReq("GET", `https://api.github.com/users/${username.value}/gists`, {
-        Authorization: `token ${tk}`,
-        Accept: "application/vnd.github.v3+json",
-      });
+      const res = await sendReq(
+        "GET",
+        `https://api.github.com/users/${username.value}/gists`,
+        {
+          Authorization: `token ${tk}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      );
       if (res.status === 200) {
         LocalGetToken = tkobj;
         localStorage.setItem("GistUserT", JSON.stringify(tkobj));
@@ -377,7 +516,9 @@ const saveis = async () => {
         window.dispatchEvent(new Event("gist-credentials-change"));
         showToast("保存成功");
       } else {
-        showToast("验证失败, 用户名 或 Token 错误; 服务器返回状态码" + res.status);
+        showToast(
+          "验证失败, 用户名 或 Token 错误; 服务器返回状态码" + res.status,
+        );
       }
     } else {
       localStorage.removeItem("GistUserT");
@@ -406,12 +547,17 @@ const setBGC = (value) => setStoredBoolean("ISBGC", value);
 const autoGistlocal = ref(getStoredBoolean("LocalGistRe", true));
 const setGistautolocal = (value) => {
   setStoredBoolean("LocalGistRe", value);
-  window.dispatchEvent(new CustomEvent("gist-local-cache-setting-change", { detail: { enabled: value } }));
+  window.dispatchEvent(
+    new CustomEvent("gist-local-cache-setting-change", {
+      detail: { enabled: value },
+    }),
+  );
 };
 
 const autoISBGC = ref(getStoredBoolean("ISBGC"));
 const autoGistlocala = ref(getStoredBoolean("LocalGistResTure", true));
-const setGistautolocala = (value) => setStoredBoolean("LocalGistResTure", value);
+const setGistautolocala = (value) =>
+  setStoredBoolean("LocalGistResTure", value);
 
 // 编辑器自定义设置
 const initialCmSettings = getCmSettings();
@@ -425,21 +571,30 @@ const enableCloseBrackets = ref(initialCmSettings.enableCloseBrackets);
 
 const onHighlightThresholdChange = () => {
   const val = parseFloat(highlightThreshold.value);
-  const finalVal = isNaN(val) || val <= 0 ? CM_SETTINGS_DEFAULTS[CM_SETTINGS_KEYS.HIGHLIGHT_THRESHOLD] : val;
+  const finalVal =
+    isNaN(val) || val <= 0
+      ? CM_SETTINGS_DEFAULTS[CM_SETTINGS_KEYS.HIGHLIGHT_THRESHOLD]
+      : val;
   highlightThreshold.value = finalVal;
   setCmSetting(CM_SETTINGS_KEYS.HIGHLIGHT_THRESHOLD, finalVal);
 };
 
 const onLinewrapThresholdChange = () => {
   const val = parseFloat(linewrapThreshold.value);
-  const finalVal = isNaN(val) || val <= 0 ? CM_SETTINGS_DEFAULTS[CM_SETTINGS_KEYS.LINEWRAP_THRESHOLD] : val;
+  const finalVal =
+    isNaN(val) || val <= 0
+      ? CM_SETTINGS_DEFAULTS[CM_SETTINGS_KEYS.LINEWRAP_THRESHOLD]
+      : val;
   linewrapThreshold.value = finalVal;
   setCmSetting(CM_SETTINGS_KEYS.LINEWRAP_THRESHOLD, finalVal);
 };
 
 const onFoldIndentThresholdChange = () => {
   const val = parseFloat(foldIndentThreshold.value);
-  const finalVal = isNaN(val) || val <= 0 ? CM_SETTINGS_DEFAULTS[CM_SETTINGS_KEYS.FOLD_INDENT_THRESHOLD] : val;
+  const finalVal =
+    isNaN(val) || val <= 0
+      ? CM_SETTINGS_DEFAULTS[CM_SETTINGS_KEYS.FOLD_INDENT_THRESHOLD]
+      : val;
   foldIndentThreshold.value = finalVal;
   setCmSetting(CM_SETTINGS_KEYS.FOLD_INDENT_THRESHOLD, finalVal);
 };
@@ -462,7 +617,12 @@ const onEnableCloseBracketsChange = (val) => {
 
 const reHome = async () => {
   const resetHomeData = () => {
-    const keys = ["HomePageSort", "HomePageCards", "HomeIconTileOrder","HomeSpecialIcons"];
+    const keys = [
+      "HomePageSort",
+      "HomePageCards",
+      "HomeIconTileOrder",
+      "HomeSpecialIcons",
+    ];
 
     if (!confirm("确定要清空首页卡片排序和配置吗？")) {
       return;
@@ -496,7 +656,9 @@ const rePwa = async () => {
     localStorage.removeItem("HomePageSort");
     if ("serviceWorker" in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(registrations.map((registration) => registration.unregister()));
+      await Promise.all(
+        registrations.map((registration) => registration.unregister()),
+      );
     }
 
     if ("caches" in window) {

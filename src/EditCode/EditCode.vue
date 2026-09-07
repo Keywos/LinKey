@@ -12,378 +12,232 @@
         margin-top: -10px;
       "
     >
-    <span
-      class="edit-code-editor-title"
-      style="opacity: 0.6"
-      @click="goFunction()"
-      >Code Hub</span
-    >
-    <span class="edit-code-editor-toggle" @click.stop="toggleSaves">{{
-      showSaves ? "▴" : "▾"
-    }}</span>
-    <div class="edit-code-editor-actions">
-      <button
-        class="edit-code-editor-add"
-        type="button"
-        title="新建"
-        aria-label="新建"
-        @click.stop="createNewBlank"
+      <span
+        class="edit-code-editor-title"
+        style="opacity: 0.6"
+        @click="goFunction()"
+        >Code Hub</span
       >
-        +
-      </button>
-    </div>
+      <span class="edit-code-editor-toggle" @click.stop="toggleSaves">{{
+        showSaves ? "▴" : "▾"
+      }}</span>
+      <div class="edit-code-editor-actions">
+        <button
+          class="edit-code-editor-add"
+          type="button"
+          title="新建"
+          aria-label="新建"
+          @click.stop="createNewBlank"
+        >
+          +
+        </button>
+      </div>
     </h2>
 
     <!-- 保存列表面板 -->
     <div v-if="showSaves" class="saves-panel">
-    <div class="saves-body" :style="{ height: savesPanelHeight + 'px' }">
-      <div class="saves-toolbar">
-        <button class="saves-btn" @click="toggleToolbar">
-          {{ toolbarExpanded ? "折叠" : "展开" }}
-        </button>
-        <!-- <button class="saves-btn" @click="createNewBlank">新建</button> -->
-        <button class="saves-btn" @click="toggleTimeSort">
-          {{ timeSortDescending ? "顺序" : "倒序" }}
-        </button>
-        <button class="saves-btn" @click="requestUrlContent">URL</button>
-        <button class="saves-btn" @click="triggerImport">导入</button>
-        <button class="saves-btn" @click="exportCurrent">导出</button>
+      <div class="saves-body" :style="{ height: savesPanelHeight + 'px' }">
+        <div class="saves-toolbar">
+          <button class="saves-btn" @click="toggleToolbar">
+            {{ toolbarExpanded ? "折叠" : "展开" }}
+          </button>
+          <!-- <button class="saves-btn" @click="createNewBlank">新建</button> -->
+          <!-- <button class="saves-btn" @click="toggleTimeSort">
+            {{ timeSortDescending ? "顺序" : "倒序" }}
+          </button> -->
+          <button class="saves-btn" @click="requestUrlContent">URL</button>
+          <button class="saves-btn" @click="triggerImport">导入</button>
+          <button class="saves-btn" @click="exportCurrent">导出</button>
+          <button
+            class="saves-btn"
+            :disabled="syncingCodeHub"
+            @click="syncCodeHub('upload')"
+          >
+            {{ syncingCodeHub ? "同步中…" : "上传" }}
+            <span
+              v-if="syncDiffInfo && syncDiffInfo.localNewCount > 0"
+              class="saves-btn-badge"
+            ></span>
+          </button>
+          <button
+            class="saves-btn"
+            :disabled="syncingCodeHub"
+            @click="syncCodeHub('restore')"
+          >
+            下载
+            <span
+              v-if="syncDiffInfo && syncDiffInfo.remoteNewCount > 0"
+              class="saves-btn-badge"
+            ></span>
+          </button>
 
-        <div v-if="toolbarExpanded" class="saves-toolbar-actions">
-          <template v-if="selectMode">
-            <button class="saves-btn" @click="toggleSelectMode">完成</button>
-            <label class="saves-check-all">
-              <input
-                type="checkbox"
-                :checked="allChecked"
-                @change="toggleCheckAll"
-              />
-              全选
-            </label>
-            <button
-              class="saves-btn"
-              :disabled="checkedIds.size === 0"
-              @click="deleteSelected"
-            >
-              删除({{ checkedIds.size }})
-            </button>
-            <button
-              class="saves-btn"
-              :disabled="checkedIds.size === 0"
-              @click="exportSelected"
-            >
-              导出选中({{ checkedIds.size }})
-            </button>
-          </template>
-
-          <template v-else>
-            <button class="saves-btn" @click="toggleSelectMode">选择</button>
-            <button
-              class="saves-btn"
-              :disabled="syncingAllGists"
-              @click="downloadAllGists"
-            >
-              {{ syncingAllGists ? "获取中…" : "GIST" }}
-            </button>
-            <div v-if="toolbarExpanded" class="saves-toolbar-search">
-              <input
-                v-model="saveSearchQuery"
-                class="saves-search-input"
-                type="search"
-                placeholder=" 搜索"
-                @input="searchSavedContent"
-              />
-              <span v-if="searchingSavedContent" class="saves-search-status"
-                >搜索中…</span
+          <div v-if="toolbarExpanded" class="saves-toolbar-actions">
+            <template v-if="selectMode">
+              <button class="saves-btn" @click="toggleSelectMode">完成</button>
+              <label class="saves-check-all">
+                <input
+                  type="checkbox"
+                  :checked="allChecked"
+                  @change="toggleCheckAll"
+                />
+                全选
+              </label>
+              <button
+                class="saves-btn"
+                :disabled="checkedIds.size === 0"
+                @click="deleteSelected"
               >
-            </div>
-          </template>
-        </div>
+                删除({{ checkedIds.size }})
+              </button>
+              <button
+                class="saves-btn"
+                :disabled="checkedIds.size === 0"
+                @click="exportSelected"
+              >
+                导出选中({{ checkedIds.size }})
+              </button>
+            </template>
 
-        <div v-if="toolbarExpanded" class="saves-toolbar-filters">
-          <span class="saves-filter-label">&nbsp; 筛选：</span>
-          <button
-            class="saves-filter-btn"
-            :class="{ active: selectedTags.length === 0 }"
-            @click="selectedTags = []"
-          >
-            全部
-          </button>
-          <button
-            v-for="tag in availableTags"
-            :key="tag"
-            class="saves-filter-btn"
-            :class="{ active: selectedTags.includes(tag) }"
-            @click="toggleTagFilter(tag)"
-          >
-            {{ tag }}
-          </button>
-        </div>
-
-        <input
-          ref="importInputRef"
-          type="file"
-          style="display: none"
-          @change="onImportFileChange"
-        />
-        <input
-          ref="backupRestoreInputRef"
-          type="file"
-          accept=".zip,application/zip"
-          style="display: none"
-          @change="onBackupRestoreFileChange"
-        />
-      </div>
-      <div ref="savesListRef" class="saves-list">
-        <Transition name="saves-empty">
-          <div
-            v-if="!isLoadingSaves && savedItems.length === 0"
-            class="saves-empty"
-          >
-            暂无保存的内容
-          </div>
-        </Transition>
-        <template v-for="item in primarySavedItems" :key="item.id">
-          <Transition name="saves-item" appear>
-            <div
-              :data-save-id="item.id"
-              @click.stop="toggleItemActions(item)"
-              class="saves-item"
-              :class="{ 'saves-item-current': item.id === currentItemId }"
-            >
-              <input
-                v-if="selectMode"
-                type="checkbox"
-                :value="item.id"
-                v-model="checkedIds"
-                @click.stop
-              />
-
-              <div class="saves-item-info">
-                <span class="saves-item-name">
-                  {{ item.name }}
-                  <span
-                    v-if="getItemChildrenCount(item) > 0"
-                    class="saves-item-child-count"
-                    >{{ getItemChildrenCount(item) + 1 + " 项" }}</span
-                  >
-                  <span
-                    v-if="item.gist"
-                    class="saves-item-source"
-                    :title="gistPath(item)"
-                    >{{ gistPath(item) }}</span
-                  >
-                  <span v-if="item.tags?.length" class="saves-item-tags">
-                    <span
-                      v-for="tag in item.tags"
-                      :key="tag"
-                      class="saves-item-tag"
-                      :class="`saves-item-tag-${tag.toLowerCase()}`"
-                      >{{ tag }}</span
-                    >
-                  </span>
-                </span>
-
-                <div class="saves-item-preview">
-                  <span class="saves-item-content-preview">{{
-                    item.preview || ""
-                  }}</span>
-                </div>
-
-                <span class="saves-item-meta">
-                  {{ formatTime(itemUpdatedAt(item)) }}
-                  ·
-                  {{ formatBytes(item.length) }}
-                </span>
-              </div>
-
-              <Transition :name="actionPanelsReady ? 'saves-actions' : ''">
-                <div
-                  v-if="isItemActionsExpanded(item)"
-                  class="saves-item-sync-actions"
+            <template v-else>
+              <button class="saves-btn" @click="toggleSelectMode">选择</button>
+              <button class="saves-btn" @click="toggleTimeSort">
+                {{ timeSortDescending ? "顺序" : "倒序" }}
+              </button>
+              <button
+                class="saves-btn"
+                :disabled="syncingAllGists"
+                @click="downloadAllGists"
+              >
+                {{ syncingAllGists ? "获取中…" : "GIST" }}
+              </button>
+              <div v-if="toolbarExpanded" class="saves-toolbar-search">
+                <input
+                  v-model="saveSearchQuery"
+                  class="saves-search-input"
+                  type="search"
+                  placeholder=" 搜索"
+                  @input="searchSavedContent"
+                />
+                <span v-if="searchingSavedContent" class="saves-search-status"
+                  >搜索中…</span
                 >
-                  <div class="saves-item-sync-actions-content">
-                    <div class="saves-item-action-group">
-                      <button
-                        class="saves-sync-btn"
-                        @click.stop="toggleItemExpansion(item)"
-                      >
-                        {{
-                          isItemExpanded(item)
-                            ? "收起"
-                            : getItemChildrenCount(item) > 0
-                              ? `展开 (${getItemChildrenCount(item)})`
-                              : "展开"
-                        }}
-                      </button>
-                      <button
-                        class="saves-sync-btn"
-                        :class="{
-                          'is-syncing':
-                            syncingItemId === item.id &&
-                            syncingAction === 'upload',
-                        }"
-                        :disabled="
-                          syncingItemId === item.id &&
-                          syncingAction === 'upload'
-                        "
-                        title="上传到 Gist"
-                        @click.stop="confirmUploadToGist(item)"
-                      >
-                        上传
-                      </button>
-                      <button
-                        class="saves-sync-btn"
-                        @click.stop="deleteSingleItem(item)"
-                      >
-                        删除
-                      </button>
-                      <button
-                        class="saves-sync-btn"
-                        @click.stop="editItemTags(item)"
-                      >
-                        + 标签
-                      </button>
-                    </div>
-                    <div
-                      class="saves-item-action-group saves-item-action-group-right"
-                    >
-                      <button
-                        v-if="item.url"
-                        class="saves-sync-btn"
-                        @click.stop="copyUrl(item, 'raw')"
-                      >
-                        {{ item.blobUrl ? "Raw" : "Url" }}
-                      </button>
-                      <button
-                        v-if="item.blobUrl"
-                        class="saves-sync-btn"
-                        @click.stop="copyUrl(item, 'blob')"
-                      >
-                        Blob
-                      </button>
-                      <button
-                        v-if="item.gist?.rawUrl"
-                        class="saves-sync-btn"
-                        @click.stop="copyUrl(item, 'gist')"
-                      >
-                        Gist
-                      </button>
-                      <button
-                        v-if="item.gist?.htmlUrl"
-                        class="saves-sync-btn"
-                        @click.stop="copyUrl(item, 'html')"
-                      >
-                        Html
-                      </button>
-                      <button
-                        v-if="item.url"
-                        class="saves-sync-btn"
-                        :class="{
-                          'is-syncing': refreshingUrlItemId === item.id,
-                        }"
-                        :disabled="refreshingUrlItemId === item.id"
-                        title="从原始 URL 重新拉取"
-                        @click.stop="confirmRefreshFromUrl(item)"
-                      >
-                        拉取 URL
-                      </button>
-                      <button
-                        v-if="item.gist?.rawUrl"
-                        class="saves-sync-btn"
-                        :class="{
-                          'is-syncing':
-                            syncingItemId === item.id &&
-                            syncingAction === 'gist',
-                        }"
-                        :disabled="
-                          syncingItemId === item.id && syncingAction === 'gist'
-                        "
-                        title="从 Gist 拉取最新内容"
-                        @click.stop="confirmDownloadFromGist(item)"
-                      >
-                        拉取 Gist
-                      </button>
-                      <button
-                        class="saves-sync-btn"
-                        @click.stop="renameItem(item)"
-                      >
-                        重命名
-                      </button>
-                      <!-- <button class="saves-sync-btn" :class="{ 'is-current': item.id === currentItemId }" :disabled="loadingItemId === item.id" @click.stop="loadItemForList(item)">
-                  {{ item.id === currentItemId ? "当前" : "加载" }}
-                </button> -->
-                    </div>
-                  </div>
-                </div>
-              </Transition>
+              </div>
+            </template>
+          </div>
+
+          <div v-if="toolbarExpanded" class="saves-toolbar-filters">
+            <span class="saves-filter-label">&nbsp; 筛选：</span>
+            <button
+              class="saves-filter-btn"
+              :class="{ active: selectedTags.length === 0 }"
+              @click="selectedTags = []"
+            >
+              全部
+            </button>
+            <button
+              v-for="tag in availableTags"
+              :key="tag"
+              class="saves-filter-btn"
+              :class="{ active: selectedTags.includes(tag) }"
+              @click="toggleTagFilter(tag)"
+            >
+              {{ tag }}
+            </button>
+          </div>
+
+          <input
+            ref="importInputRef"
+            type="file"
+            style="display: none"
+            @change="onImportFileChange"
+          />
+          <input
+            ref="backupRestoreInputRef"
+            type="file"
+            accept=".zip,application/zip"
+            style="display: none"
+            @change="onBackupRestoreFileChange"
+          />
+        </div>
+        <div ref="savesListRef" class="saves-list">
+          <Transition name="saves-empty">
+            <div
+              v-if="!isLoadingSaves && savedItems.length === 0"
+              class="saves-empty"
+            >
+              暂无保存的内容
             </div>
           </Transition>
-          <Transition name="saves-children">
-            <div v-if="isItemExpanded(item)" class="saves-gist-children">
-              <div class="saves-gist-children-content">
-                <div
-                  @click.stop="toggleItemActions(child)"
-                  v-for="child in gistChildItems(item)"
-                  :key="child.id"
-                  class="saves-item saves-gist-child"
-                  :data-save-id="child.id"
-                  :class="{ 'saves-item-current': child.id === currentItemId }"
-                >
-                  <input
-                    v-if="selectMode"
-                    type="checkbox"
-                    :value="child.id"
-                    v-model="checkedIds"
-                    @click.stop
-                  />
+          <template v-for="item in primarySavedItems" :key="item.id">
+            <Transition name="saves-item" appear>
+              <div
+                :data-save-id="item.id"
+                @click.stop="toggleItemActions(item)"
+                class="saves-item"
+                :class="{ 'saves-item-current': item.id === currentItemId }"
+              >
+                <input
+                  v-if="selectMode"
+                  type="checkbox"
+                  :value="item.id"
+                  v-model="checkedIds"
+                  @click.stop
+                />
 
-                  <div class="saves-item-info">
-                    <span class="saves-item-name">
-                      {{ child.name }}
+                <div class="saves-item-info">
+                  <span class="saves-item-name">
+                    {{ item.name }}
+                    <span
+                      v-if="getItemChildrenCount(item) > 0"
+                      class="saves-item-child-count"
+                      >{{ getItemChildrenCount(item) + 1 + " 项" }}</span
+                    >
+                    <span
+                      v-if="item.gist"
+                      class="saves-item-source"
+                      :title="gistPath(item)"
+                      >{{ gistPath(item) }}</span
+                    >
+                    <span v-if="item.tags?.length" class="saves-item-tags">
                       <span
-                        v-if="child.gist"
-                        class="saves-item-source"
-                        :title="gistPath(child)"
-                        >{{ gistPath(child) }}</span
+                        v-for="tag in item.tags"
+                        :key="tag"
+                        class="saves-item-tag"
+                        :class="`saves-item-tag-${tag.toLowerCase()}`"
+                        >{{ tag }}</span
                       >
-                      <span v-if="child.tags?.length" class="saves-item-tags">
-                        <span
-                          v-for="tag in child.tags"
-                          :key="tag"
-                          class="saves-item-tag"
-                          :class="`saves-item-tag-${tag.toLowerCase()}`"
-                          >{{ tag }}</span
-                        >
-                      </span>
                     </span>
-                    <div class="saves-item-preview">
-                      <span class="saves-item-content-preview">{{
-                        child.preview || ""
-                      }}</span>
-                    </div>
-                    <span class="saves-item-meta">
-                      {{ formatTime(itemUpdatedAt(child)) }}
-                      ·
-                      {{ formatBytes(child.length) }}
-                    </span>
+                  </span>
+
+                  <div class="saves-item-preview">
+                    <span class="saves-item-content-preview">{{
+                      item.preview || ""
+                    }}</span>
                   </div>
 
+                  <span class="saves-item-meta">
+                    {{ formatTime(itemUpdatedAt(item)) }}
+                    ·
+                    {{ formatBytes(item.length) }}
+                  </span>
+                </div>
+
+                <Transition :name="actionPanelsReady ? 'saves-actions' : ''">
                   <div
-                    v-if="isItemActionsExpanded(child)"
+                    v-if="isItemActionsExpanded(item)"
                     class="saves-item-sync-actions"
                   >
                     <div class="saves-item-sync-actions-content">
                       <div class="saves-item-action-group">
                         <button
                           class="saves-sync-btn"
-                          @click.stop="toggleItemExpansion(child)"
+                          @click.stop="toggleItemExpansion(item)"
                         >
                           {{
-                            isItemExpanded(child)
+                            isItemExpanded(item)
                               ? "收起"
-                              : getItemChildrenCount(child) > 0
-                                ? `展开 (${getItemChildrenCount(child)})`
+                              : getItemChildrenCount(item) > 0
+                                ? `展开 (${getItemChildrenCount(item)})`
                                 : "展开"
                           }}
                         </button>
@@ -391,27 +245,27 @@
                           class="saves-sync-btn"
                           :class="{
                             'is-syncing':
-                              syncingItemId === child.id &&
+                              syncingItemId === item.id &&
                               syncingAction === 'upload',
                           }"
                           :disabled="
-                            syncingItemId === child.id &&
+                            syncingItemId === item.id &&
                             syncingAction === 'upload'
                           "
                           title="上传到 Gist"
-                          @click.stop="confirmUploadToGist(child)"
+                          @click.stop="confirmUploadToGist(item)"
                         >
-                          上传
+                          上传 Gist
                         </button>
                         <button
                           class="saves-sync-btn"
-                          @click.stop="deleteSingleItem(child)"
+                          @click.stop="deleteSingleItem(item)"
                         >
                           删除
                         </button>
                         <button
                           class="saves-sync-btn"
-                          @click.stop="editItemTags(child)"
+                          @click.stop="editItemTags(item)"
                         >
                           + 标签
                         </button>
@@ -420,133 +274,309 @@
                         class="saves-item-action-group saves-item-action-group-right"
                       >
                         <button
-                          v-if="child.url"
+                          v-if="item.url"
                           class="saves-sync-btn"
-                          @click.stop="copyUrl(child, 'raw')"
+                          @click.stop="copyUrl(item, 'raw')"
                         >
-                          {{ child.blobUrl ? "Raw" : "Url" }}
+                          {{ item.blobUrl ? "Raw" : "Url" }}
                         </button>
                         <button
-                          v-if="child.blobUrl"
-                          title="复制 Blob URL"
+                          v-if="item.blobUrl"
                           class="saves-sync-btn"
-                          @click.stop="copyUrl(child, 'blob')"
+                          @click.stop="copyUrl(item, 'blob')"
                         >
                           Blob
                         </button>
                         <button
-                          v-if="child.gist?.rawUrl"
+                          v-if="item.gist?.rawUrl"
                           class="saves-sync-btn"
-                          title="复制 Gist URL"
-                          @click.stop="copyUrl(child, 'gist')"
+                          @click.stop="copyUrl(item, 'gist')"
                         >
                           Gist
                         </button>
                         <button
-                          v-if="child.gist?.htmlUrl"
+                          v-if="item.gist?.htmlUrl"
                           class="saves-sync-btn"
-                          title="复制 Html URL"
-                          @click.stop="copyUrl(child, 'html')"
+                          @click.stop="copyUrl(item, 'html')"
                         >
                           Html
                         </button>
                         <button
-                          v-if="child.url"
+                          v-if="item.url"
                           class="saves-sync-btn"
                           :class="{
-                            'is-syncing': refreshingUrlItemId === child.id,
+                            'is-syncing': refreshingUrlItemId === item.id,
                           }"
-                          :disabled="refreshingUrlItemId === child.id"
+                          :disabled="refreshingUrlItemId === item.id"
                           title="从原始 URL 重新拉取"
-                          @click.stop="confirmRefreshFromUrl(child)"
+                          @click.stop="confirmRefreshFromUrl(item)"
                         >
-                          从 URL 拉取
+                          拉取 URL
                         </button>
                         <button
-                          v-if="child.gist?.rawUrl"
+                          v-if="item.gist?.rawUrl"
                           class="saves-sync-btn"
                           :class="{
                             'is-syncing':
-                              syncingItemId === child.id &&
+                              syncingItemId === item.id &&
                               syncingAction === 'gist',
                           }"
                           :disabled="
-                            syncingItemId === child.id &&
+                            syncingItemId === item.id &&
                             syncingAction === 'gist'
                           "
                           title="从 Gist 拉取最新内容"
-                          @click.stop="confirmDownloadFromGist(child)"
+                          @click.stop="confirmDownloadFromGist(item)"
                         >
-                          从 Gist 拉取
+                          拉取 Gist
                         </button>
                         <button
                           class="saves-sync-btn"
-                          @click.stop="renameItem(child)"
+                          @click.stop="renameItem(item)"
                         >
                           重命名
                         </button>
-                        <button
-                          class="saves-sync-btn"
-                          :class="{ 'is-current': child.id === currentItemId }"
-                          :disabled="loadingItemId === child.id"
-                          @click.stop="loadItemForList(child)"
-                        >
-                          加载
-                        </button>
+                        <!-- <button class="saves-sync-btn" :class="{ 'is-current': item.id === currentItemId }" :disabled="loadingItemId === item.id" @click.stop="loadItemForList(item)">
+                  {{ item.id === currentItemId ? "当前" : "加载" }}
+                </button> -->
                       </div>
                     </div>
                   </div>
-                </div>
-                <button
-                  class="saves-gist-child saves-gist-child-new"
-                  @click.stop="createExpandedFile(item)"
-                >
-                  {{ item.gist?.id ? "+ 新建 Gist 文件" : "+ 新建" }}
-                </button>
+                </Transition>
               </div>
-            </div>
-          </Transition>
-        </template>
-        <div class="saves-footers">
-          <button class="saves-sync-btn" @click.stop="push_home">
-            返回首页
-          </button>
-          <button
-            class="saves-sync-btn"
-            :disabled="backupInProgress"
-            @click.stop="backupDatabase"
-          >
-            {{ backupInProgress ? "备份中…" : "备份" }}
-          </button>
-          <button
-            class="saves-sync-btn"
-            :disabled="restoreInProgress"
-            @click.stop="triggerBackupRestore"
-          >
-            {{ restoreInProgress ? "恢复中…" : "恢复备份" }}
-          </button>
+            </Transition>
+            <Transition name="saves-children">
+              <div v-if="isItemExpanded(item)" class="saves-gist-children">
+                <div class="saves-gist-children-content">
+                  <div
+                    @click.stop="toggleItemActions(child)"
+                    v-for="child in gistChildItems(item)"
+                    :key="child.id"
+                    class="saves-item saves-gist-child"
+                    :data-save-id="child.id"
+                    :class="{
+                      'saves-item-current': child.id === currentItemId,
+                    }"
+                  >
+                    <input
+                      v-if="selectMode"
+                      type="checkbox"
+                      :value="child.id"
+                      v-model="checkedIds"
+                      @click.stop
+                    />
+
+                    <div class="saves-item-info">
+                      <span class="saves-item-name">
+                        {{ child.name }}
+                        <span
+                          v-if="child.gist"
+                          class="saves-item-source"
+                          :title="gistPath(child)"
+                          >{{ gistPath(child) }}</span
+                        >
+                        <span v-if="child.tags?.length" class="saves-item-tags">
+                          <span
+                            v-for="tag in child.tags"
+                            :key="tag"
+                            class="saves-item-tag"
+                            :class="`saves-item-tag-${tag.toLowerCase()}`"
+                            >{{ tag }}</span
+                          >
+                        </span>
+                      </span>
+                      <div class="saves-item-preview">
+                        <span class="saves-item-content-preview">{{
+                          child.preview || ""
+                        }}</span>
+                      </div>
+                      <span class="saves-item-meta">
+                        {{ formatTime(itemUpdatedAt(child)) }}
+                        ·
+                        {{ formatBytes(child.length) }}
+                      </span>
+                    </div>
+
+                    <div
+                      v-if="isItemActionsExpanded(child)"
+                      class="saves-item-sync-actions"
+                    >
+                      <div class="saves-item-sync-actions-content">
+                        <div class="saves-item-action-group">
+                          <button
+                            class="saves-sync-btn"
+                            @click.stop="toggleItemExpansion(child)"
+                          >
+                            {{
+                              isItemExpanded(child)
+                                ? "收起"
+                                : getItemChildrenCount(child) > 0
+                                  ? `展开 (${getItemChildrenCount(child)})`
+                                  : "展开"
+                            }}
+                          </button>
+                          <button
+                            class="saves-sync-btn"
+                            :class="{
+                              'is-syncing':
+                                syncingItemId === child.id &&
+                                syncingAction === 'upload',
+                            }"
+                            :disabled="
+                              syncingItemId === child.id &&
+                              syncingAction === 'upload'
+                            "
+                            title="上传到 Gist"
+                            @click.stop="confirmUploadToGist(child)"
+                          >
+                            上传
+                          </button>
+                          <button
+                            class="saves-sync-btn"
+                            @click.stop="deleteSingleItem(child)"
+                          >
+                            删除
+                          </button>
+                          <button
+                            class="saves-sync-btn"
+                            @click.stop="editItemTags(child)"
+                          >
+                            + 标签
+                          </button>
+                        </div>
+                        <div
+                          class="saves-item-action-group saves-item-action-group-right"
+                        >
+                          <button
+                            v-if="child.url"
+                            class="saves-sync-btn"
+                            @click.stop="copyUrl(child, 'raw')"
+                          >
+                            {{ child.blobUrl ? "Raw" : "Url" }}
+                          </button>
+                          <button
+                            v-if="child.blobUrl"
+                            title="复制 Blob URL"
+                            class="saves-sync-btn"
+                            @click.stop="copyUrl(child, 'blob')"
+                          >
+                            Blob
+                          </button>
+                          <button
+                            v-if="child.gist?.rawUrl"
+                            class="saves-sync-btn"
+                            title="复制 Gist URL"
+                            @click.stop="copyUrl(child, 'gist')"
+                          >
+                            Gist
+                          </button>
+                          <button
+                            v-if="child.gist?.htmlUrl"
+                            class="saves-sync-btn"
+                            title="复制 Html URL"
+                            @click.stop="copyUrl(child, 'html')"
+                          >
+                            Html
+                          </button>
+                          <button
+                            v-if="child.url"
+                            class="saves-sync-btn"
+                            :class="{
+                              'is-syncing': refreshingUrlItemId === child.id,
+                            }"
+                            :disabled="refreshingUrlItemId === child.id"
+                            title="从原始 URL 重新拉取"
+                            @click.stop="confirmRefreshFromUrl(child)"
+                          >
+                            从 URL 拉取
+                          </button>
+                          <button
+                            v-if="child.gist?.rawUrl"
+                            class="saves-sync-btn"
+                            :class="{
+                              'is-syncing':
+                                syncingItemId === child.id &&
+                                syncingAction === 'gist',
+                            }"
+                            :disabled="
+                              syncingItemId === child.id &&
+                              syncingAction === 'gist'
+                            "
+                            title="从 Gist 拉取最新内容"
+                            @click.stop="confirmDownloadFromGist(child)"
+                          >
+                            从 Gist 拉取
+                          </button>
+                          <button
+                            class="saves-sync-btn"
+                            @click.stop="renameItem(child)"
+                          >
+                            重命名
+                          </button>
+                          <button
+                            class="saves-sync-btn"
+                            :class="{
+                              'is-current': child.id === currentItemId,
+                            }"
+                            :disabled="loadingItemId === child.id"
+                            @click.stop="loadItemForList(child)"
+                          >
+                            加载
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    class="saves-gist-child saves-gist-child-new"
+                    @click.stop="createExpandedFile(item)"
+                  >
+                    {{ item.gist?.id ? "+ 新建 Gist 文件" : "+ 新建" }}
+                  </button>
+                </div>
+              </div>
+            </Transition>
+          </template>
+          <div class="saves-footers">
+            <button class="saves-sync-btn" @click.stop="push_home">
+              返回首页
+            </button>
+            <button
+              class="saves-sync-btn"
+              :disabled="backupInProgress"
+              @click.stop="backupDatabase"
+            >
+              {{ backupInProgress ? "备份中…" : "备份" }}
+            </button>
+            <button
+              class="saves-sync-btn"
+              :disabled="restoreInProgress"
+              @click.stop="triggerBackupRestore"
+            >
+              {{ restoreInProgress ? "恢复中…" : "恢复备份" }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-    <!-- 拖拽调整高度手柄 -->
-    <div
-      ref="savesHandleRef"
-      class="saves-resize-handle"
-      @pointerdown="startSavesResizePointer"
-    >
-      <div class="saves-resize-bar"></div>
-    </div>
-    <!-- 拖拽调整宽度手柄（宽屏时显示） -->
-    <div
-      class="saves-vresize-handle"
-      @pointerdown="startSavesWidthResizePointer"
-      title="拖拽调整宽度"
-    >
-      <div class="saves-vresize-bar"></div>
-      <!-- <div class="saves-vresize-knob">
+      <!-- 拖拽调整高度手柄 -->
+      <div
+        ref="savesHandleRef"
+        class="saves-resize-handle"
+        @pointerdown="startSavesResizePointer"
+      >
+        <div class="saves-resize-bar"></div>
+      </div>
+      <!-- 拖拽调整宽度手柄（宽屏时显示） -->
+      <div
+        class="saves-vresize-handle"
+        @pointerdown="startSavesWidthResizePointer"
+        title="拖拽调整宽度"
+      >
+        <div class="saves-vresize-bar"></div>
+        <!-- <div class="saves-vresize-knob">
         <span class="saves-vresize-dots"></span>
       </div> -->
-    </div>
+      </div>
     </div>
     <cmView
       v-if="editorReady"
@@ -654,8 +684,18 @@
   </div>
 
   <!-- 自定义输入弹窗 -->
-  <div v-if="promptState.visible" class="modal-mask" @click.self="promptCancel">
-    <div class="modal-box">
+  <div
+    v-if="promptState.visible"
+    class="modal-mask prompt-mask"
+    :class="{ 'has-position': Boolean(promptState.position) }"
+    @click.self="promptCancel"
+    @touchmove="handleModalMaskTouchMove"
+  >
+    <div
+      ref="promptDialogRef"
+      class="modal-box prompt-box"
+      :style="promptBoxStyle"
+    >
       <div class="modal-title">{{ promptState.title }}</div>
       <div v-if="promptState.hasTags" class="modal-tag-list">
         <span v-for="tag in promptState.tags" :key="tag" class="modal-tag">
@@ -702,10 +742,16 @@
   </div>
 
   <!-- 自定义确认弹窗 -->
-  <div v-if="confirmState.visible" class="modal-mask" @click.self="confirmNo">
+  <div
+    v-if="confirmState.visible"
+    class="modal-mask confirm-mask"
+    :class="{ 'has-position': Boolean(confirmState.position) }"
+    @click.self="confirmNo"
+  >
     <div
       ref="confirmDialogRef"
-      class="modal-box"
+      class="modal-box confirm-box"
+      :style="confirmBoxStyle"
       tabindex="-1"
       @keydown.enter.prevent="confirmYes"
       @keydown.esc.prevent="confirmNo"
@@ -771,6 +817,11 @@ import {
   SAVES_INDEX_KEY,
   syncGistFilesToCodeHub,
 } from "@/storage/codehubStorage.js";
+import {
+  checkCodeHubSyncDiff,
+  restoreCodeHubSnapshot,
+  uploadCodeHubSnapshot,
+} from "@/storage/codehubSync.js";
 
 import JSZip from "jszip";
 import "./env.js";
@@ -782,6 +833,75 @@ const israw = ref(false);
 const grc = ref("");
 const { toClipboard } = useV3Clipboard();
 const cmStore = useCmStore();
+const syncingCodeHub = ref(false);
+const syncDiffInfo = ref(null); // 云端与本地差异信息
+
+// 检查云端差异（静默拉取索引并对比）
+const checkRemoteSync = async () => {
+  try {
+    const diff = await checkCodeHubSyncDiff();
+    if (diff && diff.hasChanges) {
+      syncDiffInfo.value = diff;
+      if (diff.remoteNewCount > 0) {
+        showToast({
+          message: `云端检测到 ${diff.remoteNewCount} 个更新，可点击“下载”获取`,
+          duration: 3500,
+        });
+      } else if (diff.localNewCount > 0) {
+        showToast({
+          message: `本地有 ${diff.localNewCount} 个待同步更新，可点击“上传”`,
+          duration: 3000,
+        });
+      }
+    } else {
+      syncDiffInfo.value = null;
+    }
+  } catch (e) {
+    // 检查失败仅记录，不打扰用户
+    console.debug("检查云端差异失败:", e);
+  }
+};
+
+const syncCodeHub = async (action) => {
+  if (action === "upload") {
+    const ok = await askConfirm("确定要将本地数据上传并覆盖云端吗？只会更新变化的文件");
+    if (!ok) return;
+  } else {
+    const ok = await askConfirm("确定要从云端拉取并同步到本地吗？只会更新变化的文件");
+    if (!ok) return;
+  }
+
+  syncingCodeHub.value = true;
+  try {
+    if (action === "upload") {
+      const res = await uploadCodeHubSnapshot();
+      if (!res.changed) {
+        showToast("云端已是最新，无变更需同步");
+      } else {
+        const parts = [];
+        if (res.uploaded > 0) parts.push(`上传 ${res.uploaded} 个文件`);
+        if (res.deleted > 0) parts.push(`删除 ${res.deleted} 个云端废弃文件`);
+        showToast(
+          parts.length > 0 ? `同步完成：${parts.join("，")}` : "云端索引已更新",
+        );
+      }
+      syncDiffInfo.value = null;
+    } else {
+      const res = await restoreCodeHubSnapshot();
+      await loadSaves();
+      showToast(
+        res.downloaded > 0
+          ? `已同步下载 ${res.downloaded} 个文件`
+          : "本地已是最新，无文件需下载",
+      );
+      syncDiffInfo.value = null;
+    }
+  } catch (error) {
+    showToast(error.message || "云同步失败");
+  } finally {
+    syncingCodeHub.value = false;
+  }
+};
 const showlog = ref(false);
 const EMPTY_CONTENT = "\n".repeat(19);
 const { isDarkModeEnabled } = useTheme();
@@ -883,6 +1003,7 @@ function cleanupResizeListeners() {
 const props = defineProps(["isReadOnly"]);
 const lastSavedContent = ref("");
 const promptInputRef = ref(null);
+const promptDialogRef = ref(null);
 const confirmDialogRef = ref(null);
 const confirmInputRef = ref(null);
 
@@ -898,6 +1019,7 @@ const promptState = ref({
   hasUserAgent: false,
   hasTags: false,
   tags: [],
+  position: null,
   resolve: null,
 });
 const confirmState = ref({
@@ -905,15 +1027,175 @@ const confirmState = ref({
   title: "",
   value: "",
   hasInput: false,
+  position: null,
   resolve: null,
 });
+
+const promptBoxStyle = computed(() => {
+  if (!promptState.value.position) return {};
+  const { x, y } = promptState.value.position;
+  return {
+    position: "fixed",
+    left: `${x}px`,
+    top: `${y}px`,
+  };
+});
+
+const confirmBoxStyle = computed(() => {
+  if (!confirmState.value.position) return {};
+  const { x, y } = confirmState.value.position;
+  return {
+    position: "fixed",
+    left: `${x}px`,
+    top: `${y}px`,
+  };
+});
+
+function getViewportSize() {
+  const vv = window.visualViewport;
+  const vw = Math.min(
+    window.innerWidth || 0,
+    document.documentElement.clientWidth || window.innerWidth || 0,
+    vv ? vv.width : window.innerWidth
+  );
+  const vh = Math.min(
+    window.innerHeight || 0,
+    document.documentElement.clientHeight || window.innerHeight || 0,
+    vv ? vv.height : window.innerHeight
+  );
+  return {
+    vw: vw > 0 ? vw : window.innerWidth,
+    vh: vh > 0 ? vh : window.innerHeight,
+  };
+}
+
+// 监听弹窗显示/隐藏：自动获取焦点、DOM精确边界校正、锁定页面滚动、适配软键盘
+let visualViewportCleanup = null;
+
+function adjustPopupForKeyboard() {
+  if (typeof window === "undefined") return;
+  const vv = window.visualViewport;
+  const currentVh = vv ? vv.height : window.innerHeight;
+  const margin = 20;
+
+  // 避免浏览器在输入法弹起时擅自滚动 window
+  if (window.scrollY !== 0) {
+    window.scrollTo(0, 0);
+  }
+
+  // 纠正 prompt 弹窗避免被键盘遮挡
+  if (promptState.value.visible && promptDialogRef.value && promptState.value.position) {
+    const rect = promptDialogRef.value.getBoundingClientRect();
+    let currentY = promptState.value.position.y;
+    if (currentY + rect.height > currentVh - margin) {
+      const newY = Math.max(margin, Math.round(currentVh - rect.height - margin));
+      if (newY !== currentY) {
+        promptState.value.position = {
+          ...promptState.value.position,
+          y: newY,
+        };
+      }
+    }
+  }
+
+  // 纠正 confirm 弹窗避免被键盘遮挡
+  if (confirmState.value.visible && confirmDialogRef.value && confirmState.value.position) {
+    const rect = confirmDialogRef.value.getBoundingClientRect();
+    let currentY = confirmState.value.position.y;
+    if (currentY + rect.height > currentVh - margin) {
+      const newY = Math.max(margin, Math.round(currentVh - rect.height - margin));
+      if (newY !== currentY) {
+        confirmState.value.position = {
+          ...confirmState.value.position,
+          y: newY,
+        };
+      }
+    }
+  }
+}
+
+function syncModalScrollLock() {
+  if (typeof document === "undefined") return;
+  const isAnyModalOpen = promptState.value.visible || confirmState.value.visible;
+  if (isAnyModalOpen) {
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    if (!visualViewportCleanup && window.visualViewport) {
+      const onResizeOrScroll = () => {
+        adjustPopupForKeyboard();
+      };
+      window.visualViewport.addEventListener("resize", onResizeOrScroll);
+      window.visualViewport.addEventListener("scroll", onResizeOrScroll);
+      window.addEventListener("scroll", onResizeOrScroll);
+      visualViewportCleanup = () => {
+        window.visualViewport?.removeEventListener("resize", onResizeOrScroll);
+        window.visualViewport?.removeEventListener("scroll", onResizeOrScroll);
+        window.removeEventListener("scroll", onResizeOrScroll);
+        visualViewportCleanup = null;
+      };
+    }
+  } else {
+    document.body.style.overflow = "";
+    document.documentElement.style.overflow = "";
+    document.body.style.touchAction = "";
+    if (visualViewportCleanup) {
+      visualViewportCleanup();
+    }
+    if (typeof window !== "undefined" && window.scrollY !== 0) {
+      window.scrollTo(0, 0);
+    }
+  }
+}
 
 watch(
   () => promptState.value.visible,
   (visible) => {
+    syncModalScrollLock();
     if (visible) {
       nextTick(() => {
-        promptInputRef.value?.focus();
+        // 使用 preventScroll 防止获焦时浏览器自动滚屏
+        promptInputRef.value?.focus({ preventScroll: true });
+
+        // 测量实际渲染宽高，修正位置避免超出屏幕（保留20px安全边距）
+        if (promptDialogRef.value && promptState.value.position) {
+          const rect = promptDialogRef.value.getBoundingClientRect();
+          const margin = 20;
+          const { vw, vh } = getViewportSize();
+
+          let targetX = rect.left;
+          let targetY = rect.top;
+
+          // 窄屏幕时水平居中
+          if (vw <= 480 || vw - margin * 2 <= rect.width) {
+            targetX = Math.max(margin, Math.round((vw - rect.width) / 2));
+          } else {
+            if (targetX + rect.width > vw - margin) {
+              targetX = vw - margin - rect.width;
+            }
+            if (targetX < margin) {
+              targetX = margin;
+            }
+          }
+
+          if (targetY + rect.height > vh - margin) {
+            targetY = vh - margin - rect.height;
+          }
+          if (targetY < margin) {
+            targetY = margin;
+          }
+
+          if (
+            Math.round(targetX) !== Math.round(rect.left) ||
+            Math.round(targetY) !== Math.round(rect.top)
+          ) {
+            promptState.value.position = {
+              x: Math.round(targetX),
+              y: Math.round(targetY),
+            };
+          }
+        }
       });
     }
   },
@@ -922,12 +1204,44 @@ watch(
 watch(
   () => confirmState.value.visible,
   (visible) => {
+    syncModalScrollLock();
     if (visible) {
       nextTick(() => {
-        (confirmState.value.hasInput
+        const target = confirmState.value.hasInput
           ? confirmInputRef.value
-          : confirmDialogRef.value
-        )?.focus();
+          : confirmDialogRef.value;
+        target?.focus({ preventScroll: true });
+
+        // 测量实际渲染宽高，修正位置避免超出屏幕（保留20px安全边距）
+        if (confirmDialogRef.value && confirmState.value.position) {
+          const rect = confirmDialogRef.value.getBoundingClientRect();
+          const margin = 20;
+          const { vw, vh } = getViewportSize();
+
+          let targetX = rect.left;
+          let targetY = rect.top;
+
+          // 窄屏幕时水平居中
+          if (vw <= 480 || vw - margin * 2 <= rect.width) {
+            targetX = Math.max(margin, Math.round((vw - rect.width) / 2));
+          } else {
+            if (targetX + rect.width > vw - margin) {
+              targetX = vw - margin - rect.width;
+            }
+            if (targetX < margin) {
+              targetX = margin;
+            }
+          }
+
+          if (targetY + rect.height > vh - margin) {
+            targetY = vh - margin - rect.height;
+          }
+          if (targetY < margin) {
+            targetY = margin;
+          }
+
+          confirmState.value.position = { x: Math.round(targetX), y: Math.round(targetY) };
+        }
       });
     }
   },
@@ -939,8 +1253,40 @@ async function requestUrlContent() {
   await loadUrlContent(request.url.trim(), request.userAgent.trim());
 }
 
+function calcPopupPosition(estimatedW = 340, estimatedH = 150) {
+  if (!lastClickPos.value || Date.now() - lastClickPos.value.time >= 3000) {
+    return null;
+  }
+  const margin = 20;
+  const { vw, vh } = getViewportSize();
+  const maxW = Math.min(estimatedW, vw - margin * 2);
+  const w = maxW;
+  const h = estimatedH;
+
+  const clickX = lastClickPos.value.x;
+  const clickY = lastClickPos.value.y;
+
+  let x = clickX - w / 2;
+  let y = clickY + 14;
+
+  if (y + h > vh - margin) {
+    y = clickY - h - 14;
+  }
+
+  // 移动端/窄屏幕时，弹窗左右居中，上下跟随点击位置
+  if (vw <= 480 || vw - margin * 2 <= w) {
+    x = Math.max(margin, Math.round((vw - w) / 2));
+  } else {
+    x = Math.max(margin, Math.min(vw - margin - w, x));
+  }
+  y = Math.max(margin, Math.min(vh - margin - h, y));
+
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
 function askPrompt(title, defaultValue = "", hasUserAgent = false) {
   return new Promise((resolve) => {
+    const position = calcPopupPosition(360, hasUserAgent ? 210 : 160);
     promptState.value = {
       visible: true,
       title,
@@ -951,6 +1297,7 @@ function askPrompt(title, defaultValue = "", hasUserAgent = false) {
       hasUserAgent,
       hasTags: false,
       tags: [],
+      position,
       resolve,
     };
   });
@@ -1015,13 +1362,32 @@ async function pasteToPromptInput() {
   } catch {}
 }
 
+// 全局记录最近一次用户点击/触摸位置，供 askConfirm 等弹窗使用
+const lastClickPos = ref(null);
+const recordClickPosition = (e) => {
+  if (!e) return;
+  const clientX =
+    e.clientX ?? (e.touches && e.touches[0] ? e.touches[0].clientX : null);
+  const clientY =
+    e.clientY ?? (e.touches && e.touches[0] ? e.touches[0].clientY : null);
+  if (clientX != null && clientY != null) {
+    lastClickPos.value = {
+      x: clientX,
+      y: clientY,
+      time: Date.now(),
+    };
+  }
+};
+
 function askConfirm(title, inputValue) {
   return new Promise((resolve) => {
+    const position = calcPopupPosition(340, inputValue !== undefined ? 170 : 120);
     confirmState.value = {
       visible: true,
       title,
       value: inputValue || "",
       hasInput: inputValue !== undefined,
+      position,
       resolve,
     };
   });
@@ -1314,6 +1680,7 @@ const editItemTags = async (item) => {
 
 const askTags = (tags) =>
   new Promise((resolve) => {
+    const position = calcPopupPosition(360, 220);
     promptState.value = {
       visible: true,
       title: "修改标签",
@@ -1322,6 +1689,7 @@ const askTags = (tags) =>
       hasUserAgent: false,
       hasTags: true,
       tags,
+      position,
       resolve,
     };
   });
@@ -3149,6 +3517,7 @@ onMounted(async () => {
 
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("beforeunload", handleBeforeUnload);
+  window.addEventListener("pointerdown", recordClickPosition, true);
 
   // 监听 saves-list 宽度变化，动态计算 URL 截断长度
   savesListObserver = new ResizeObserver((entries) => {
@@ -3162,6 +3531,9 @@ onMounted(async () => {
 
   // ★ 初始加载完成后，如果有当前项且面板显示，滚动到该项
   scrollToCurrentItem();
+
+  // ★ 每次进入时后台静默拉取云端 index 进行差异比对并提示
+  checkRemoteSync();
 });
 
 // ★ 面板打开/关闭时，打开后自动滚动到当前项
@@ -3456,6 +3828,7 @@ onBeforeUnmount(() => {
   flushCurrentSave();
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   window.removeEventListener("beforeunload", handleBeforeUnload);
+  window.removeEventListener("pointerdown", recordClickPosition, true);
   window.removeEventListener("editor-theme-change", updateEditorPageBackground);
   window.removeEventListener("resize", updateNavHeight);
   document.body.style.backgroundColor = "";
@@ -3585,6 +3958,7 @@ onBeforeUnmount(() => {
 }
 
 .saves-btn {
+  position: relative;
   font-size: 13px;
   padding: 5px 8px;
   height: 29px;
@@ -3597,7 +3971,19 @@ onBeforeUnmount(() => {
   flex: 1 1 0;
   min-width: 0;
   white-space: nowrap;
-  transition: background-color 160ms ease, color 160ms ease;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.saves-btn-badge {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #ff5252;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -3753,9 +4139,10 @@ onBeforeUnmount(() => {
 }
 
 .saves-list {
-  overflow-y: visible;
+  overflow-y: auto;
   /* ★ 横向溢出一律隐藏，避免子列/按钮把列表撑出屏幕 */
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   padding: 4px 0;
   flex: 1;
   min-height: 0;
@@ -4126,6 +4513,12 @@ onBeforeUnmount(() => {
   padding: 0 8%;
 }
 
+.modal-mask.confirm-mask.has-position,
+.modal-mask.prompt-mask.has-position {
+  padding: 0;
+  display: block;
+}
+
 .modal-box {
   width: 100%;
   max-width: 400px;
@@ -4139,6 +4532,27 @@ onBeforeUnmount(() => {
   border-radius: 28px;
   padding: 1px 18px 10px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.modal-box.confirm-box,
+.modal-box.prompt-box {
+  width: calc(100vw - 40px);
+  width: calc(100dvw - 40px);
+  max-width: 360px;
+  box-sizing: border-box;
+  transition: top 0.5s cubic-bezier(0.25, 1, 0.5, 1), left 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+  will-change: top, left;
+}
+
+/* 窄屏幕 (如 iOS 手机端竖屏) 确保左右各有至少20px边距 */
+@media (max-width: 480px) {
+  .modal-box.confirm-box,
+  .modal-box.prompt-box {
+    width: calc(100vw - 40px) !important;
+    width: calc(100dvw - 40px) !important;
+    max-width: calc(100vw - 40px) !important;
+    box-sizing: border-box !important;
+  }
 }
 
 .modal-title {
@@ -4394,16 +4808,29 @@ onBeforeUnmount(() => {
   }
   /* ★ 面板打开时：标题固定在左侧面板顶部，形成「标题 | cmview / 文件列表 | cmview」分栏 */
   .edit-code-editor.saves-open {
-    position: relative;
+    position: fixed;
+    top: var(--nav-height, 0px);
+    left: 0;
+    width: var(--saves-width, 400px) !important;
+    margin: 0 !important;
+    padding: 20px 16px 22px 18px !important; /* 底部 22px 边距 */
+    box-sizing: border-box;
+    z-index: 1002;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .saves-panel {
-    position: relative;
-    top: auto;
-    left: auto;
-    bottom: auto;
+    position: fixed;
+    top: var(--nav-height, 0px);
+    left: 0;
+    bottom: 0;
     width: var(--saves-width, 400px);
-    margin: 0 2% 4% 0;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+    z-index: 1001;
   }
 
   .saves-panel-header {
@@ -4421,10 +4848,10 @@ onBeforeUnmount(() => {
   }
 
   .saves-body {
-    height: auto !important;
-    flex: 0 0 auto;
+    height: auto !important; /* 覆盖内联拖拽高度 */
+    flex: 1; /* 占满其余高度 */
     min-height: 0;
-    margin-top: 0;
+    margin-top: 62px; /* 标题栏高度（含 22px 底部边距），面板已从导航栏下方开始 */
     border-radius: 0;
   }
 
