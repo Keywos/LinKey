@@ -1,16 +1,17 @@
 <template>
-  <h2
-    class="edit-code-editor"
-    :class="{ 'saves-open': showSaves }"
-    style="
-      -webkit-user-select: none;
-      user-select: none;
-      display: flex;
-      justify-content: left;
-      width: 90%;
-      margin-top: -10px;
-    "
-  >
+  <div class="edit-code-scroll">
+    <h2
+      class="edit-code-editor"
+      :class="{ 'saves-open': showSaves }"
+      style="
+        -webkit-user-select: none;
+        user-select: none;
+        display: flex;
+        justify-content: left;
+        width: 90%;
+        margin-top: -10px;
+      "
+    >
     <span
       class="edit-code-editor-title"
       style="opacity: 0.6"
@@ -31,10 +32,10 @@
         +
       </button>
     </div>
-  </h2>
+    </h2>
 
-  <!-- 保存列表面板 -->
-  <div v-if="showSaves" class="saves-panel">
+    <!-- 保存列表面板 -->
+    <div v-if="showSaves" class="saves-panel">
     <div class="saves-body" :style="{ height: savesPanelHeight + 'px' }">
       <div class="saves-toolbar">
         <button class="saves-btn" @click="toggleToolbar">
@@ -546,15 +547,16 @@
         <span class="saves-vresize-dots"></span>
       </div> -->
     </div>
+    </div>
+    <cmView
+      v-if="editorReady"
+      ref="cmViewRef"
+      id="main"
+      :isReadOnly="false"
+      :class="{ 'saves-open': showSaves }"
+    />
+    <div style="height: 30dvh"></div>
   </div>
-  <cmView
-    v-if="editorReady"
-    ref="cmViewRef"
-    id="main"
-    :isReadOnly="false"
-    :class="{ 'saves-open': showSaves }"
-  />
-
   <!-- ★ 可拖拽控制台面板 -->
   <div
     v-if="showlog"
@@ -3524,6 +3526,14 @@ onBeforeUnmount(() => {
   animation: edit-code-editor-add-press 300ms ease-out;
 }
 
+.edit-code-scroll {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
 @keyframes edit-code-editor-add-press {
   0% {
     background: #8f98c61a;
@@ -3743,10 +3753,9 @@ onBeforeUnmount(() => {
 }
 
 .saves-list {
-  overflow-y: auto;
+  overflow-y: visible;
   /* ★ 横向溢出一律隐藏，避免子列/按钮把列表撑出屏幕 */
   overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
   padding: 4px 0;
   flex: 1;
   min-height: 0;
@@ -4385,29 +4394,16 @@ onBeforeUnmount(() => {
   }
   /* ★ 面板打开时：标题固定在左侧面板顶部，形成「标题 | cmview / 文件列表 | cmview」分栏 */
   .edit-code-editor.saves-open {
-    position: fixed;
-    top: var(--nav-height, 0px);
-    left: 0;
-    width: var(--saves-width, 400px) !important;
-    margin: 0 !important;
-    padding: 20px 16px 22px 18px !important; /* 底部 22px 边距 */
-    box-sizing: border-box;
-    z-index: 1002;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    position: relative;
   }
 
   .saves-panel {
-    position: fixed;
-    top: var(--nav-height, 0px);
-    left: 0;
-    bottom: 0;
+    position: relative;
+    top: auto;
+    left: auto;
+    bottom: auto;
     width: var(--saves-width, 400px);
-    margin: 0;
-    border-radius: 0;
-    box-shadow: none;
-    z-index: 1001;
+    margin: 0 2% 4% 0;
   }
 
   .saves-panel-header {
@@ -4425,10 +4421,10 @@ onBeforeUnmount(() => {
   }
 
   .saves-body {
-    height: auto !important; /* 覆盖内联拖拽高度 */
-    flex: 1; /* 占满其余高度 */
+    height: auto !important;
+    flex: 0 0 auto;
     min-height: 0;
-    margin-top: 62px; /* 标题栏高度（含 22px 底部边距），面板已从导航栏下方开始 */
+    margin-top: 0;
     border-radius: 0;
   }
 

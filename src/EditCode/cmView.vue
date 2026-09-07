@@ -1,5 +1,8 @@
 <template>
-  <div class="cmviewRef">
+  <div
+    class="cmviewRef"
+    :style="{ '--cm-editor-height': `${cmEditorHeight}px` }"
+  >
     <div class="cm-toolbar-row cm-toolbar-row--locked-y">
       <!-- 展开态：完整工具栏 -->
       <div class="cm-toolbar-wrapper">
@@ -90,6 +93,7 @@
         aria-label="查找与替换"
         :style="[searchSheetStyle, editorOverlayStyle]"
         @pointerdown="startSearchSheetDrag"
+        @click.capture="onSearchSheetClick"
         @keydown.escape.prevent="closeSearch"
       >
         <div class="cm-search-field-row">
@@ -116,7 +120,6 @@
                 :aria-expanded="replaceOpen"
                 :aria-label="replaceOpen ? '收起替换' : '展开替换'"
                 :title="replaceOpen ? '收起替换' : '展开替换'"
-                @pointerdown.stop
                 @click.stop="toggleReplace"
               >
                 {{ replaceOpen ? "▴" : "▾" }}
@@ -188,7 +191,6 @@
               <button
                 type="button"
                 :disabled="!canSearch"
-                @pointerdown.stop
                 @click.stop="replaceNext"
               >
                 替换
@@ -198,7 +200,6 @@
                 class="cm-replace-all"
                 :class="{ armed: replaceAllArmed }"
                 :disabled="!canSearch"
-                @pointerdown.stop
                 @click.stop="confirmReplaceAll"
               >
                 {{ replaceAllArmed ? "再次点击确认" : "全替" }}
@@ -211,8 +212,15 @@
     <div
       ref="viewRef"
       class="cmview-editor-host"
-      style="width: 100%; min-width: 0; font-size: 11px; overflow: hidden"
+      style="width: 100%; min-width: 0; font-size: 11px"
     />
+    <div
+      class="cm-editor-resize-handle"
+      @pointerdown="startCmEditorResize"
+      title="拖拽调整编辑器高度"
+    >
+      <div class="cm-editor-resize-bar"></div>
+    </div>
     <div
       v-if="editorLoading"
       class="cm-content-loading"
@@ -559,6 +567,57 @@ const props = defineProps({
 });
 
 const viewRef = ref(null);
+
+const CM_EDITOR_HEIGHT_KEY = "cm_editor_height";
+const CM_EDITOR_MIN_HEIGHT = 180;
+const CM_EDITOR_MAX_HEIGHT = 1520;
+const getDefaultCmEditorHeight = () => Math.min(window.innerHeight * 0.7, 720);
+const getSavedCmEditorHeight = () => {
+  const saved = Number(localStorage.getItem(CM_EDITOR_HEIGHT_KEY));
+  return Number.isFinite(saved) && saved >= CM_EDITOR_MIN_HEIGHT ? saved : null;
+};
+const cmEditorHeight = ref(
+  getSavedCmEditorHeight() ?? getDefaultCmEditorHeight(),
+);
+let cmEditorResizeData = null;
+
+const getMaxCmEditorHeight = () => CM_EDITOR_MAX_HEIGHT;
+
+const startCmEditorResize = (event) => {
+  if (event.button !== undefined && event.button !== 0) return;
+  event.preventDefault();
+  cmEditorResizeData = {
+    startY: event.clientY,
+    startHeight: cmEditorHeight.value,
+  };
+  document.addEventListener("pointermove", onCmEditorResize, {
+    passive: false,
+  });
+  document.addEventListener("pointerup", stopCmEditorResize);
+  document.addEventListener("pointercancel", stopCmEditorResize);
+};
+
+const onCmEditorResize = (event) => {
+  if (!cmEditorResizeData) return;
+  event.preventDefault();
+  cmEditorHeight.value = Math.max(
+    CM_EDITOR_MIN_HEIGHT,
+    Math.min(
+      getMaxCmEditorHeight(),
+      cmEditorResizeData.startHeight + event.clientY - cmEditorResizeData.startY,
+    ),
+  );
+};
+
+const stopCmEditorResize = () => {
+  if (cmEditorResizeData) {
+    localStorage.setItem(CM_EDITOR_HEIGHT_KEY, String(cmEditorHeight.value));
+  }
+  cmEditorResizeData = null;
+  document.removeEventListener("pointermove", onCmEditorResize);
+  document.removeEventListener("pointerup", stopCmEditorResize);
+  document.removeEventListener("pointercancel", stopCmEditorResize);
+};
 
 const langs = new Compartment();
 const editorTheme = new Compartment();
@@ -978,35 +1037,16 @@ let _pendingStoreContent = null;
 // 这是为了避免页面滚动和编辑器滚动同时参与大面积重绘。
 const iosScrollStabilityTheme = EditorView.theme({
   "&": {
-    // 高度由外层 cmview-editor-host 提供，编辑器本身填满宿主。
-    // height: "100%",
     minHeight: 0,
-    // maxHeight: "100%",
     minWidth: 0,
     display: "flex",
     flexDirection: "column",
-    overflow: "hidden",
   },
   ".cm-scroller": {
-    // 关键：让滚动条属于 CmView 内部，而不是 body/页面右侧。
-    flex: "1 1 0",
-    minHeight: 0,
-    // height: "100%",
-    // maxHeight: "100%",
     minWidth: 0,
-    overflowY: "scroll",
+    overflowY: "auto",
     overflowX: "auto",
-    "scrollbar-gutter": "stable",
-    "-webkit-overflow-scrolling": "auto",
-    "overscroll-behavior": "contain",
-  },
-  ".cm-scroller::-webkit-scrollbar": {
-    width: "10px",
-    height: "10px",
-  },
-  ".cm-scroller::-webkit-scrollbar-thumb": {
-    background: "rgba(128, 128, 128, 0.55)",
-    borderRadius: "5px",
+    overscrollBehavior: "contain",
   },
 });
 
@@ -1379,6 +1419,7 @@ const refreshEditorTheme = () => {
 onBeforeUnmount(() => {
   applyContentId++;
   languageRequestId++;
+  stopCmEditorResize();
   applyContentToEditor = null;
   flushStoreSync();
   stopParseLoop();
@@ -1473,6 +1514,7 @@ const searchSheetStyle = computed(() => {
 });
 let searchDispatchRafId = null;
 let searchSheetDragState = null;
+let searchSheetSuppressClick = false;
 
 const clampSearchSheetPosition = (x, y) => {
   const minX = 10;
@@ -1504,6 +1546,7 @@ const onSearchSheetDrag = (e) => {
   const dy = e.clientY - searchSheetDragState.startY;
   if (!searchSheetDragState.dragging && Math.hypot(dx, dy) < 6) return;
   searchSheetDragState.dragging = true;
+  searchSheetSuppressClick = true;
   e.preventDefault();
   searchSheetPos.value = clampSearchSheetPosition(
     searchSheetDragState.originX + dx,
@@ -1524,9 +1567,15 @@ const endSearchSheetDrag = () => {
   searchSheetDragState = null;
 };
 
+const onSearchSheetClick = (event) => {
+  if (!searchSheetSuppressClick) return;
+  event.preventDefault();
+  event.stopPropagation();
+  searchSheetSuppressClick = false;
+};
+
 const startSearchSheetDrag = (e) => {
   if (e.button !== undefined && e.button !== 0) return;
-  if (e.target.closest("input, button, select, textarea")) return;
   initSearchSheetPos();
   searchSheetDragState = {
     startX: e.clientX,
@@ -2075,10 +2124,10 @@ onBeforeUnmount(() => {
 
 .cmviewRef {
   width: 100%;
-  /* height: 60dvh; */
-  height: 120dvh;
-  min-height: 0;
+  height: auto;
+  min-height: 40px;
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   box-sizing: border-box;
 }
@@ -2088,44 +2137,29 @@ onBeforeUnmount(() => {
 }
 
 .cmviewRef > .cmview-editor-host {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 0 auto;
+  flex-basis: auto;
   min-width: 0;
-  overflow: hidden;
 }
 
 .cmviewRef :deep(.cm-editor) {
-  height: 100%;
+  height: var(--cm-editor-height);
   min-height: 0;
-  max-height: none;
+  max-height: 1520px;
 }
 
 .cmviewRef :deep(.cm-scroller) {
   height: 100%;
-  min-height: 0;
-  max-height: none;
   overflow-y: auto;
   overflow-x: auto;
   overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
   touch-action: pan-x pan-y;
-}
-.cmviewRef > .cmview-editor-host {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.cmviewRef :deep(.cm-scroller) {
-  overflow-y: auto;
-  overscroll-behavior-y: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 .cmviewRef {
   display: flex;
-  flex: 1 1 0;
-  flex-basis: 0;
+  flex: 0 0 auto;
+  flex-basis: auto;
   flex-direction: column;
   width: 100%;
   min-width: 0;
@@ -2158,14 +2192,14 @@ onBeforeUnmount(() => {
 }
 
 .cmviewRef > .cmview-editor-host {
-  flex: 1 1 0;
-  flex-basis: 0;
+  flex: 0 0 auto;
+  flex-basis: auto;
   width: 100%;
   min-width: 0;
   max-width: 100%;
   min-inline-size: 0;
   max-inline-size: 100%;
-  min-height: 0;
+  min-height: 1px;
   box-sizing: border-box;
 }
 
@@ -2174,6 +2208,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   max-width: 100%;
   min-height: 0;
+  max-height: 1520px;
   box-sizing: border-box;
 }
 
@@ -2181,7 +2216,38 @@ onBeforeUnmount(() => {
   width: 100%;
   min-width: 0;
   max-width: 100%;
+  overflow-y: auto;
+  overflow-x: auto;
   box-sizing: border-box;
+}
+
+.cm-editor-resize-handle {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 24px;
+  cursor: row-resize;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  background: transparent;
+}
+
+.cm-editor-resize-bar {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  width: 90px;
+  height: 4px;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.45);
+  transition: background 0.15s;
+}
+
+.cm-editor-resize-handle:hover .cm-editor-resize-bar,
+.cm-editor-resize-handle:active .cm-editor-resize-bar {
+  background: rgba(255, 255, 255, 0.8);
 }
 
 .cmviewRef > .cm-toolbar-row--locked-y .cm-img-button {
