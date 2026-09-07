@@ -96,7 +96,19 @@ import { defineAsyncComponent, onBeforeUnmount, ref } from "vue";
 import { showToast } from "vant";
 import { sendReq } from "@/http/http.js";
 import { useCmStore } from "@/store/cmCodeStore.js";
-import { codehubStorage, contentKey, getGistItemId, metaKey, prependGistFileToCache, renameGistFileInCodeHub, SAVES_INDEX_KEY, updateGistDescriptionInCodeHub } from "@/storage/codehubStorage.js";
+import {
+  codehubStorage,
+  computeGistHash,
+  contentKey,
+  getGistItemId,
+  getIdsFromSavesIndex,
+  metaKey,
+  parseSavesIndex,
+  prependGistFileToCache,
+  renameGistFileInCodeHub,
+  SAVES_INDEX_KEY,
+  updateGistDescriptionInCodeHub,
+} from "@/storage/codehubStorage.js";
 import { toStableGistRawUrl } from "@/gist/rawUrl.js";
 const cmStore = useCmStore();
 
@@ -168,32 +180,53 @@ cmStore.setCmCode(inp.value);
 const saveGistFileLocally = async (gist, file, fileName, fileContent) => {
   const id = getGistItemId(gist.id, fileName);
   const content = typeof fileContent === "string" ? fileContent : String(fileContent || "");
-  const savedIds = await codehubStorage.getItem(SAVES_INDEX_KEY);
-  const ids = new Set(Array.isArray(savedIds) ? savedIds : []);
-  ids.add(id);
+  const rawIndex = await codehubStorage.getItem(SAVES_INDEX_KEY);
+  const { isDetailed, items } = parseSavesIndex(rawIndex);
+
+  const preview = content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100);
+  const updatedAt = new Date(gist.updated_at || Date.now()).getTime();
+  const folderName = gist.description || Object.keys(gist.files || {})[0] || fileName;
+  const gistHash = computeGistHash(gist.id);
+
   await codehubStorage.setItem(contentKey(id), content);
   await codehubStorage.setItem(metaKey(id), {
     name: fileName,
     length: content.length,
-    preview: content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100),
-    updatedAt: new Date(gist.updated_at || Date.now()).getTime(),
+    preview,
+    updatedAt,
     language: "",
     manualLanguage: "",
     url: "",
     blobUrl: "",
+    tags: ["Gist"],
     gist: {
-      id: gist.id,
-      folderName: gist.description || Object.keys(gist.files || {})[0] || fileName,
+      gistHash,
+      folderName,
       filename: fileName,
       rawUrl: toStableGistRawUrl(file?.raw_url),
-      htmlUrl: gist.html_url || "",
-      description: gist.description || "",
-      user: gist.owner?.login || "",
-      updatedAt: new Date(gist.updated_at || Date.now()).getTime(),
+      htmlUrl: "",
+      description: "",
+      user: "",
+      updatedAt,
       downloaded: true,
     },
   });
-  await codehubStorage.setItem(SAVES_INDEX_KEY, [...ids]);
+
+  const nextIndexItem = {
+    id,
+    name: fileName,
+    updatedAt,
+    isGist: true,
+  };
+
+  const filteredItems = items.filter((it) => (typeof it === "string" ? it !== id : it?.id !== id));
+  const newItems = [nextIndexItem, ...filteredItems];
+
+  await codehubStorage.setItem(SAVES_INDEX_KEY, {
+    version: 2,
+    updatedAt: Date.now(),
+    items: newItems,
+  });
 };
 
 const onSubmit = async (values) => {

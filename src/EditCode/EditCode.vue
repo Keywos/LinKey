@@ -805,10 +805,13 @@ import { sendReq } from "@/http/http.js";
 import { toStableGistRawUrl } from "@/gist/rawUrl.js";
 import {
   codehubStorage as idbStorage,
+  computeGistHash,
   contentKey,
   getGistItemId,
+  getIdsFromSavesIndex,
   metaKey,
   moveCodeHubItemId,
+  parseSavesIndex,
   prependGistFileToCache,
   removeGistFilesFromCache,
   removeGistFilesFromCodeHub,
@@ -879,8 +882,10 @@ const syncCodeHub = async (action) => {
         showToast("云端已是最新，无变更需同步");
       } else {
         const parts = [];
-        if (res.uploaded > 0) parts.push(`上传 ${res.uploaded} 个文件`);
+        if (res.uploaded > 0) parts.push(`上传 ${res.uploaded} 个项目`);
         if (res.deleted > 0) parts.push(`删除 ${res.deleted} 个云端废弃文件`);
+        if (res.failed > 0) parts.push(`${res.failed} 个文件项目失败`);
+        if (res.failedDeleted > 0) parts.push(`${res.failedDeleted} 个云端文件删除失败`);
         showToast(
           parts.length > 0 ? `同步完成：${parts.join("，")}` : "云端索引已更新",
         );
@@ -1408,6 +1413,18 @@ const createId = () =>
 const toStoredValue = (value) =>
   value == null ? null : JSON.parse(JSON.stringify(toRaw(value)));
 
+const sanitizeGistForStorage = (gist) => {
+  if (!gist || typeof gist !== "object") return null;
+  const rawGist = toStoredValue(gist);
+  const gistHash = rawGist.gistHash || (rawGist.id ? computeGistHash(rawGist.id) : "");
+  // 移除真实的 gist.id，改用安全的单向散列 gistHash
+  const { id, ...rest } = rawGist;
+  return {
+    ...rest,
+    gistHash,
+  };
+};
+
 const saveMeta = async (item) => {
   await idbStorage.setItem(metaKey(item.id), {
     name: item.name,
@@ -1419,7 +1436,7 @@ const saveMeta = async (item) => {
     url: item.url || "",
     blobUrl: item.blobUrl || "",
     userAgent: item.userAgent || "",
-    gist: toStoredValue(item.gist),
+    gist: sanitizeGistForStorage(item.gist),
     localGroupId: item.localGroupId || "",
     tags: normalizeTags(item.tags),
   });
@@ -1704,19 +1721,65 @@ const toggleItemActions = async (item) => {
   await loadItemForList(item);
 };
 
+const hydrateGistDetails = async (items) => {
+  try {
+    const cachedGists = await idbStorage.getItem(GIST_LIST_KEY);
+    if (!Array.isArray(cachedGists) || cachedGists.length === 0) return items;
+
+    const gistHashMap = new Map();
+    const gistIdMap = new Map();
+    for (const g of cachedGists) {
+      if (g?.id) {
+        gistHashMap.set(computeGistHash(g.id), g);
+        gistIdMap.set(g.id, g);
+      }
+    }
+
+    return items.map((item) => {
+      if (!item.gist) return item;
+      const matchedGist =
+        (item.gist.gistHash && gistHashMap.get(item.gist.gistHash)) ||
+        (item.gist.id && gistIdMap.get(item.gist.id));
+
+      if (matchedGist) {
+        return {
+          ...item,
+          gist: {
+            ...item.gist,
+            id: matchedGist.id,
+            htmlUrl: item.gist.htmlUrl || matchedGist.html_url || "",
+            description: item.gist.description || matchedGist.description || matchedGist.desc || "",
+            user: item.gist.user || matchedGist.user || matchedGist.owner?.login || "",
+          },
+        };
+      }
+      return item;
+    });
+  } catch (e) {
+    console.warn("hydrateGistDetails failed", e);
+    return items;
+  }
+};
+
 const loadSaves = async () => {
   isLoadingSaves.value = true;
   try {
     const list = await idbStorage.getItem(SAVES_INDEX_KEY);
-    const ids = Array.isArray(list) ? list : [];
+    const parsedIndex = parseSavesIndex(list);
+    const ids = parsedIndex.items.map((it) => it.id);
+    const itemIndexMap = new Map(parsedIndex.items.map((it) => [it.id, it]));
+
     const metaEntries = await Promise.all(
       ids.map(async (id) => {
         try {
           const meta = await idbStorage.getItem(metaKey(id));
           if (meta) {
+            const indexItem = itemIndexMap.get(id);
             return {
               id,
               ...meta,
+              cf_meta: indexItem?.cf_meta === true,
+              cf_content: indexItem?.cf_content === true,
               tags: normalizeTags(
                 meta.tags?.length
                   ? meta.tags
@@ -1734,7 +1797,7 @@ const loadSaves = async () => {
         }
       }),
     );
-    const items = metaEntries.filter(Boolean);
+    let items = metaEntries.filter(Boolean);
 
     // ★ 索引恢复：仅当列表为空时扫描 IDB 中的 meta/content 键，找回索引丢失的项
     if (items.length === 0) {
@@ -1781,16 +1844,18 @@ const loadSaves = async () => {
 
         if (recovered > 0) {
           console.log(`索引恢复：找回 ${recovered} 个丢失的项`);
-          // 恢复后立即持久化索引
-          const idList = items.map((item) => item.id);
-          await idbStorage.setItem(SAVES_INDEX_KEY, idList);
         }
       } catch (e) {
         console.error("索引恢复扫描失败", e);
       }
     }
 
+    items = await hydrateGistDetails(items);
     savedItems.value = items;
+
+    if (!list || !list.version || list.version < 2) {
+      await persistIndex();
+    }
   } catch (error) {
     console.error("读取保存列表失败", error);
     savedItems.value = [];
@@ -1800,9 +1865,9 @@ const loadSaves = async () => {
 };
 
 const persistIndex = async () => {
-  const idList = savedItems.value.map((item) => item.id);
+  const currentItems = savedItems.value;
   // ★ 防御：空列表写入前检查 IDB 是否仍有数据，防止意外清空索引
-  if (idList.length === 0) {
+  if (currentItems.length === 0) {
     const allKeys = await idbStorage.getAllKeys();
     const hasData = allKeys.some(
       (k) => typeof k === "string" && k.startsWith("codehub_save_meta:"),
@@ -1812,7 +1877,29 @@ const persistIndex = async () => {
       return;
     }
   }
-  await idbStorage.setItem(SAVES_INDEX_KEY, idList);
+
+  // 获取当前已有索引中的分项同步状态，避免保存时丢失状态
+  const existingRawIndex = await idbStorage.getItem(SAVES_INDEX_KEY);
+  const existingParsed = parseSavesIndex(existingRawIndex);
+  const existingSyncMap = new Map(existingParsed.items.map((it) => [it.id, it]));
+
+  const leanIndex = {
+    version: 2,
+    updatedAt: Date.now(),
+    items: currentItems.map((item) => {
+      const existing = existingSyncMap.get(item.id);
+      return {
+        id: item.id,
+        name: item.name || "",
+        updatedAt: item.updatedAt || Date.now(),
+        ...(item.gist ? { isGist: true } : {}),
+        ...(item.cf_meta === true || existing?.cf_meta === true ? { cf_meta: true } : {}),
+        ...(item.cf_content === true || existing?.cf_content === true ? { cf_content: true } : {}),
+      };
+    }),
+  };
+
+  await idbStorage.setItem(SAVES_INDEX_KEY, leanIndex);
 };
 
 const buildMeta = (content) => ({

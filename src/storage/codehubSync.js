@@ -1,8 +1,11 @@
 import {
   codehubStorage,
   contentKey,
+  getIdsFromSavesIndex,
   metaKey,
+  parseSavesIndex,
   SAVES_INDEX_KEY,
+  GIST_LIST_KEY,
 } from "@/storage/codehubStorage.js";
 import { CryptoJS } from "@/st/cpto.js";
 
@@ -11,6 +14,16 @@ export const CODEHUB_SYNC_TOKEN_KEY = "CodeHubSyncToken";
 export const CODEHUB_SYNC_SECRET_KEY = "CodeHubSyncKey";
 export const CODEHUB_SYNC_KEY_KEY = CODEHUB_SYNC_SECRET_KEY;
 export const MAX_SYNC_FILE_SIZE = 50 * 1024 * 1024; // 单个文件最大 50MB
+const SHOW_SAVES_KEY = "SHOW_SAVES_KEY";
+
+const isSyncableStoreKey = (key) => key !== SAVES_INDEX_KEY && key !== SHOW_SAVES_KEY;
+
+const getLogicalFileId = (key) => {
+  if (key === GIST_LIST_KEY) return GIST_LIST_KEY;
+  if (key.startsWith("codehub_save_meta:")) return key.slice("codehub_save_meta:".length);
+  if (key.startsWith("codehub_save_content:")) return key.slice("codehub_save_content:".length);
+  return key;
+};
 
 export const getCodeHubSyncConfig = () => {
   const url = (localStorage.getItem(CODEHUB_SYNC_URL_KEY) || "").trim().replace(/\/$/, "");
@@ -191,16 +204,27 @@ const getMetaTimestamp = (meta) => {
   return Number.isFinite(num) ? num : 0;
 };
 
-// 获取本地仅包含元数据的轻量索引
+// 获取本地仅包含元数据的轻量索引，普通文件和 Gist 文件都参与同步
 export const getLocalIndex = async () => {
-  const ids = await codehubStorage.getItem(SAVES_INDEX_KEY);
-  const idList = Array.isArray(ids) ? ids : [];
+  const rawIndex = await codehubStorage.getItem(SAVES_INDEX_KEY);
+  const idList = getIdsFromSavesIndex(rawIndex);
   const files = {};
+  const syncableIds = [];
   for (const id of idList) {
     const meta = await codehubStorage.getItem(metaKey(id));
-    if (meta) files[id] = meta;
+    if (meta) {
+      files[id] = meta;
+      syncableIds.push(id);
+    }
   }
-  return { version: 2, updatedAt: Date.now(), ids: idList, files };
+  const gistList = await codehubStorage.getItem(GIST_LIST_KEY);
+  return {
+    version: 2,
+    updatedAt: Date.now(),
+    ids: syncableIds,
+    files,
+    gistList: Array.isArray(gistList) ? gistList : [],
+  };
 };
 
 // 获取并解密云端索引（仅解析加密密文，不再兼容明文）
@@ -221,174 +245,212 @@ export const fetchAndDecryptRemoteIndex = async (secretKey) => {
 
 // 上传：检查时间戳，只有本地比云端更新或云端缺失的文件才上传
 export const uploadCodeHubSnapshot = async () => {
-  const { token, secretKey } = getCodeHubSyncConfig();
-  const localIndex = await getLocalIndex();
+  const { secretKey } = getCodeHubSyncConfig();
   const remoteIndex = await fetchAndDecryptRemoteIndex(secretKey);
-
-  const remoteFiles = remoteIndex?.files || {};
-  const remoteIds = Array.isArray(remoteIndex?.ids) ? remoteIndex.ids : [];
-  const filesToUpload = [];
-
-  for (const id of localIndex.ids) {
-    const localMeta = localIndex.files[id];
-    if (!localMeta) continue;
-
-    const remoteMeta = remoteFiles[id];
-    const isNew = !remoteMeta;
-    const localTime = getMetaTimestamp(localMeta);
-    const remoteTime = getMetaTimestamp(remoteMeta);
-    // 严格检查时间戳：仅当云端没有，或者本地时间戳严格大于云端时间戳时才上传
-    const isLocalNewer = localTime > remoteTime;
-
-    if (isNew || isLocalNewer) {
-      filesToUpload.push(id);
-    }
+  const localEntries = await codehubStorage.getAllEntries();
+  const localIndex = parseSavesIndex(await codehubStorage.getItem(SAVES_INDEX_KEY));
+  const remoteIndexData = parseSavesIndex(remoteIndex);
+  const remoteItems = new Map(remoteIndexData.items.map((item) => [item.id, item]));
+  const localValues = new Map(localEntries.map(({ key, value }) => [key, value]));
+  const localIds = new Set(localIndex.items.map((item) => item.id));
+  const remoteKeys = new Set(Array.isArray(remoteIndex?.entries) ? remoteIndex.entries : []);
+  const fileIdsToUpload = localIndex.items
+    .filter(
+      (item) =>
+        !remoteItems.has(item.id) ||
+        Number(item.updatedAt) > Number(remoteItems.get(item.id)?.updatedAt || 0),
+    )
+    .map((item) => item.id);
+  const entriesToUpload = fileIdsToUpload.flatMap((id) => [
+    { key: metaKey(id), value: localValues.get(metaKey(id)) },
+    { key: contentKey(id), value: localValues.get(contentKey(id)) },
+  ]).filter(({ value }) => value !== undefined);
+  const localGistListTime = Number(localIndex.gistListUpdatedAt) || 0;
+  const remoteGistListTime = Number(remoteIndexData.gistListUpdatedAt) || 0;
+  if (!remoteKeys.has(GIST_LIST_KEY) || localGistListTime > remoteGistListTime) {
+    const gistList = localValues.get(GIST_LIST_KEY);
+    if (gistList !== undefined) entriesToUpload.push({ key: GIST_LIST_KEY, value: gistList });
   }
+  const remoteKeysToDelete = [...remoteKeys].filter(
+    (key) => {
+      if (key === GIST_LIST_KEY) return !localValues.has(key);
+      const id = key.startsWith("codehub_save_meta:")
+        ? key.slice("codehub_save_meta:".length)
+        : key.startsWith("codehub_save_content:")
+          ? key.slice("codehub_save_content:".length)
+          : null;
+      return id ? !localIds.has(id) : !localValues.has(key);
+    },
+  );
+  const successfulKeys = new Set();
+  const failedUploadErrors = [];
+  const failedDeleteErrors = [];
 
-  // 找出本地已经删除但云端依然存在的文件（需从云端同步删除）
-  const filesToDelete = remoteIds.filter((id) => !localIndex.ids.includes(id));
-  const hasNewIds = localIndex.ids.some((id) => !remoteIds.includes(id));
-  const hasDeletedIds = filesToDelete.length > 0;
-
-  // 如果没有任何文件需要上传，没有新文件，也没有需要删除的文件，直接返回，不发起任何写请求
-  if (filesToUpload.length === 0 && !hasNewIds && !hasDeletedIds) {
-    return {
-      uploaded: 0,
-      deleted: 0,
-      total: localIndex.ids.length,
-      changed: false,
-    };
-  }
-
-  // 并发从云端彻底删除本地已删除的文件（每次最多 4 个并发）
-  if (filesToDelete.length > 0) {
-    await runWithConcurrency(filesToDelete, 4, async (id) => {
-      try {
-        await apiFetch(`/files/${encodeURIComponent(id)}`, {
-          method: "DELETE",
-        });
-      } catch (err) {
-        console.warn(`删除云端文件 ${id} 失败:`, err);
+  await runWithConcurrency(entriesToUpload, 4, async ({ key, value }) => {
+    try {
+      const serialized = JSON.stringify(value);
+      if (new Blob([serialized]).size > MAX_SYNC_FILE_SIZE) {
+        throw new Error(`IndexedDB 项 "${key}" 超过 50MB 大小限制`);
       }
-    });
-  }
-
-  // 并发加密并上传仅变更或新增的文件的 content（每次最多 4 个并发）
-  if (filesToUpload.length > 0) {
-    await runWithConcurrency(filesToUpload, 4, async (id) => {
-      const content = await codehubStorage.getItem(contentKey(id));
-      const textToUpload = typeof content === "string" ? content : "";
-
-      // 本地校验：单个文件不得超过 50MB
-      const byteSize = new Blob([textToUpload]).size;
-      if (byteSize > MAX_SYNC_FILE_SIZE) {
-        const fileTitle = localIndex.files[id]?.title || id;
-        throw new Error(
-          `文件 "${fileTitle}" 超过 50MB 大小限制 (当前 ${(byteSize / (1024 * 1024)).toFixed(1)}MB)，已取消上传`
-        );
-      }
-
-      // 本地端到端 AES 加密，云端仅存储密文
-      const encryptedBody = await encryptContent(textToUpload, secretKey);
-      await apiFetch(`/files/${encodeURIComponent(id)}`, {
+      await apiFetch(`/files/${encodeURIComponent(key)}`, {
         method: "PUT",
         headers: { "Content-Type": "text/plain; charset=utf-8" },
-        body: encryptedBody,
+        body: await encryptContent(serialized, secretKey),
       });
-    });
-  }
-
-  // 合并元数据：同步删除已失效文件的元数据，保留本地最新的文件列表
-  const mergedFiles = {};
-  for (const id of localIndex.ids) {
-    const localMeta = localIndex.files[id];
-    const remoteMeta = remoteFiles[id];
-    const localTime = getMetaTimestamp(localMeta);
-    const remoteTime = getMetaTimestamp(remoteMeta);
-
-    if (!remoteMeta || localTime >= remoteTime) {
-      if (localMeta) mergedFiles[id] = localMeta;
-    } else {
-      mergedFiles[id] = remoteMeta;
+      successfulKeys.add(key);
+    } catch (error) {
+      failedUploadErrors.push({ key, error });
+      console.error(`同步 IndexedDB 项 ${key} 失败:`, error);
     }
-  }
+  });
 
-  const newIndex = {
-    version: 2,
+  const successfullyDeletedIds = new Set();
+  await runWithConcurrency(remoteKeysToDelete, 4, async (key) => {
+    try {
+      await apiFetch(`/files/${encodeURIComponent(key)}`, { method: "DELETE" });
+      successfullyDeletedIds.add(key);
+    } catch (error) {
+      failedDeleteErrors.push({ key, error });
+    }
+  });
+
+  const uploadedLogicalIds = new Set([...successfulKeys].map(getLogicalFileId));
+  const failedLogicalIds = new Set(failedUploadErrors.map(({ key }) => getLogicalFileId(key)));
+  const deletedLogicalIds = new Set([...successfullyDeletedIds].map(getLogicalFileId));
+  const completedLogicalIds = new Set(
+    [...uploadedLogicalIds].filter((id) => !failedLogicalIds.has(id)),
+  );
+
+  const currentRawIndex = await codehubStorage.getItem(SAVES_INDEX_KEY);
+  const parsedIndex = parseSavesIndex(currentRawIndex);
+  const updatedItems = parsedIndex.items.map((item) => {
+    const metaKeyName = metaKey(item.id);
+    const contentKeyName = contentKey(item.id);
+    const copy = { ...item };
+    if (successfulKeys.has(metaKeyName)) copy.cf_meta = true;
+    else delete copy.cf_meta;
+    if (successfulKeys.has(contentKeyName)) copy.cf_content = true;
+    else delete copy.cf_content;
+    return copy;
+  });
+  const syncedIndex = {
+    ...parsedIndex,
     updatedAt: Date.now(),
-    ids: localIndex.ids,
-    files: mergedFiles,
+    items: updatedItems,
   };
+  await codehubStorage.setItem(SAVES_INDEX_KEY, syncedIndex);
 
+  const latestEntries = await codehubStorage.getAllEntries();
+
+  const indexEntries = [
+    ...new Set([
+      ...remoteKeysToDelete.filter((key) => !successfullyDeletedIds.has(key)),
+      ...[...remoteKeys].filter((key) => latestEntries.some((entry) => entry.key === key)),
+      ...latestEntries
+        .filter(({ key }) => isSyncableStoreKey(key) && successfulKeys.has(key))
+        .map(({ key }) => key),
+    ]),
+  ];
+  const newIndex = {
+    version: 4,
+    updatedAt: Date.now(),
+    entries: indexEntries,
+    items: updatedItems,
+    gistListUpdatedAt: successfulKeys.has(GIST_LIST_KEY)
+      ? localGistListTime
+      : remoteGistListTime,
+    ids: updatedItems.map((item) => item.id),
+    files: Object.fromEntries(
+      latestEntries
+        .filter(({ key }) => key.startsWith("codehub_save_meta:") && successfulKeys.has(key))
+        .map(({ key, value }) => [key.slice("codehub_save_meta:".length), value]),
+    ),
+    gistList: latestEntries.find(({ key }) => key === GIST_LIST_KEY)?.value || [],
+  };
   const indexJsonStr = JSON.stringify(newIndex);
   if (new Blob([indexJsonStr]).size > MAX_SYNC_FILE_SIZE) {
     throw new Error("云端索引超出 50MB 大小限制");
   }
-
-  // 索引同样在本地端到端 AES 加密后再上传云端
-  const encryptedIndex = await encryptContent(indexJsonStr, secretKey);
   await apiFetch("/index", {
     method: "PUT",
     headers: { "Content-Type": "text/plain; charset=utf-8" },
-    body: encryptedIndex,
+    body: await encryptContent(indexJsonStr, secretKey),
   });
 
   return {
-    uploaded: filesToUpload.length,
-    deleted: filesToDelete.length,
-    total: localIndex.ids.length,
-    changed: true,
+    uploaded: completedLogicalIds.size,
+    failed: failedLogicalIds.size,
+    deleted: deletedLogicalIds.size,
+    failedDeleted: new Set(failedDeleteErrors.map(({ key }) => getLogicalFileId(key))).size,
+    total: localEntries.length,
+    changed:
+      entriesToUpload.length > 0 ||
+      successfullyDeletedIds.size > 0 ||
+      failedUploadErrors.length > 0,
   };
 };
 
 // 恢复：拉取 index，仅下载本地没有或云端时间戳更新的 content
 export const restoreCodeHubSnapshot = async () => {
-  const { token, secretKey } = getCodeHubSyncConfig();
+  const { secretKey } = getCodeHubSyncConfig();
   const remoteIndex = await fetchAndDecryptRemoteIndex(secretKey);
 
-  if (!remoteIndex || !Array.isArray(remoteIndex.ids) || !remoteIndex.files) {
+  if (!remoteIndex || !Array.isArray(remoteIndex.entries)) {
     throw new Error("云端暂无可用的文件索引，或密钥错误无法解密");
   }
 
-  const localIndex = await getLocalIndex();
-  const localFiles = localIndex.files;
-  const filesToDownload = [];
-
-  for (const id of remoteIndex.ids) {
-    const remoteMeta = remoteIndex.files[id];
-    if (!remoteMeta) continue;
-
-    const localMeta = localFiles[id];
-    const isMissing = !localMeta;
-    const localTime = getMetaTimestamp(localMeta);
-    const remoteTime = getMetaTimestamp(remoteMeta);
-    // 仅当本地缺失，或云端时间戳严格大于本地时间戳时才需要下载
-    const isRemoteNewer = remoteTime > localTime;
-
-    if (isMissing || isRemoteNewer) {
-      filesToDownload.push({ id, meta: remoteMeta });
+  const localIndex = parseSavesIndex(await codehubStorage.getItem(SAVES_INDEX_KEY));
+  const remoteIndexData = parseSavesIndex(remoteIndex);
+  const localKeys = new Set(await codehubStorage.getAllKeys());
+  const remoteEntries = remoteIndex.entries.filter(isSyncableStoreKey);
+  const remoteItems = new Map(remoteIndexData.items.map((item) => [item.id, item]));
+  const localItems = new Map(localIndex.items.map((item) => [item.id, item]));
+  const entriesToDownload = remoteEntries.filter((key) => {
+    if (key === GIST_LIST_KEY) {
+      return !localKeys.has(key) || Number(remoteIndexData.gistListUpdatedAt) > Number(localIndex.gistListUpdatedAt);
     }
-  }
+    const id = key.startsWith("codehub_save_meta:")
+      ? key.slice("codehub_save_meta:".length)
+      : key.startsWith("codehub_save_content:")
+        ? key.slice("codehub_save_content:".length)
+        : null;
+    return id && (!localItems.has(id) || Number(remoteItems.get(id)?.updatedAt) > Number(localItems.get(id)?.updatedAt));
+  });
+  await runWithConcurrency(entriesToDownload, 4, async (key) => {
+    const fileRes = await apiFetch(`/files/${encodeURIComponent(key)}`);
+    const encryptedContent = await fileRes.text();
+    const serialized = await decryptContent(encryptedContent, secretKey);
+    await codehubStorage.setItem(key, JSON.parse(serialized));
+    localKeys.delete(key);
+  });
 
-  // 并发拉取内容并使用 Token 本地解密（每次最多 4 个并发）
-  if (filesToDownload.length > 0) {
-    await runWithConcurrency(filesToDownload, 4, async ({ id, meta }) => {
-      const fileRes = await apiFetch(`/files/${encodeURIComponent(id)}`);
-      const encryptedContent = await fileRes.text();
-      // 本地使用独立密钥解密密文
-      const decryptedContent = await decryptContent(encryptedContent, secretKey);
-      await codehubStorage.setItem(contentKey(id), decryptedContent);
-      await codehubStorage.setItem(metaKey(id), meta);
-    });
-  }
+  // 只删除云端索引中已不存在的本地键；未下载的同名键仍是有效数据。
+  const remoteEntrySet = new Set(remoteEntries);
+  await runWithConcurrency(
+    [...localKeys].filter((key) => isSyncableStoreKey(key) && !remoteEntrySet.has(key)),
+    4,
+    async (key) => {
+    await codehubStorage.removeItem(key);
+    },
+  );
 
-  // 合并本地保存索引列表
-  const mergedIds = [...new Set([...localIndex.ids, ...remoteIndex.ids])];
-  await codehubStorage.setItem(SAVES_INDEX_KEY, mergedIds);
+  const restoredIndex = await codehubStorage.getItem(SAVES_INDEX_KEY);
+  const parsedIndex = parseSavesIndex(restoredIndex);
+  const restoredItems = remoteIndexData.items.map((item) => ({
+    ...item,
+    cf_meta: true,
+    cf_content: true,
+  }));
+  await codehubStorage.setItem(SAVES_INDEX_KEY, {
+    ...parsedIndex,
+    items: restoredItems,
+    gistListUpdatedAt: remoteIndexData.gistListUpdatedAt,
+    updatedAt: Date.now(),
+  });
 
   return {
-    downloaded: filesToDownload.length,
-    total: remoteIndex.ids.length,
+    downloaded: new Set(entriesToDownload.map(getLogicalFileId)).size,
+    total: new Set(remoteEntries.map(getLogicalFileId)).size,
   };
 };
 
@@ -414,42 +476,25 @@ export const checkCodeHubSyncDiff = async () => {
     fetchAndDecryptRemoteIndex(secretKey),
   ]);
 
-  if (!remoteIndex || !Array.isArray(remoteIndex.ids)) {
+  if (!remoteIndex || !Array.isArray(remoteIndex.entries)) {
     return null;
   }
 
-  const localFileMap = localIndex.files || {};
-  const remoteFileMap = remoteIndex.files || {};
+  const localIndexData = parseSavesIndex(await codehubStorage.getItem(SAVES_INDEX_KEY));
+  const remoteIndexData = parseSavesIndex(remoteIndex);
+  const localKeys = new Set(localIndexData.items.map((item) => item.id));
+  const remoteItems = new Map(remoteIndexData.items.map((item) => [item.id, item]));
+  const remoteKeys = new Set(remoteIndexData.items.map((item) => item.id));
+  const toDownload = [...remoteKeys].filter(
+    (id) => !localKeys.has(id) || Number(remoteItems.get(id)?.updatedAt) > Number(localIndexData.items.find((item) => item.id === id)?.updatedAt),
+  ).length;
+  const toUpload = [...localKeys].filter(
+    (id) => !remoteKeys.has(id) || Number(localIndexData.items.find((item) => item.id === id)?.updatedAt) > Number(remoteItems.get(id)?.updatedAt),
+  ).length;
+  const gistListChanged = Number(localIndexData.gistListUpdatedAt) !== Number(remoteIndexData.gistListUpdatedAt);
+  const changedKeyCount = gistListChanged ? 1 : 0;
 
-  // 1. 检查云端相对于本地的新增或更新（本地需要下载）
-  let toDownload = 0;
-  for (const id of remoteIndex.ids) {
-    const remoteMeta = remoteFileMap[id];
-    const localMeta = localFileMap[id];
-    if (!localMeta) {
-      toDownload++;
-    } else if (remoteMeta?.updatedAt && localMeta?.updatedAt) {
-      if (remoteMeta.updatedAt > localMeta.updatedAt) {
-        toDownload++;
-      }
-    }
-  }
-
-  // 2. 检查本地相对于云端的新增或更新（本地需要上传）
-  let toUpload = 0;
-  for (const id of localIndex.ids) {
-    const localMeta = localFileMap[id];
-    const remoteMeta = remoteFileMap[id];
-    if (!remoteMeta) {
-      toUpload++;
-    } else if (localMeta?.updatedAt && remoteMeta?.updatedAt) {
-      if (localMeta.updatedAt > remoteMeta.updatedAt) {
-        toUpload++;
-      }
-    }
-  }
-
-  const hasChanges = toDownload > 0 || toUpload > 0;
+  const hasChanges = toDownload > 0 || toUpload > 0 || changedKeyCount > 0;
 
   return {
     hasChanges,
@@ -457,7 +502,7 @@ export const checkCodeHubSyncDiff = async () => {
     toUpload,
     remoteNewCount: toDownload,
     localNewCount: toUpload,
-    remoteCount: remoteIndex.ids.length,
-    localCount: localIndex.ids.length,
+    remoteCount: remoteKeys.size,
+    localCount: localKeys.length,
   };
 };
