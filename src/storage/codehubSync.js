@@ -6,6 +6,7 @@ import {
   parseSavesIndex,
   SAVES_INDEX_KEY,
   GIST_LIST_KEY,
+  markCodeHubItemsDeleted,
 } from "@/storage/codehubStorage.js";
 import { CryptoJS } from "@/st/cpto.js";
 
@@ -254,7 +255,17 @@ export const uploadCodeHubSnapshot = async () => {
   const localValues = new Map(localEntries.map(({ key, value }) => [key, value]));
   const localIds = new Set(localIndex.items.map((item) => item.id));
   const remoteKeys = new Set(Array.isArray(remoteIndex?.entries) ? remoteIndex.entries : []);
+  const localTombstones = localIndex.tombstones || {};
+  const remoteTombstones = remoteIndexData.tombstones || {};
+  const allTombstones = { ...localTombstones };
+  for (const [id, deletedAt] of Object.entries(remoteTombstones)) {
+    if (Number(deletedAt) > Number(allTombstones[id] || 0)) allTombstones[id] = deletedAt;
+  }
+  const remoteDeletedIds = localIndex.items
+    .filter((item) => Number(allTombstones[item.id] || 0) >= Number(item.updatedAt || 0))
+    .map((item) => item.id);
   const fileIdsToUpload = localIndex.items
+    .filter((item) => !remoteDeletedIds.includes(item.id))
     .filter(
       (item) =>
         !remoteItems.has(item.id) ||
@@ -279,9 +290,17 @@ export const uploadCodeHubSnapshot = async () => {
         : key.startsWith("codehub_save_content:")
           ? key.slice("codehub_save_content:".length)
           : null;
-      return id ? !localIds.has(id) : !localValues.has(key);
+      return id
+        ? !localIds.has(id) || remoteDeletedIds.includes(id)
+        : !localValues.has(key);
     },
   );
+  const mergedTombstones = { ...allTombstones };
+  for (const item of localIndex.items) {
+    if (Number(item.updatedAt || 0) > Number(mergedTombstones[item.id] || 0)) {
+      delete mergedTombstones[item.id];
+    }
+  }
   const successfulKeys = new Set();
   const failedUploadErrors = [];
   const failedDeleteErrors = [];
@@ -314,6 +333,8 @@ export const uploadCodeHubSnapshot = async () => {
     }
   });
 
+  if (remoteDeletedIds.length) await markCodeHubItemsDeleted(remoteDeletedIds);
+
   const uploadedLogicalIds = new Set([...successfulKeys].map(getLogicalFileId));
   const failedLogicalIds = new Set(failedUploadErrors.map(({ key }) => getLogicalFileId(key)));
   const deletedLogicalIds = new Set([...successfullyDeletedIds].map(getLogicalFileId));
@@ -337,6 +358,7 @@ export const uploadCodeHubSnapshot = async () => {
     ...parsedIndex,
     updatedAt: Date.now(),
     items: updatedItems,
+    tombstones: mergedTombstones,
   };
   await codehubStorage.setItem(SAVES_INDEX_KEY, syncedIndex);
 
@@ -356,6 +378,7 @@ export const uploadCodeHubSnapshot = async () => {
     updatedAt: Date.now(),
     entries: indexEntries,
     items: updatedItems,
+    tombstones: mergedTombstones,
     gistListUpdatedAt: successfulKeys.has(GIST_LIST_KEY)
       ? localGistListTime
       : remoteGistListTime,
@@ -386,7 +409,8 @@ export const uploadCodeHubSnapshot = async () => {
     changed:
       entriesToUpload.length > 0 ||
       successfullyDeletedIds.size > 0 ||
-      failedUploadErrors.length > 0,
+      failedUploadErrors.length > 0 ||
+      failedDeleteErrors.length > 0,
   };
 };
 
@@ -405,6 +429,12 @@ export const restoreCodeHubSnapshot = async () => {
   const remoteEntries = remoteIndex.entries.filter(isSyncableStoreKey);
   const remoteItems = new Map(remoteIndexData.items.map((item) => [item.id, item]));
   const localItems = new Map(localIndex.items.map((item) => [item.id, item]));
+  const remoteTombstones = remoteIndexData.tombstones || {};
+  const remoteDeletedIds = new Set(
+    [...Object.entries(remoteTombstones)]
+      .filter(([id, deletedAt]) => Number(deletedAt) >= Number(localItems.get(id)?.updatedAt || 0))
+      .map(([id]) => id),
+  );
   const entriesToDownload = remoteEntries.filter((key) => {
     if (key === GIST_LIST_KEY) {
       return !localKeys.has(key) || Number(remoteIndexData.gistListUpdatedAt) > Number(localIndex.gistListUpdatedAt);
@@ -414,7 +444,8 @@ export const restoreCodeHubSnapshot = async () => {
       : key.startsWith("codehub_save_content:")
         ? key.slice("codehub_save_content:".length)
         : null;
-    return id && (!localItems.has(id) || Number(remoteItems.get(id)?.updatedAt) > Number(localItems.get(id)?.updatedAt));
+    return id && !remoteDeletedIds.has(id)
+      && (!localItems.has(id) || Number(remoteItems.get(id)?.updatedAt) > Number(localItems.get(id)?.updatedAt));
   });
   await runWithConcurrency(entriesToDownload, 4, async (key) => {
     const fileRes = await apiFetch(`/files/${encodeURIComponent(key)}`);
@@ -423,6 +454,8 @@ export const restoreCodeHubSnapshot = async () => {
     await codehubStorage.setItem(key, JSON.parse(serialized));
     localKeys.delete(key);
   });
+
+  if (remoteDeletedIds.size) await markCodeHubItemsDeleted([...remoteDeletedIds]);
 
   // 只删除云端索引中已不存在的本地键；未下载的同名键仍是有效数据。
   const remoteEntrySet = new Set(remoteEntries);

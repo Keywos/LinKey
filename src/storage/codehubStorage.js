@@ -4,8 +4,16 @@ import { toStableGistRawUrl } from "@/gist/rawUrl.js";
 export const SAVES_INDEX_KEY = "codehub_saves_index";
 export const GIST_LIST_KEY = "codehub_gist_list";
 const SHOW_SAVES_KEY = "SHOW_SAVES_KEY";
+const TOMBSTONE_RETENTION_MS = 60 * 24 * 60 * 60 * 1000;
 
 const isSyncableStoreKey = (key) => key !== SAVES_INDEX_KEY && key !== SHOW_SAVES_KEY;
+
+const pruneTombstones = (tombstones) => {
+  const cutoff = Date.now() - TOMBSTONE_RETENTION_MS;
+  return Object.fromEntries(
+    Object.entries(tombstones || {}).filter(([, deletedAt]) => Number(deletedAt) >= cutoff),
+  );
+};
 
 const compactGistFile = (file, filename) => {
   if (!file || typeof file !== "object") return { filename };
@@ -63,8 +71,10 @@ export const codehubStorage = {
       const nextIndex = parseSavesIndex(value);
       const gistListUpdatedAt = Number(value?.gistListUpdatedAt)
         || previousIndex.gistListUpdatedAt;
+      const tombstones = pruneTombstones({ ...previousIndex.tombstones, ...nextIndex.tombstones });
+      for (const item of nextIndex.items) delete tombstones[item.id];
       await store.put(
-        { ...nextIndex, updatedAt: Date.now(), gistListUpdatedAt },
+        { ...nextIndex, updatedAt: Date.now(), gistListUpdatedAt, tombstones },
         key,
       );
       await tx.done;
@@ -205,6 +215,7 @@ export const parseSavesIndex = (indexData) => {
       version: 3,
       updatedAt: indexData.updatedAt || Date.now(),
       gistListUpdatedAt: Number(indexData.gistListUpdatedAt) || 0,
+      tombstones: pruneTombstones(indexData.tombstones),
       items: indexData.items
         .filter((item) => item?.id)
         .map((item) => ({
@@ -212,6 +223,8 @@ export const parseSavesIndex = (indexData) => {
           name: item.name || "",
           updatedAt: item.updatedAt,
           ...(item.isGist ? { isGist: true } : {}),
+          ...(item.cf_meta ? { cf_meta: true } : {}),
+          ...(item.cf_content ? { cf_content: true } : {}),
         })),
     };
   }
@@ -224,6 +237,33 @@ export const parseSavesIndex = (indexData) => {
 export const getIdsFromSavesIndex = (indexData) => {
   const parsed = parseSavesIndex(indexData);
   return parsed.items.map((it) => it.id);
+};
+
+export const markCodeHubItemsDeleted = async (ids) => {
+  const targetIds = [...new Set(ids)].filter(Boolean);
+  if (!targetIds.length) return;
+  const db = await dbPromise;
+  const tx = db.transaction("store", "readwrite");
+  const store = tx.objectStore("store");
+  const parsedIndex = parseSavesIndex(await store.get(SAVES_INDEX_KEY));
+  const deletedAt = Date.now();
+  const tombstones = { ...parsedIndex.tombstones };
+  for (const id of targetIds) {
+    await store.delete(contentKey(id));
+    await store.delete(metaKey(id));
+    tombstones[id] = deletedAt;
+  }
+  const removed = new Set(targetIds);
+  await store.put(
+    {
+      ...parsedIndex,
+      updatedAt: deletedAt,
+      items: parsedIndex.items.filter((item) => !removed.has(item.id)),
+      tombstones,
+    },
+    SAVES_INDEX_KEY,
+  );
+  await tx.done;
 };
 
 export const moveCodeHubItemId = async (oldId, newId) => {
@@ -253,11 +293,12 @@ export const updateGistDescriptionInCodeHub = async (gistId, description) => {
   const tx = db.transaction("store", "readwrite");
   const store = tx.objectStore("store");
   const savedIds = await store.get(SAVES_INDEX_KEY);
-  const ids = Array.isArray(savedIds) ? savedIds : [];
+  const ids = parseSavesIndex(savedIds).items.map((item) => item.id);
+  const gistHash = computeGistHash(gistId);
 
   for (const id of ids) {
     const meta = await store.get(metaKey(id));
-    if (meta?.gist?.id !== gistId) continue;
+    if (meta?.gist?.gistHash !== gistHash && meta?.gist?.id !== gistId) continue;
     await store.put(
       { ...meta, gist: { ...meta.gist, description, folderName: description || meta.gist.folderName } },
       metaKey(id),
@@ -357,8 +398,10 @@ export const renameGistFileInCodeHub = async (gistId, oldName, newName) => {
   const updatedItems = parsedIndex.items.map((item) =>
     item.id === oldId ? { ...item, id: newId, name: newName } : item,
   );
+  const tombstones = { ...parsedIndex.tombstones, [oldId]: Date.now() };
+  delete tombstones[newId];
   await store.put(
-    { ...parsedIndex, updatedAt: Date.now(), items: updatedItems },
+    { ...parsedIndex, updatedAt: Date.now(), items: updatedItems, tombstones },
     SAVES_INDEX_KEY,
   );
   await tx.done;
@@ -403,11 +446,15 @@ export const removeGistFilesFromCodeHub = async (gistId, fileNames) => {
 
   if (removedIds.length) {
     const removed = new Set(removedIds);
+    const deletedAt = Date.now();
+    const tombstones = { ...parsedIndex.tombstones };
+    for (const id of removedIds) tombstones[id] = deletedAt;
     await store.put(
       {
         ...parsedIndex,
-        updatedAt: Date.now(),
+        updatedAt: deletedAt,
         items: parsedIndex.items.filter((it) => !removed.has(it.id)),
+        tombstones,
       },
       SAVES_INDEX_KEY,
     );

@@ -809,6 +809,7 @@ import {
   contentKey,
   getGistItemId,
   getIdsFromSavesIndex,
+  markCodeHubItemsDeleted,
   metaKey,
   moveCodeHubItemId,
   parseSavesIndex,
@@ -870,7 +871,7 @@ const syncCodeHub = async (action) => {
     const ok = await askConfirm("确定要将本地数据上传并覆盖云端吗？只会更新变化的文件");
     if (!ok) return;
   } else {
-    const ok = await askConfirm("确定要从云端拉取并同步到本地吗？只会更新变化的文件");
+    const ok = await askConfirm("确定要从云端拉取并同步到本地吗？会覆盖本地数据");
     if (!ok) return;
   }
 
@@ -2056,7 +2057,7 @@ const createGistFile = async (item) => {
   const name = await askPrompt("新建 Gist 文件名");
   if (!name?.trim()) return;
   const filename = toGistFileName(name.trim());
-  const id = `gist:${item.gist.id}:${encodeURIComponent(filename)}`;
+  const id = getGistItemId(item.gist.id, filename);
   if (savedItems.value.some((savedItem) => savedItem.id === id)) {
     showToast("该 Gist 文件已存在");
     return;
@@ -2267,7 +2268,7 @@ const downloadGistItem = async (
     Object.assign(item, {
       length: content.length,
       preview: content.slice(0, 123).replace(/\s+/g, " ").slice(0, 100),
-      updatedAt: Date.now(),
+      updatedAt: Number(item.gist.updatedAt) || Date.now(),
     });
     item.gist.downloaded = true;
     await saveMeta(item);
@@ -2495,8 +2496,7 @@ const deleteSingleItem = async (item) => {
     }
   }
   try {
-    await idbStorage.removeItem(contentKey(item.id));
-    await idbStorage.removeItem(metaKey(item.id));
+    await markCodeHubItemsDeleted([item.id]);
   } catch (error) {
     console.error("删除失败", error);
   }
@@ -2533,10 +2533,7 @@ const deleteSelected = async () => {
   try {
     await Promise.all(
       ids.map((id) =>
-        Promise.all([
-          idbStorage.removeItem(contentKey(id)),
-          idbStorage.removeItem(metaKey(id)),
-        ]),
+        markCodeHubItemsDeleted([id]),
       ),
     );
   } catch (error) {
