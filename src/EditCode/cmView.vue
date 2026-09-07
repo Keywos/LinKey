@@ -1046,7 +1046,7 @@ const iosScrollStabilityTheme = EditorView.theme({
     minWidth: 0,
     overflowY: "auto",
     overflowX: "auto",
-    overscrollBehavior: "contain",
+    overscrollBehavior: "auto",
   },
 });
 
@@ -2152,7 +2152,7 @@ onBeforeUnmount(() => {
   height: 100%;
   overflow-y: auto;
   overflow-x: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   touch-action: pan-x pan-y;
 }
 
@@ -2218,6 +2218,7 @@ onBeforeUnmount(() => {
   max-width: 100%;
   overflow-y: auto;
   overflow-x: auto;
+  overscroll-behavior: auto;
   box-sizing: border-box;
 }
 
