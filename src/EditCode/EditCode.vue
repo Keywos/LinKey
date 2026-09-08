@@ -3985,7 +3985,22 @@ const renameItem = async (item) => {
       syncingAction.value = "";
     }
   }
+  const now = Date.now();
   item.name = name;
+  item.updatedAt = now;
+  if (item.gist) {
+    item.gist.updatedAt = now;
+  }
+  const targetIndex = savedItems.value.findIndex(
+    (it) => it.id === previousId || it.id === item.id,
+  );
+  if (targetIndex !== -1) {
+    savedItems.value[targetIndex].name = name;
+    savedItems.value[targetIndex].updatedAt = now;
+    if (savedItems.value[targetIndex].gist) {
+      savedItems.value[targetIndex].gist.updatedAt = now;
+    }
+  }
   if (currentItemId.value === previousId) {
     currentItemId.value = item.id;
     cmStore.setCurrentFileName(name);

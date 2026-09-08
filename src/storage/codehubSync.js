@@ -356,11 +356,10 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
 
   // 本地新增或比云端更新的文件才上传
   const fileIdsToUpload = activeLocalItems
-    .filter(
-      (item) =>
-        !remoteItems.has(item.id) ||
-        Number(item.updatedAt) > Number(remoteItems.get(item.id)?.updatedAt || 0),
-    )
+    .filter((item) => {
+      const r = remoteItems.get(item.id);
+      return !r || Number(item.updatedAt || 0) > Number(r?.updatedAt || 0);
+    })
     .map((item) => item.id);
 
   const entriesToUpload = fileIdsToUpload.flatMap((id) => [
@@ -832,12 +831,17 @@ export const checkCodeHubSyncDiff = async () => {
     const rTime = Number(r?.updatedAt || 0);
     const isNewer = !r || lTime > rTime;
     if (isNewer) {
+      const isNameChanged = Boolean(r && item.name && r.name && item.name !== r.name);
       const hasMeta = localKeysSet.has(metaKey(item.id));
       const hasContent = localKeysSet.has(contentKey(item.id));
       uploadItems.push({
         id: item.id,
         name: item.name || "未命名文件",
-        reason: !r ? "云端缺失" : `本地更新 (相差 ${Math.round((lTime - rTime) / 1000)}秒)`,
+        reason: !r
+          ? "云端缺失"
+          : isNameChanged
+            ? "本地重命名"
+            : `本地更新 (相差 ${Math.round((lTime - rTime) / 1000)}秒)`,
         localUpdatedAt: lTime,
         localTimeStr: lTime ? new Date(lTime).toLocaleString() : "无",
         remoteUpdatedAt: rTime,
@@ -856,10 +860,15 @@ export const checkCodeHubSyncDiff = async () => {
     const lTime = Number(l?.updatedAt || 0);
     const isRemoteNewer = !l || rTime > lTime;
     if (isRemoteNewer) {
+      const isNameChanged = Boolean(l && item.name && l.name && item.name !== l.name);
       downloadItems.push({
         id: item.id,
         name: item.name || "未命名文件",
-        reason: !l ? "本地缺失" : `云端更新 (相差 ${Math.round((rTime - lTime) / 1000)}秒)`,
+        reason: !l
+          ? "本地缺失"
+          : isNameChanged
+            ? "云端重命名"
+            : `云端更新 (相差 ${Math.round((rTime - lTime) / 1000)}秒)`,
         remoteUpdatedAt: rTime,
         remoteTimeStr: rTime ? new Date(rTime).toLocaleString() : "无",
         localUpdatedAt: lTime,
