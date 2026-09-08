@@ -306,6 +306,11 @@ export const fetchAndDecryptRemoteIndex = async (secretKey) => {
     }
 
     if (typeof rawIndex === "object") {
+      // 兼容彻底删除旧版本写入的 { index: "密文" } 包装格式。
+      if (typeof rawIndex.index === "string" && rawIndex.index.trim()) {
+        const decrypted = await decryptContent(rawIndex.index, secretKey);
+        return JSON.parse(decrypted);
+      }
       return rawIndex;
     }
 
@@ -883,6 +888,7 @@ export const checkCodeHubSyncDiff = async () => {
       : []
   );
   const trashPendingUploadItems = [];
+  const trashPendingLocalCleanupItems = [];
   for (const [id, tombVal] of Object.entries(localIndexData.tombstones || {})) {
     const tTime = getTombstoneDeletedAt(tombVal);
     if (!tTime || Date.now() - tTime >= TOMBSTONE_RETENTION_MS) continue;
@@ -891,6 +897,20 @@ export const checkCodeHubSyncDiff = async () => {
       remoteIndexData.tombstones &&
       getTombstoneDeletedAt(remoteIndexData.tombstones[id]) >= tTime
     );
+    const remoteHasFile =
+      remoteKeys.has(contentKey(id)) ||
+      remoteKeys.has(metaKey(id)) ||
+      Object.prototype.hasOwnProperty.call(remoteIndexData.files || {}, id);
+    if (!remoteHasTombstone && !remoteHasFile) {
+      trashPendingLocalCleanupItems.push({
+        id,
+        name: tombVal?.name || id,
+        deletedAt: tTime,
+        deleteTimeStr: new Date(tTime).toLocaleString(),
+        reason: "云端已彻底删除，待清理本地回收站",
+      });
+      continue;
+    }
     if (!remoteHasTombstone && !remoteKeys.has(contentKey(id))) {
       const hasLocalData =
         localKeysSet.has(contentKey(id)) ||
@@ -911,7 +931,10 @@ export const checkCodeHubSyncDiff = async () => {
     }
   }
 
-  const effectiveUploadCount = uploadItems.length + (trashPendingUploadItems.length > 0 ? 1 : 0);
+  const effectiveUploadCount =
+    uploadItems.length +
+    (trashPendingUploadItems.length > 0 ? 1 : 0) +
+    (trashPendingLocalCleanupItems.length > 0 ? 1 : 0);
   const hasChanges =
     downloadItems.length > 0 ||
     effectiveUploadCount > 0 ||
@@ -958,6 +981,7 @@ export const checkCodeHubSyncDiff = async () => {
     uploadItems,
     downloadItems,
     trashPendingUploadItems,
+    trashPendingLocalCleanupItems,
     gistListChanged,
     gistListUploadNeeded,
     gistListDownloadNeeded,
@@ -1045,13 +1069,35 @@ export const apiDeleteFileFromCloud = async (id, options = {}) => {
           indexChanged = true;
         }
       }
+      if (Array.isArray(remoteIndex.entries)) {
+        const prevLen = remoteIndex.entries.length;
+        remoteIndex.entries = remoteIndex.entries.filter(
+          (key) => getLogicalFileId(key) !== id,
+        );
+        if (remoteIndex.entries.length !== prevLen) {
+          indexChanged = true;
+        }
+      }
+      if (Array.isArray(remoteIndex.ids)) {
+        const prevLen = remoteIndex.ids.length;
+        remoteIndex.ids = remoteIndex.ids.filter((itemId) => itemId !== id);
+        if (remoteIndex.ids.length !== prevLen) {
+          indexChanged = true;
+        }
+      }
+      if (remoteIndex.files && typeof remoteIndex.files === "object") {
+        if (Object.prototype.hasOwnProperty.call(remoteIndex.files, id)) {
+          delete remoteIndex.files[id];
+          indexChanged = true;
+        }
+      }
       if (indexChanged) {
         remoteIndex.updatedAt = Date.now();
         const encryptedIndex = await encryptContent(JSON.stringify(remoteIndex), secretKey);
         await apiFetch("/index", {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ index: encryptedIndex }),
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+          body: encryptedIndex,
         });
       }
     }
@@ -1117,13 +1163,37 @@ export const apiDeleteMultipleFilesFromCloud = async (ids = [], options = {}) =>
           indexChanged = true;
         }
       }
+      if (Array.isArray(remoteIndex.entries)) {
+        const prevLen = remoteIndex.entries.length;
+        remoteIndex.entries = remoteIndex.entries.filter(
+          (key) => !idSet.has(getLogicalFileId(key)),
+        );
+        if (remoteIndex.entries.length !== prevLen) {
+          indexChanged = true;
+        }
+      }
+      if (Array.isArray(remoteIndex.ids)) {
+        const prevLen = remoteIndex.ids.length;
+        remoteIndex.ids = remoteIndex.ids.filter((id) => !idSet.has(id));
+        if (remoteIndex.ids.length !== prevLen) {
+          indexChanged = true;
+        }
+      }
+      if (remoteIndex.files && typeof remoteIndex.files === "object") {
+        for (const id of ids) {
+          if (Object.prototype.hasOwnProperty.call(remoteIndex.files, id)) {
+            delete remoteIndex.files[id];
+            indexChanged = true;
+          }
+        }
+      }
       if (indexChanged) {
         remoteIndex.updatedAt = Date.now();
         const encryptedIndex = await encryptContent(JSON.stringify(remoteIndex), secretKey);
         await apiFetch("/index", {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ index: encryptedIndex }),
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+          body: encryptedIndex,
         });
       }
     }

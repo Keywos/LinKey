@@ -1198,7 +1198,13 @@
                   v-if="item.status === 'pending'"
                   class="status-badge pending"
                 >
-                  {{ syncModalState.tab === "upload" ? "待上传" : "待下载" }}
+                  {{
+                    item.syncAction === "cleanup-local"
+                      ? "待同步"
+                      : syncModalState.tab === "upload"
+                        ? "待上传"
+                        : "待下载"
+                  }}
                 </span>
                 <span
                   v-else-if="item.status === 'uploading'"
@@ -1247,7 +1253,16 @@
         <template v-else-if="syncModalState.phase === 'confirm'">
           <button class="sync-btn cancel" @click="closeSyncModal">取消</button>
           <button class="sync-btn confirm" @click="executeSyncModal">
-            确认{{ syncModalState.tab === "upload" ? "上传" : "下载" }}
+            确认{{
+              syncModalState.tab === "download"
+                ? "下载"
+                : syncModalState.activeItems.length > 0 &&
+                    syncModalState.activeItems.every(
+                      (item) => item.syncAction === "cleanup-local",
+                    )
+                  ? "清理"
+                  : "上传"
+            }}
           </button>
         </template>
         <template v-else-if="syncModalState.phase === 'syncing'">
@@ -1353,7 +1368,19 @@ const checkRemoteSync = async (silent = false) => {
             duration: 3500,
           });
         } else if (diff.localNewCount > 0) {
-          if (diff.uploadItems && diff.uploadItems.length > 0) {
+          if (
+            diff.trashPendingLocalCleanupItems &&
+            diff.trashPendingLocalCleanupItems.length > 0
+          ) {
+            const cleanupNames = diff.trashPendingLocalCleanupItems
+              .map((it) => it.name || it.id)
+              .slice(0, 3)
+              .join(", ");
+            showToast({
+              message: `云端已彻底删除 ${diff.trashPendingLocalCleanupItems.length} 个文件，本地待清理${cleanupNames ? `（${cleanupNames}${diff.trashPendingLocalCleanupItems.length > 3 ? " 等" : ""}）` : ""}，点击“同步”处理`,
+              duration: 3500,
+            });
+          } else if (diff.uploadItems && diff.uploadItems.length > 0) {
             const names = diff.uploadItems
               .map((it) => it.name || it.id)
               .slice(0, 3)
@@ -1799,6 +1826,7 @@ const openSyncModal = async (defaultTab) => {
     // 解析上传项
     const uploadItems = diff.uploadItems || [];
     const trashItems = diff.trashPendingUploadItems || [];
+    const localCleanupItems = diff.trashPendingLocalCleanupItems || [];
     const hasGistUpload = Boolean(diff.gistListUploadNeeded);
     const hasGistDownload = Boolean(diff.gistListDownloadNeeded);
     const hasTombstone = Boolean(diff.tombstoneChanged);
@@ -1818,6 +1846,15 @@ const openSyncModal = async (defaultTab) => {
         type: "回收站",
         reason: "回收站暂存备份",
         status: "pending",
+        error: null,
+      })),
+      ...localCleanupItems.map((it) => ({
+        id: it.id,
+        name: it.name || it.id,
+        type: "清理",
+        reason: it.reason || "云端已彻底删除，待清理本地回收站",
+        status: "pending",
+        syncAction: "cleanup-local",
         error: null,
       })),
       ...(hasGistUpload
@@ -1922,11 +1959,32 @@ const executeSyncModal = async () => {
     if (isUpload) {
       // 用户确认后可能有其他设备写入云端，上传前重新比对，避免覆盖云端新版本。
       const latestDiff = await checkCodeHubSyncDiff();
+      const localCleanupIds = syncModalState.value.activeItems
+        .filter((item) => item.syncAction === "cleanup-local")
+        .map((item) => item.id);
+      for (const id of localCleanupIds) {
+        await permanentlyDeleteCodeHubTombstone(id);
+      }
+      syncModalState.value.activeItems.forEach((item) => {
+        if (item.syncAction === "cleanup-local") item.status = "success";
+      });
+      if (localCleanupIds.length === syncModalState.value.activeItems.length) {
+        await loadTrashList();
+        await loadSaves();
+        syncModalState.value.summary = `已清理本地回收站 ${localCleanupIds.length} 项`;
+        syncModalState.value.phase = "done";
+        showToast(syncModalState.value.summary);
+        await openSyncModal();
+        return;
+      }
       const latestRemoteIds = new Set(
         (latestDiff?.downloadItems || []).map((item) => item.id),
       );
       const uploadConflicts = syncModalState.value.activeItems.filter(
-        (item) => !item.id.startsWith("__") && latestRemoteIds.has(item.id),
+        (item) =>
+          !item.id.startsWith("__") &&
+          item.syncAction !== "cleanup-local" &&
+          latestRemoteIds.has(item.id),
       );
       if (uploadConflicts.length > 0) {
         const names = uploadConflicts.map((item) => item.name).join("、");
@@ -5454,7 +5512,7 @@ onBeforeUnmount(() => {
   display: inline-block;
   margin-right: 3px;
   padding: 1.5px 5px;
-  border-radius: 8px;
+  border-radius: 16px;
   background: #8f98c61a;
   color: var(--text);
 }
@@ -5501,7 +5559,7 @@ onBeforeUnmount(() => {
   display: inline-block;
   margin-left: 4px;
   padding: 2px 5px;
-  border-radius: 8px;
+  border-radius: 16px;
   background: rgba(92, 125, 190, 0.2);
   color: var(--text);
   font-size: 9px;
@@ -5591,7 +5649,7 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   width: 90px;
   height: 4px;
-  border-radius: 2px;
+  border-radius: 16px;
   background: rgba(128, 128, 128, 0.35);
   transition: background 0.15s;
 }
@@ -5676,7 +5734,7 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   max-width: 100%;
   padding: 1px 5px;
-  border-radius: 8px;
+  border-radius: 16px;
   background: rgba(211, 146, 74, 0.1);
   color: #c27a2e9c;
   font-size: 9px;
@@ -6134,7 +6192,7 @@ onBeforeUnmount(() => {
   opacity: 0.6;
   height: 18px;
   padding: 0px 6px;
-  border-radius: 4px;
+  border-radius: 16px;
 }
 .log-btn:hover {
   opacity: 1;
@@ -6400,7 +6458,7 @@ onBeforeUnmount(() => {
   line-height: 1;
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: 16px;
   opacity: 0.65;
   transition: opacity 0.2s;
 }
@@ -6432,7 +6490,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   margin-bottom: 10px;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: 16px;
   background: rgba(59, 130, 246, 0.1);
   border: 0.5px solid rgba(59, 130, 246, 0.25);
   font-size: 12px;
@@ -6445,6 +6503,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   min-height: 140px;
   max-height: 48vh;
+  padding-bottom: 50px;
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -6575,7 +6634,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   margin-top: 3px;
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: 16px;
   font-size: 11px;
   font-weight: 500;
   animation: fadeInRow 0.2s ease;
