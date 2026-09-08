@@ -44,6 +44,28 @@ const pruneTombstones = (tombstones) => {
   );
 };
 
+/**
+ * 语义化比较两个墓碑集合是否一致（消除对象字段顺序、空字段、类型差异等引起的虚假差异）
+ */
+export const areTombstonesEqual = (tombstonesA = {}, tombstonesB = {}) => {
+  const keysA = Object.keys(tombstonesA || {});
+  const keysB = Object.keys(tombstonesB || {});
+  if (keysA.length !== keysB.length) return false;
+
+  for (const id of keysA) {
+    if (!Object.prototype.hasOwnProperty.call(tombstonesB || {}, id)) return false;
+    const infoA = getTombstoneInfo(id, tombstonesA[id]);
+    const infoB = getTombstoneInfo(id, tombstonesB[id]);
+
+    // 核心判定：删除时间必须一致
+    if (infoA.deletedAt !== infoB.deletedAt) return false;
+    // 关键元数据判定
+    if (infoA.name !== infoB.name) return false;
+    if (infoA.language !== infoB.language) return false;
+  }
+  return true;
+};
+
 const compactGistFile = (file, filename) => {
   if (!file || typeof file !== "object") return { filename };
   return {

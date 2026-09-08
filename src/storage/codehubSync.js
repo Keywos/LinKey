@@ -12,6 +12,7 @@ import {
   getTombstoneDeletedAt,
   getTombstoneInfo,
   mergeTombstones,
+  areTombstonesEqual,
 } from "@/storage/codehubStorage.js";
 import { CryptoJS } from "@/st/cpto.js";
 
@@ -590,8 +591,20 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
     body: await encryptContent(indexJsonStr, secretKey),
   });
 
-  const tombstoneChanged =
-    JSON.stringify(remoteIndexData.tombstones || {}) !== JSON.stringify(finalAllTombstones);
+  // 上传云端成功后，同步将合并后的墓碑和最新的 items 回写到本地 IndexedDB，
+  // 避免本地索引与云端索引存在细微差异导致反复触发“有内容需上传”的假报警
+  try {
+    const localCurrentIndex = parseSavesIndex(await codehubStorage.getItem(SAVES_INDEX_KEY));
+    await codehubStorage.setItem(SAVES_INDEX_KEY, {
+      ...localCurrentIndex,
+      updatedAt: newIndex.updatedAt,
+      tombstones: finalAllTombstones,
+    });
+  } catch (err) {
+    console.warn("上传后同步本地索引失败:", err);
+  }
+
+  const tombstoneChanged = !areTombstonesEqual(remoteIndexData.tombstones || {}, finalAllTombstones);
   const itemsChanged =
     remoteIndexData.items.length !== cloudMergedItems.length ||
     remoteIndexData.items.some((rItem) => {
@@ -839,8 +852,10 @@ export const checkCodeHubSyncDiff = async () => {
   const gistListChanged = Number(localIndexData.gistListUpdatedAt) !== Number(remoteIndexData.gistListUpdatedAt);
   const changedKeyCount = gistListChanged ? 1 : 0;
 
-  const tombstoneChanged =
-    JSON.stringify(localIndexData.tombstones || {}) !== JSON.stringify(remoteIndexData.tombstones || {});
+  const tombstoneChanged = !areTombstonesEqual(
+    localIndexData.tombstones || {},
+    remoteIndexData.tombstones || {}
+  );
 
   const remoteKeys = new Set(
     Array.isArray(remoteIndex?.entries)
@@ -853,7 +868,12 @@ export const checkCodeHubSyncDiff = async () => {
   for (const [id, tombVal] of Object.entries(localIndexData.tombstones || {})) {
     const tTime = getTombstoneDeletedAt(tombVal);
     if (!tTime || Date.now() - tTime >= TOMBSTONE_RETENTION_MS) continue;
-    if (!remoteKeys.has(contentKey(id))) {
+    // 如果云端已经知晓该墓碑记录，说明该文件的删除标记已在云端生效，不再将其视作“需要触发上传”的项目
+    const remoteHasTombstone = Boolean(
+      remoteIndexData.tombstones &&
+      getTombstoneDeletedAt(remoteIndexData.tombstones[id]) >= tTime
+    );
+    if (!remoteHasTombstone && !remoteKeys.has(contentKey(id))) {
       const hasLocalData =
         localKeysSet.has(contentKey(id)) ||
         localKeysSet.has(`codehub_trash_content:${id}`) ||
