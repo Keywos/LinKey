@@ -86,6 +86,32 @@ const dbPromise = openDB("codehub", 1, {
   },
 });
 
+// 统一合并两个墓碑对象：保留较新的删除时间戳，并完整保留名称、语言等附加元数据
+export const mergeTombstones = (localTombstones, remoteTombstones, allActiveItems = []) => {
+  const merged = { ...(localTombstones || {}) };
+  for (const [id, val] of Object.entries(remoteTombstones || {})) {
+    const remoteTime = getTombstoneDeletedAt(val);
+    const localTime = getTombstoneDeletedAt(merged[id]);
+    if (!merged[id] || remoteTime > localTime) {
+      merged[id] = val;
+    } else if (remoteTime === localTime) {
+      // 时间戳相同时，优先保留对象格式的详细信息（name, language, inCloud 等）
+      if (typeof val === "object" && typeof merged[id] !== "object") {
+        merged[id] = val;
+      } else if (typeof val === "object" && typeof merged[id] === "object") {
+        merged[id] = { ...merged[id], ...val, inCloud: Boolean(merged[id].inCloud || val.inCloud) };
+      }
+    }
+  }
+  // 清除已被更新版本文件复活的墓碑记录
+  for (const item of allActiveItems) {
+    if (item?.id && Number(item.updatedAt || 0) > getTombstoneDeletedAt(merged[item.id])) {
+      delete merged[item.id];
+    }
+  }
+  return pruneTombstones(merged);
+};
+
 export const codehubStorage = { 
   async getItem(key) {
     const value = await (await dbPromise).get("store", key);
@@ -100,8 +126,17 @@ export const codehubStorage = {
       const nextIndex = parseSavesIndex(value);
       const gistListUpdatedAt = Number(value?.gistListUpdatedAt)
         || previousIndex.gistListUpdatedAt;
-      const tombstones = pruneTombstones({ ...previousIndex.tombstones, ...nextIndex.tombstones });
-      for (const item of nextIndex.items) delete tombstones[item.id];
+      // 使用带对象保留的 mergeTombstones 合并新旧墓碑
+      const tombstones = mergeTombstones(previousIndex.tombstones, nextIndex.tombstones);
+      // 只有当 item 的更新时间严格晚于墓碑删除时间时，才说明该 item 被用户重新创建或复活，此时才清理墓碑
+      for (const item of nextIndex.items) {
+        const tombTime = getTombstoneDeletedAt(tombstones[item.id]);
+        if (tombTime > 0 && Number(item.updatedAt || 0) <= tombTime) {
+          // 该项已被墓碑删除，不能删除墓碑
+          continue;
+        }
+        delete tombstones[item.id];
+      }
       await store.put(
         { ...nextIndex, updatedAt: Date.now(), gistListUpdatedAt, tombstones },
         key,

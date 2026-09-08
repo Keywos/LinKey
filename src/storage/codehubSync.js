@@ -11,6 +11,7 @@ import {
   TOMBSTONE_RETENTION_MS,
   getTombstoneDeletedAt,
   getTombstoneInfo,
+  mergeTombstones,
 } from "@/storage/codehubStorage.js";
 import { CryptoJS } from "@/st/cpto.js";
 
@@ -248,24 +249,6 @@ const getMetaTimestamp = (meta) => {
   return Number.isFinite(num) ? num : 0;
 };
 
-// 合并墓碑并清除被更新版本文件复活的墓碑记录
-const mergeTombstones = (localTombstones, remoteTombstones, allActiveItems = []) => {
-  const merged = { ...(localTombstones || {}) };
-  for (const [id, val] of Object.entries(remoteTombstones || {})) {
-    const remoteTime = getTombstoneDeletedAt(val);
-    const localTime = getTombstoneDeletedAt(merged[id]);
-    if (remoteTime > localTime) {
-      merged[id] = val;
-    }
-  }
-  for (const item of allActiveItems) {
-    if (item?.id && Number(item.updatedAt || 0) > getTombstoneDeletedAt(merged[item.id])) {
-      delete merged[item.id];
-    }
-  }
-  return merged;
-};
-
 // 获取本地仅包含元数据的轻量索引，普通文件和 Gist 文件都参与同步
 export const getLocalIndex = async () => {
   const rawIndex = await codehubStorage.getItem(SAVES_INDEX_KEY);
@@ -342,7 +325,7 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
 
   // 本地已被有效墓碑标记删除的文件
   const localDeletedIds = localIndex.items
-    .filter((item) => Number(allTombstones[item.id] || 0) >= Number(item.updatedAt || 0))
+    .filter((item) => getTombstoneDeletedAt(allTombstones[item.id]) >= Number(item.updatedAt || 0))
     .map((item) => item.id);
   if (localDeletedIds.length) {
     await markCodeHubItemsDeleted(localDeletedIds);
@@ -481,13 +464,35 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
     [...uploadedLogicalIds].filter((id) => !failedLogicalIds.has(id)),
   );
 
+  // 在生成并上传最新云端索引前，重新拉取一次云端最新索引，防止上传文件耗时期间其他设备写入了新墓碑或文件导致被覆盖
+  let latestRemoteIndex = remoteIndex;
+  try {
+    const refreshedRemote = await fetchAndDecryptRemoteIndex(secretKey);
+    if (refreshedRemote) {
+      latestRemoteIndex = refreshedRemote;
+    }
+  } catch (refreshErr) {
+    console.warn("上传完成时拉取最新云端索引失败，将使用初始索引合并:", refreshErr);
+  }
+  const latestRemoteIndexData = parseSavesIndex(latestRemoteIndex);
+  const latestRemoteKeys = new Set(
+    Array.isArray(latestRemoteIndex?.entries) ? latestRemoteIndex.entries : []
+  );
+
+  // 合并本地墓碑、初始墓碑与云端最新墓碑
+  const finalAllTombstones = mergeTombstones(
+    allTombstones,
+    latestRemoteIndexData.tombstones,
+    [...localIndex.items, ...latestRemoteIndexData.items],
+  );
+
   // 更新本地保存索引
   const currentRawIndex = await codehubStorage.getItem(SAVES_INDEX_KEY);
   const parsedIndex = parseSavesIndex(currentRawIndex);
   const isKeyOnCloud = (keyName, previousFlag) => {
     if (successfullyDeletedIds.has(keyName)) return false;
     if (successfulKeys.has(keyName)) return true;
-    if (remoteKeys.has(keyName)) return true;
+    if (latestRemoteKeys.has(keyName) || remoteKeys.has(keyName)) return true;
     return Boolean(previousFlag);
   };
   const updatedItems = parsedIndex.items.map((item) => {
@@ -504,15 +509,15 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
     ...parsedIndex,
     updatedAt: Date.now(),
     items: updatedItems,
-    tombstones: allTombstones,
+    tombstones: finalAllTombstones,
   };
   await codehubStorage.setItem(SAVES_INDEX_KEY, syncedIndex);
 
   // 云端索引三方合并：保留远端其他设备新增的有效项，同时加入/更新本地上传的项
   const cloudMergedItemsMap = new Map();
-  // 1. 先载入远端原有的项（过滤已被墓碑删除的）
-  for (const rItem of remoteIndexData.items) {
-    if (Number(allTombstones[rItem.id] || 0) < Number(rItem.updatedAt || 0)) {
+  // 1. 先载入远端最新原有的项（过滤已被墓碑删除的）
+  for (const rItem of latestRemoteIndexData.items) {
+    if (getTombstoneDeletedAt(finalAllTombstones[rItem.id]) < Number(rItem.updatedAt || 0)) {
       cloudMergedItemsMap.set(rItem.id, { ...rItem, cf_meta: true, cf_content: true });
     }
   }
@@ -534,7 +539,9 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
 
   // 云端 entries 也是三方合并：保留远端原有未被删除的 key，加上本次新成功上传的 key
   const successfullyDeletedKeySet = successfullyDeletedIds;
-  const survivingRemoteKeys = [...remoteKeys].filter((k) => !successfullyDeletedKeySet.has(k));
+  const survivingRemoteKeys = [...new Set([...remoteKeys, ...latestRemoteKeys])].filter(
+    (k) => !successfullyDeletedKeySet.has(k)
+  );
   const indexEntries = [
     ...new Set([
       ...survivingRemoteKeys,
@@ -542,9 +549,12 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
     ]),
   ];
 
-  const cloudFiles = { ...(remoteIndexData.files || {}) };
-  for (const [id] of Object.entries(allTombstones)) {
-    if (Number(allTombstones[id] || 0) >= Number(cloudMergedItemsMap.get(id)?.updatedAt || 0)) {
+  const cloudFiles = {
+    ...(remoteIndexData.files || {}),
+    ...(latestRemoteIndexData.files || {}),
+  };
+  for (const [id] of Object.entries(finalAllTombstones)) {
+    if (getTombstoneDeletedAt(finalAllTombstones[id]) >= Number(cloudMergedItemsMap.get(id)?.updatedAt || 0)) {
       delete cloudFiles[id];
     }
   }
@@ -554,20 +564,21 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
     }
   }
 
+  const latestRemoteGistListTime = Number(latestRemoteIndexData.gistListUpdatedAt) || remoteGistListTime;
   const newIndex = {
     version: 4,
     updatedAt: Date.now(),
     entries: indexEntries,
     items: cloudMergedItems,
-    tombstones: allTombstones,
+    tombstones: finalAllTombstones,
     gistListUpdatedAt: successfulKeys.has(GIST_LIST_KEY)
       ? localGistListTime
-      : remoteGistListTime,
+      : latestRemoteGistListTime,
     ids: cloudMergedItems.map((item) => item.id),
     files: cloudFiles,
     gistList: successfulKeys.has(GIST_LIST_KEY)
       ? (latestEntries.find(({ key }) => key === GIST_LIST_KEY)?.value || [])
-      : (remoteIndex.gistList || []),
+      : (latestRemoteIndex.gistList || remoteIndex.gistList || []),
   };
   const indexJsonStr = JSON.stringify(newIndex);
   if (new Blob([indexJsonStr]).size > MAX_SYNC_FILE_SIZE) {
@@ -580,7 +591,7 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
   });
 
   const tombstoneChanged =
-    JSON.stringify(remoteIndexData.tombstones || {}) !== JSON.stringify(allTombstones);
+    JSON.stringify(remoteIndexData.tombstones || {}) !== JSON.stringify(finalAllTombstones);
   const itemsChanged =
     remoteIndexData.items.length !== cloudMergedItems.length ||
     remoteIndexData.items.some((rItem) => {
@@ -643,7 +654,7 @@ export const restoreCodeHubSnapshot = async (options = {}) => {
 
   // 只有被有效墓碑标记删除的文件才从本地删除
   const localDeletedIds = localIndex.items
-    .filter((item) => Number(allTombstones[item.id] || 0) >= Number(item.updatedAt || 0))
+    .filter((item) => getTombstoneDeletedAt(allTombstones[item.id]) >= Number(item.updatedAt || 0))
     .map((item) => item.id);
   if (localDeletedIds.length) {
     await markCodeHubItemsDeleted(localDeletedIds);
@@ -659,7 +670,7 @@ export const restoreCodeHubSnapshot = async (options = {}) => {
         ? key.slice("codehub_save_content:".length)
         : null;
     if (!id) return false;
-    const isDeleted = Number(allTombstones[id] || 0) >= Number(remoteItems.get(id)?.updatedAt || 0);
+    const isDeleted = getTombstoneDeletedAt(allTombstones[id]) >= Number(remoteItems.get(id)?.updatedAt || 0);
     return !isDeleted
       && (!localItems.has(id) || Number(remoteItems.get(id)?.updatedAt) > Number(localItems.get(id)?.updatedAt));
   });
@@ -703,14 +714,14 @@ export const restoreCodeHubSnapshot = async (options = {}) => {
 
   // 先放本地当前有效且未被墓碑删除的 items
   for (const item of parsedIndex.items) {
-    if (Number(allTombstones[item.id] || 0) < Number(item.updatedAt || 0)) {
+    if (getTombstoneDeletedAt(allTombstones[item.id]) < Number(item.updatedAt || 0)) {
       localMergedItemsMap.set(item.id, { ...item });
     }
   }
 
   // 再把远端有效 items 合并进来（如果远端更新或者本地没有）
   for (const rItem of remoteIndexData.items) {
-    if (Number(allTombstones[rItem.id] || 0) >= Number(rItem.updatedAt || 0)) {
+    if (getTombstoneDeletedAt(allTombstones[rItem.id]) >= Number(rItem.updatedAt || 0)) {
       continue;
     }
     const localItem = localMergedItemsMap.get(rItem.id);
@@ -776,10 +787,10 @@ export const checkCodeHubSyncDiff = async () => {
   const localItems = new Map(localIndexData.items.map((item) => [item.id, item]));
 
   const activeRemoteItems = remoteIndexData.items.filter(
-    (item) => Number(allTombstones[item.id] || 0) < Number(item.updatedAt || 0),
+    (item) => getTombstoneDeletedAt(allTombstones[item.id]) < Number(item.updatedAt || 0),
   );
   const activeLocalItems = localIndexData.items.filter(
-    (item) => Number(allTombstones[item.id] || 0) < Number(item.updatedAt || 0),
+    (item) => getTombstoneDeletedAt(allTombstones[item.id]) < Number(item.updatedAt || 0),
   );
 
   const uploadItems = [];
