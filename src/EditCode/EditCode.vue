@@ -2033,6 +2033,8 @@ const executeSyncModal = async () => {
       // 上传后重新检查弹窗差异，刷新列表并切换到剩余的同步方向
       await openSyncModal();
     } else {
+      clearTimeout(autosaveTimer);
+      isDirty = false;
       const res = await restoreCodeHubSnapshot({ onProgress });
       syncModalState.value.activeItems.forEach((it) => {
         if (it.status === "pending" || it.status === "downloading") {
@@ -2040,6 +2042,11 @@ const executeSyncModal = async () => {
         }
       });
       await loadSaves();
+
+      // ★ 若当前正打开着文件，从本地存储重新加载最新内容到 cmView，避免依然显示旧内容或旧代码触发自动保存覆盖
+      if (currentItemId.value) {
+        await reloadCurrentItemFromStorage();
+      }
 
       const summaryText =
         res.downloaded > 0
@@ -3535,13 +3542,8 @@ const downloadGistItem = async (
     item.gist.downloaded = true;
     await saveMeta(item);
     await persistIndex();
-    if (loadAfterDownload) {
-      await loadItem(item);
-    } else if (currentItemId.value === item.id) {
-      isSwitchingItem = true;
-      cmStore.setCmCode(content);
-      lastSavedContent.value = content;
-      isSwitchingItem = false;
+    if (loadAfterDownload || currentItemId.value === item.id) {
+      await reloadCurrentItemFromStorage();
     }
     if (notify) showToast("已下载到本地");
     return true;
@@ -3860,6 +3862,43 @@ const loadItem = async (item) => {
     showToast("加载失败");
   } finally {
     loadingItemId.value = null;
+    isSwitchingItem = false;
+  }
+};
+
+// ★ 重新从本地存储加载当前打开的文件（例如在云端同步下载后更新 cmView）
+const reloadCurrentItemFromStorage = async () => {
+  const id = currentItemId.value;
+  if (!id) return;
+
+  const currentItem = savedItems.value.find((it) => it.id === id);
+  if (!currentItem) {
+    await setCurrentItem(null, "");
+    await cmViewRef.value?.loadContent?.(EMPTY_CONTENT, { skipHistory: true });
+    lastSavedContent.value = EMPTY_CONTENT;
+    isDirty = false;
+    return;
+  }
+
+  clearTimeout(autosaveTimer);
+  isDirty = false;
+  isSwitchingItem = true;
+
+  try {
+    const content = await idbStorage.getItem(contentKey(id));
+    await cmViewRef.value?.loadContent?.(content || EMPTY_CONTENT, {
+      fileName: currentItem.name,
+      manualLanguage: currentItem.manualLanguage || "",
+      skipHistory: true,
+    });
+    await setCurrentItem(currentItem.id, currentItem.name);
+    lastSavedContent.value = content || EMPTY_CONTENT;
+    await nextTick();
+    clearTimeout(autosaveTimer);
+    isDirty = false;
+  } catch (e) {
+    console.error("重新加载当前文件至 cmView 失败", e);
+  } finally {
     isSwitchingItem = false;
   }
 };
