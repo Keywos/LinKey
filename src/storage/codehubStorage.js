@@ -4,14 +4,43 @@ import { toStableGistRawUrl } from "@/gist/rawUrl.js";
 export const SAVES_INDEX_KEY = "codehub_saves_index";
 export const GIST_LIST_KEY = "codehub_gist_list";
 const SHOW_SAVES_KEY = "SHOW_SAVES_KEY";
-const TOMBSTONE_RETENTION_MS = 60 * 24 * 60 * 60 * 1000;
+export const TOMBSTONE_RETENTION_MS = 60 * 24 * 60 * 60 * 1000;
 
-const isSyncableStoreKey = (key) => key !== SAVES_INDEX_KEY && key !== SHOW_SAVES_KEY;
+const isSyncableStoreKey = (key) =>
+  key !== SAVES_INDEX_KEY &&
+  key !== SHOW_SAVES_KEY &&
+  !key.startsWith("codehub_trash_content:") &&
+  !key.startsWith("codehub_trash_meta:");
+
+export const getTombstoneDeletedAt = (val) => {
+  if (!val) return 0;
+  if (typeof val === "number") return val;
+  if (typeof val === "object") return Number(val.deletedAt || 0);
+  const n = Number(val);
+  return Number.isFinite(n) ? n : 0;
+};
+
+export const getTombstoneInfo = (id, val) => {
+  const deletedAt = getTombstoneDeletedAt(val);
+  const info = typeof val === "object" ? val : {};
+  const inCloud = Boolean(info.inCloud || info.cf_content || info.cf_meta);
+  return {
+    id,
+    deletedAt,
+    name: info.name || id,
+    language: info.language || "text",
+    gist: info.gist || null,
+    isGist: !!info.isGist || !!info.gist,
+    cf_content: Boolean(info.cf_content),
+    cf_meta: Boolean(info.cf_meta),
+    inCloud,
+  };
+};
 
 const pruneTombstones = (tombstones) => {
   const cutoff = Date.now() - TOMBSTONE_RETENTION_MS;
   return Object.fromEntries(
-    Object.entries(tombstones || {}).filter(([, deletedAt]) => Number(deletedAt) >= cutoff),
+    Object.entries(tombstones || {}).filter(([, val]) => getTombstoneDeletedAt(val) >= cutoff),
   );
 };
 
@@ -126,8 +155,8 @@ export const codehubStorage = {
   },
 };
 
-export const contentKey = (id) => `codehub_save_content:${id}`;
-export const metaKey = (id) => `codehub_save_meta:${id}`;
+export const contentKey = (id) => `codehub_save_content:${getLogicalFileId(id)}`;
+export const metaKey = (id) => `codehub_save_meta:${getLogicalFileId(id)}`;
 
 /**
  * 字符串 SHA-256 快速哈希（安全且确定性）
@@ -171,6 +200,16 @@ export const computeGistHash = (gistId, filename = "") => {
   return hashVal.toString(16).padStart(12, "0").slice(0, 12);
 };
 
+export const getLogicalFileId = (key) => {
+  if (!key || typeof key !== "string") return "";
+  if (key === GIST_LIST_KEY) return GIST_LIST_KEY;
+  if (key.startsWith("codehub_save_meta:")) return key.slice("codehub_save_meta:".length);
+  if (key.startsWith("codehub_save_content:")) return key.slice("codehub_save_content:".length);
+  if (key.startsWith("codehub_trash_meta:")) return key.slice("codehub_trash_meta:".length);
+  if (key.startsWith("codehub_trash_content:")) return key.slice("codehub_trash_content:".length);
+  return key;
+};
+
 /**
  * 获取或生成 Gist 对应安全不泄露的本地 Item ID
  * 格式形如：g_7a9f2b1c8e3d
@@ -181,51 +220,103 @@ export const getGistItemId = (gistId, filename) => {
 };
 
 /**
- * 标准化解析保存索引：兼容纯 ID 数组和精简对象结构。
+ * 标准化解析保存索引：兼容纯 ID 数组和精简对象结构，统一提取真实逻辑文件 ID 去重，
+ * 绝不将同一文件的 meta 与 content 误当成两个独立条目。
  */
 export const parseSavesIndex = (indexData) => {
   if (!indexData) {
     return { version: 3, updatedAt: Date.now(), gistListUpdatedAt: 0, items: [] };
   }
   if (Array.isArray(indexData)) {
-    // 兼容历史纯 ID 数组或对象数组
+    // 兼容历史纯 ID 数组或对象数组，并做 logicalFileId 归一化与去重
+    const seenIds = new Set();
+    const items = [];
+    for (const rawItem of indexData) {
+      const rawId = typeof rawItem === "string" ? rawItem : rawItem?.id;
+      const logicalId = getLogicalFileId(rawId);
+      if (!logicalId || logicalId === GIST_LIST_KEY || seenIds.has(logicalId)) continue;
+      seenIds.add(logicalId);
+      if (typeof rawItem === "string") {
+        items.push({ id: logicalId, name: "" });
+      } else {
+        items.push({
+          id: logicalId,
+          name: rawItem.name || "",
+          updatedAt: rawItem.updatedAt,
+          ...(rawItem.isGist ? { isGist: true } : {}),
+          ...(rawItem.cf_meta ? { cf_meta: true } : {}),
+          ...(rawItem.cf_content ? { cf_content: true } : {}),
+        });
+      }
+    }
     return {
       version: 3,
       updatedAt: Date.now(),
       gistListUpdatedAt: 0,
-      items: indexData
-        .map((item) => {
-          if (typeof item === "string") return { id: item, name: "" };
-          return item?.id
-            ? {
-                id: item.id,
-                name: item.name || "",
-                updatedAt: item.updatedAt,
-                ...(item.isGist ? { isGist: true } : {}),
-                ...(item.cf_meta ? { cf_meta: true } : {}),
-                ...(item.cf_content ? { cf_content: true } : {}),
-              }
-            : null;
-        })
-        .filter(Boolean),
+      items,
     };
   }
   if (typeof indexData === "object" && Array.isArray(indexData.items)) {
+    const seenIds = new Set();
+    const items = [];
+    for (const item of indexData.items) {
+      const logicalId = getLogicalFileId(item?.id);
+      if (!logicalId || logicalId === GIST_LIST_KEY || seenIds.has(logicalId)) continue;
+      seenIds.add(logicalId);
+      items.push({
+        id: logicalId,
+        name: item.name || "",
+        updatedAt: item.updatedAt,
+        ...(item.isGist ? { isGist: true } : {}),
+        ...(item.cf_meta ? { cf_meta: true } : {}),
+        ...(item.cf_content ? { cf_content: true } : {}),
+      });
+    }
     return {
       version: 3,
       updatedAt: indexData.updatedAt || Date.now(),
       gistListUpdatedAt: Number(indexData.gistListUpdatedAt) || 0,
       tombstones: pruneTombstones(indexData.tombstones),
-      items: indexData.items
-        .filter((item) => item?.id)
-        .map((item) => ({
-          id: item.id,
-          name: item.name || "",
-          updatedAt: item.updatedAt,
-          ...(item.isGist ? { isGist: true } : {}),
-          ...(item.cf_meta ? { cf_meta: true } : {}),
-          ...(item.cf_content ? { cf_content: true } : {}),
-        })),
+      items,
+    };
+  }
+  if (typeof indexData === "object" && (Array.isArray(indexData.entries) || indexData.files)) {
+    // 兼容老版本云端 index：从 entries 或 files 中还原出 items 列表
+    const entryIds = new Set();
+    if (Array.isArray(indexData.entries)) {
+      for (const entry of indexData.entries) {
+        const logicalId = getLogicalFileId(entry);
+        if (logicalId && logicalId !== GIST_LIST_KEY && !logicalId.startsWith("codehub_trash_")) {
+          entryIds.add(logicalId);
+        }
+      }
+    }
+    if (indexData.files && typeof indexData.files === "object") {
+      for (const fileId of Object.keys(indexData.files)) {
+        const logicalId = getLogicalFileId(fileId);
+        if (logicalId && logicalId !== GIST_LIST_KEY) {
+          entryIds.add(logicalId);
+        }
+      }
+    }
+    const restoredItems = [];
+    for (const id of entryIds) {
+      const fileMeta = indexData.files?.[id] || {};
+      restoredItems.push({
+        id,
+        name: fileMeta.name || "",
+        updatedAt: fileMeta.updatedAt || fileMeta.createAt || 0,
+        ...(fileMeta.gist ? { isGist: true } : {}),
+        cf_meta: true,
+        cf_content: true,
+      });
+    }
+    return {
+      version: 3,
+      updatedAt: indexData.updatedAt || Date.now(),
+      gistListUpdatedAt: Number(indexData.gistListUpdatedAt) || 0,
+      tombstones: pruneTombstones(indexData.tombstones),
+      items: restoredItems,
     };
   }
   return { version: 3, updatedAt: Date.now(), gistListUpdatedAt: 0, items: [] };
@@ -249,9 +340,33 @@ export const markCodeHubItemsDeleted = async (ids) => {
   const deletedAt = Date.now();
   const tombstones = { ...parsedIndex.tombstones };
   for (const id of targetIds) {
+    const meta = await store.get(metaKey(id));
+    const content = await store.get(contentKey(id));
+    if (content !== undefined) {
+      await store.put(content, `codehub_trash_content:${id}`);
+    }
+    if (meta !== undefined) {
+      await store.put(meta, `codehub_trash_meta:${id}`);
+    }
     await store.delete(contentKey(id));
     await store.delete(metaKey(id));
-    tombstones[id] = deletedAt;
+    const existingItem = parsedIndex.items.find((item) => item.id === id);
+    const hasCloud = Boolean(
+      meta?.cf_content ||
+      meta?.cf_meta ||
+      existingItem?.cf_content ||
+      existingItem?.cf_meta
+    );
+    tombstones[id] = {
+      deletedAt,
+      name: meta?.name || existingItem?.name || id,
+      language: meta?.language || existingItem?.language || "text",
+      gist: meta?.gist || existingItem?.gist || null,
+      isGist: !!(meta?.gist || existingItem?.gist),
+      cf_content: Boolean(meta?.cf_content || existingItem?.cf_content),
+      cf_meta: Boolean(meta?.cf_meta || existingItem?.cf_meta),
+      inCloud: hasCloud,
+    };
   }
   const removed = new Set(targetIds);
   await store.put(
@@ -259,6 +374,144 @@ export const markCodeHubItemsDeleted = async (ids) => {
       ...parsedIndex,
       updatedAt: deletedAt,
       items: parsedIndex.items.filter((item) => !removed.has(item.id)),
+      tombstones,
+    },
+    SAVES_INDEX_KEY,
+  );
+  await tx.done;
+};
+
+// 获取回收站（墓碑）文件列表，包含剩余天数
+export const getDeletedTombstoneList = async () => {
+  const rawIndex = await codehubStorage.getItem(SAVES_INDEX_KEY);
+  const parsedIndex = parseSavesIndex(rawIndex);
+  const now = Date.now();
+  const list = [];
+  for (const [id, val] of Object.entries(parsedIndex.tombstones || {})) {
+    const info = getTombstoneInfo(id, val);
+    const elapsed = now - info.deletedAt;
+    const remainingMs = Math.max(0, TOMBSTONE_RETENTION_MS - elapsed);
+    const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+    list.push({
+      ...info,
+      remainingDays,
+      expired: elapsed >= TOMBSTONE_RETENTION_MS,
+    });
+  }
+  // 按删除时间倒序排列
+  return list.sort((a, b) => b.deletedAt - a.deletedAt);
+};
+
+// 恢复单个墓碑文件：撤销墓碑标记，并将数据放回有效存储和保存列表
+export const restoreCodeHubTombstoneItem = async (id, externalData = null) => {
+  if (!id) return false;
+  const db = await dbPromise;
+  const tx = db.transaction("store", "readwrite");
+  const store = tx.objectStore("store");
+  const parsedIndex = parseSavesIndex(await store.get(SAVES_INDEX_KEY));
+  const tombstoneVal = parsedIndex.tombstones?.[id];
+  const tombstoneInfo = tombstoneVal ? getTombstoneInfo(id, tombstoneVal) : null;
+
+  let content = externalData?.content;
+  let meta = externalData?.meta;
+
+  if (content === undefined) content = await store.get(`codehub_trash_content:${id}`);
+  if (content === undefined) content = await store.get(contentKey(id));
+
+  if (meta === undefined) meta = await store.get(`codehub_trash_meta:${id}`);
+  if (meta === undefined) meta = await store.get(metaKey(id));
+
+  const restoredTime = Date.now();
+  if (!meta) {
+    meta = {
+      id,
+      name: tombstoneInfo?.name || id,
+      language: tombstoneInfo?.language || "text",
+      gist: tombstoneInfo?.gist || null,
+      createdAt: restoredTime,
+      updatedAt: restoredTime,
+    };
+  } else {
+    meta = {
+      ...meta,
+      updatedAt: restoredTime,
+    };
+  }
+
+  await store.put(typeof content === "string" ? content : "", contentKey(id));
+  await store.put(meta, metaKey(id));
+
+  await store.delete(`codehub_trash_content:${id}`);
+  await store.delete(`codehub_trash_meta:${id}`);
+
+  const tombstones = { ...parsedIndex.tombstones };
+  delete tombstones[id];
+
+  const isCloud = Boolean(
+    tombstoneInfo?.inCloud ||
+    tombstoneInfo?.cf_content ||
+    tombstoneInfo?.cf_meta ||
+    externalData?.isCloud ||
+    meta?.cf_content ||
+    meta?.cf_meta
+  );
+
+  const restoredItem = {
+    id,
+    name: meta.name || tombstoneInfo?.name || id,
+    language: meta.language || tombstoneInfo?.language || "text",
+    updatedAt: restoredTime,
+    gist: meta.gist || tombstoneInfo?.gist || undefined,
+    ...(isCloud ? { cf_content: true, cf_meta: true } : {}),
+  };
+
+  const existingItemIndex = parsedIndex.items.findIndex((it) => it.id === id);
+  const items = [...parsedIndex.items];
+  if (existingItemIndex >= 0) {
+    items[existingItemIndex] = restoredItem;
+  } else {
+    items.unshift(restoredItem);
+  }
+
+  await store.put(
+    {
+      ...parsedIndex,
+      updatedAt: restoredTime,
+      items,
+      tombstones,
+    },
+    SAVES_INDEX_KEY,
+  );
+  await tx.done;
+  return true;
+};
+
+// 批量恢复所有未过期的墓碑文件
+export const restoreAllCodeHubTombstones = async () => {
+  const list = await getDeletedTombstoneList();
+  for (const item of list) {
+    await restoreCodeHubTombstoneItem(item.id);
+  }
+  return list.length;
+};
+
+// 永久从墓碑中删除（从回收站彻底清除本地暂存与墓碑及相关文件）
+export const permanentlyDeleteCodeHubTombstone = async (id) => {
+  if (!id) return;
+  const db = await dbPromise;
+  const tx = db.transaction("store", "readwrite");
+  const store = tx.objectStore("store");
+  const parsedIndex = parseSavesIndex(await store.get(SAVES_INDEX_KEY));
+  const tombstones = { ...parsedIndex.tombstones };
+  delete tombstones[id];
+  await store.delete(`codehub_trash_content:${id}`);
+  await store.delete(`codehub_trash_meta:${id}`);
+  await store.delete(contentKey(id));
+  await store.delete(metaKey(id));
+  await store.put(
+    {
+      ...parsedIndex,
+      updatedAt: Date.now(),
       tombstones,
     },
     SAVES_INDEX_KEY,
@@ -439,16 +692,27 @@ export const removeGistFilesFromCodeHub = async (gistId, fileNames) => {
     const meta = await store.get(metaKey(item.id));
     const isTargetGist = meta?.gist?.gistHash === targetGistHash || meta?.gist?.id === gistId;
     if (!isTargetGist || (names && !names.has(meta.gist.filename))) continue;
+    const content = await store.get(contentKey(item.id));
+    if (content !== undefined) await store.put(content, `codehub_trash_content:${item.id}`);
+    if (meta !== undefined) await store.put(meta, `codehub_trash_meta:${item.id}`);
     await store.delete(contentKey(item.id));
     await store.delete(metaKey(item.id));
-    removedIds.push(item.id);
+    removedIds.push({ id: item.id, meta, item });
   }
 
   if (removedIds.length) {
-    const removed = new Set(removedIds);
+    const removed = new Set(removedIds.map((r) => r.id));
     const deletedAt = Date.now();
     const tombstones = { ...parsedIndex.tombstones };
-    for (const id of removedIds) tombstones[id] = deletedAt;
+    for (const { id, meta, item } of removedIds) {
+      tombstones[id] = {
+        deletedAt,
+        name: meta?.name || item?.name || id,
+        language: meta?.language || item?.language || "text",
+        gist: meta?.gist || item?.gist || null,
+        isGist: true,
+      };
+    }
     await store.put(
       {
         ...parsedIndex,

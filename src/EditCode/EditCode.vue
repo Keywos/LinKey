@@ -14,7 +14,7 @@
     >
       <span
         class="edit-code-editor-title"
-        style="opacity: 0.6"
+        style="opacity: 0.6" 
         @click="goFunction()"
         >Code Hub</span
       >
@@ -198,7 +198,10 @@
                       :title="gistPath(item)"
                       >{{ gistPath(item) }}</span
                     >
-                    <span v-if="item.tags?.length" class="saves-item-tags">
+                    <span
+                      v-if="item.tags?.length || isItemSynced(item)"
+                      class="saves-item-tags"
+                    >
                       <span
                         v-for="tag in item.tags"
                         :key="tag"
@@ -206,6 +209,13 @@
                         :class="`saves-item-tag-${tag.toLowerCase()}`"
                         >{{ tag }}</span
                       >
+                      <span
+                        v-if="isItemSynced(item)"
+                        class="saves-item-tag saves-item-tag-cf"
+                        title="已同步至云端"
+                      >
+                        <img :src="cfsLogo" class="saves-item-cf-icon" alt="Cloud" />
+                      </span>
                     </span>
                   </span>
 
@@ -375,7 +385,10 @@
                           :title="gistPath(child)"
                           >{{ gistPath(child) }}</span
                         >
-                        <span v-if="child.tags?.length" class="saves-item-tags">
+                        <span
+                          v-if="child.tags?.length || isItemSynced(child)"
+                          class="saves-item-tags"
+                        >
                           <span
                             v-for="tag in child.tags"
                             :key="tag"
@@ -383,6 +396,13 @@
                             :class="`saves-item-tag-${tag.toLowerCase()}`"
                             >{{ tag }}</span
                           >
+                          <span
+                            v-if="isItemSynced(child)"
+                            class="saves-item-tag saves-item-tag-cf"
+                            title="已同步至云端"
+                          >
+                            <img :src="cfsLogo" class="saves-item-cf-icon" alt="Cloud" />
+                          </span>
                         </span>
                       </span>
                       <div class="saves-item-preview">
@@ -538,6 +558,13 @@
             </Transition>
           </template>
           <div class="saves-footers">
+            <button
+              class="saves-sync-btn saves-trash-btn"
+              @click.stop="openTrashModal"
+              title="管理被墓碑标记的已删除文件（保留60天内可恢复）"
+            >
+              回收站{{ trashList.length ? ` (${trashList.length})` : "" }}
+            </button>
             <button class="saves-sync-btn" @click.stop="push_home">
               返回首页
             </button>
@@ -782,6 +809,269 @@
       </div>
     </div>
   </div>
+
+  <!-- 已删除文件管理（回收站）弹窗 -->
+  <div
+    v-if="trashModalVisible"
+    style="z-index:998;"
+    class="modal-mask trash-mask"
+    @click.self="closeTrashModal"
+  >
+    <div class="modal-box trash-box">
+      <div class="trash-header">
+        <div class="trash-title">
+          <span>已删除文件管理</span>
+          <span v-if="trashList.length" class="trash-badge">{{ trashList.length }}</span>
+        </div>
+        <button
+          class="trash-close-btn"
+          :disabled="Boolean(trashAction.activeId)"
+          @click="closeTrashModal"
+          title="关闭"
+        >
+          ×
+        </button>
+      </div>
+      <div class="trash-tip">
+        提示：已删除文件在本地与云端暂存保留 60 天。彻底删除将同时永久抹除云端与本地记录。
+      </div>
+
+      <!-- 全局批量操作进度条 -->
+      <div v-if="trashAction.activeId === 'all'" class="trash-global-bar">
+        <span class="trash-inline-spinner"></span>
+        <span class="trash-global-bar-text">{{ trashAction.stepText }}</span>
+      </div>
+
+      <div class="trash-list-scroll">
+        <div v-if="!trashList.length" class="trash-empty">
+          <div class="trash-empty-icon">🗑️</div>
+          <div class="trash-empty-text">回收站空空如也，暂无已删除文件</div>
+        </div>
+        <div
+          v-for="item in trashList"
+          :key="item.id"
+          class="trash-item-row"
+          :class="{
+            'is-busy': trashAction.activeId === item.id || trashAction.activeId === 'all'
+          }"
+        >
+          <div class="trash-item-info">
+            <div class="trash-item-name-line">
+              <span class="trash-item-name" :title="item.name">{{ item.name }}</span>
+              <!-- 云端备份 Tag -->
+              <span
+                v-if="item.inCloud"
+                class="trash-tag cloud"
+                title="云端已备份，彻底删除时将同步抹除云端记录"
+              >
+                <svg class="trash-tag-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                  <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+                </svg>
+                云端
+              </span>
+              <span v-if="item.isGist" class="trash-tag gist">Gist</span>
+              <span v-else-if="item.language" class="trash-tag lang">{{ item.language }}</span>
+            </div>
+            <div class="trash-item-meta-line">
+              <span class="trash-time">删除于 {{ formatTrashDate(item.deletedAt) }}</span>
+              <span class="trash-countdown" :class="{ 'near-expired': item.remainingDays <= 7 }">
+                剩余 {{ item.remainingDays }} 天
+              </span>
+            </div>
+            <!-- 行内操作进度提示条 -->
+            <div
+              v-if="trashAction.activeId === item.id"
+              class="trash-row-progress"
+              :class="trashAction.type"
+            >
+              <span class="trash-inline-spinner"></span>
+              <span class="trash-progress-text">{{ trashAction.stepText }}</span>
+            </div>
+          </div>
+          <div class="trash-item-actions">
+            <button
+              class="trash-btn trash-btn-restore"
+              :disabled="Boolean(trashAction.activeId)"
+              @click.stop="handleRestoreTrashItem(item)"
+              title="恢复文件"
+            >
+              <span
+                v-if="trashAction.activeId === item.id && trashAction.type === 'restore'"
+                class="trash-inline-spinner"
+              ></span>
+              {{ trashAction.activeId === item.id && trashAction.type === "restore" ? "恢复中…" : "恢复" }}
+            </button>
+            <button
+              class="trash-btn trash-btn-delete"
+              :disabled="Boolean(trashAction.activeId)"
+              @click.stop="handlePermanentDeleteTrashItem(item)"
+              title="彻底删除（先清除云端再删除本地）"
+            >
+              <span
+                v-if="trashAction.activeId === item.id && trashAction.type === 'delete'"
+                class="trash-inline-spinner"
+              ></span>
+              {{ trashAction.activeId === item.id && trashAction.type === "delete" ? "删除中…" : "彻底删除" }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions trash-footer-actions">
+        <button
+          v-if="trashList.length"
+          class="modal-btn modal-btn-primary trash-btn-batch-restore"
+          :disabled="Boolean(trashAction.activeId)"
+          @click="handleRestoreAllTrash"
+        >
+          <span
+            v-if="trashAction.activeId === 'all' && trashAction.type === 'restore'"
+            class="trash-inline-spinner"
+          ></span>
+          {{ trashAction.activeId === "all" && trashAction.type === "restore" ? trashAction.stepText : "全部恢复" }}
+        </button>
+        <button
+          v-if="trashList.length"
+          class="modal-btn modal-btn-danger trash-btn-batch-clear"
+          :disabled="Boolean(trashAction.activeId)"
+          @click="handleClearAllTrash"
+        >
+          <span
+            v-if="trashAction.activeId === 'all' && trashAction.type === 'delete'"
+            class="trash-inline-spinner"
+          ></span>
+          {{ trashAction.activeId === "all" && trashAction.type === "delete" ? trashAction.stepText : "清空回收站" }}
+        </button>
+        <button
+          class="modal-btn"
+          :disabled="Boolean(trashAction.activeId)"
+          @click="closeTrashModal"
+        >
+          关闭
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 同步确认与进度展示弹窗 -->
+  <div
+    v-if="syncModalState.visible"
+    class="modal-mask sync-mask"
+    @click.self="closeSyncModal"
+  >
+    <div class="modal-box sync-box" @click.stop>
+      <div class="sync-header">
+        <div class="sync-title-line">
+          <span class="sync-title">{{ syncModalState.title }}</span>
+          <span v-if="syncModalState.phase !== 'checking' && syncModalState.phase !== 'empty'" class="sync-count-tag">
+            {{ syncModalState.items.length }} 项
+          </span>
+        </div>
+        <button
+          v-if="syncModalState.phase !== 'syncing'"
+          class="sync-close-btn"
+          @click="closeSyncModal"
+          title="关闭"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div class="sync-body">
+        <!-- 检查中骨架/懒加载 -->
+        <div v-if="syncModalState.phase === 'checking'" class="sync-loading-box">
+          <span class="sync-spinner large"></span>
+          <span class="sync-loading-text">正在检查云端与本地差异…</span>
+        </div>
+
+        <!-- 无变动空状态 -->
+        <div v-else-if="syncModalState.phase === 'empty'" class="sync-empty-box">
+          <div class="sync-empty-icon">✓</div>
+          <div class="sync-empty-text">
+            {{ syncModalState.action === 'upload' ? '云端已是最新，无变更需上传' : '本地已是最新，无文件需下载' }}
+          </div>
+        </div>
+
+        <!-- 有变动/同步中/已完成 -->
+        <template v-else>
+          <div class="sync-tip">
+            <span v-if="syncModalState.phase === 'confirm'">
+              请确认以下需要{{ syncModalState.action === 'upload' ? '上传同步到云端' : '从云端下载到本地' }}的项目：
+            </span>
+            <span v-else-if="syncModalState.phase === 'syncing'">
+              正在同步中，请勿关闭页面…
+            </span>
+            <span v-else-if="syncModalState.error" style="color: #dc3545;">
+              ✗ {{ syncModalState.error }}
+            </span>
+            <span v-else class="sync-tip-success">
+              ✓ {{ syncModalState.summary || '同步已完成' }}
+            </span>
+          </div>
+
+          <div class="sync-item-list">
+            <div
+              v-for="item in syncModalState.items"
+              :key="item.id"
+              class="sync-item-row"
+              :class="`status-${item.status}`"
+            >
+              <div class="sync-item-info">
+                <div class="sync-item-top">
+                  <span class="sync-item-name" :title="item.name">{{ item.name }}</span>
+                  <span class="sync-item-type-badge" :class="item.type">{{ item.type }}</span>
+                </div>
+                <div class="sync-item-reason" :title="item.reason">{{ item.reason }}</div>
+              </div>
+              <div class="sync-item-status">
+                <span v-if="item.status === 'pending'" class="status-badge pending">
+                  {{ syncModalState.action === 'upload' ? '待上传' : '待下载' }}
+                </span>
+                <span v-else-if="item.status === 'uploading'" class="status-badge progress">
+                  <span class="sync-spinner"></span> 上传中...
+                </span>
+                <span v-else-if="item.status === 'downloading'" class="status-badge progress">
+                  <span class="sync-spinner"></span> 下载中...
+                </span>
+                <span v-else-if="item.status === 'success'" class="status-badge success">
+                  ✓ 成功
+                </span>
+                <span v-else-if="item.status === 'error'" class="status-badge error" :title="item.error">
+                  ✗ 失败
+                </span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="sync-footer">
+        <template v-if="syncModalState.phase === 'checking'">
+          <button class="sync-btn cancel" @click="closeSyncModal">取消</button>
+          <button class="sync-btn confirm disabled" disabled>
+            <span class="sync-spinner white"></span> 正在比对差异…
+          </button>
+        </template>
+        <template v-else-if="syncModalState.phase === 'empty'">
+          <button class="sync-btn confirm" @click="closeSyncModal">我知道了</button>
+        </template>
+        <template v-else-if="syncModalState.phase === 'confirm'">
+          <button class="sync-btn cancel" @click="closeSyncModal">取消</button>
+          <button class="sync-btn confirm" @click="executeSyncModal">
+            确认{{ syncModalState.action === 'upload' ? '上传' : '下载' }}
+          </button>
+        </template>
+        <template v-else-if="syncModalState.phase === 'syncing'">
+          <button class="sync-btn confirm" disabled>
+            <span class="sync-spinner white"></span> 同步中...
+          </button>
+        </template>
+        <template v-else>
+          <button class="sync-btn confirm" @click="closeSyncModal">完成</button>
+        </template>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -809,6 +1099,7 @@ import {
   contentKey,
   getGistItemId,
   getIdsFromSavesIndex,
+  getLogicalFileId,
   markCodeHubItemsDeleted,
   metaKey,
   moveCodeHubItemId,
@@ -820,15 +1111,26 @@ import {
   GIST_LIST_KEY,
   SAVES_INDEX_KEY,
   syncGistFilesToCodeHub,
+  getDeletedTombstoneList,
+  restoreCodeHubTombstoneItem,
+  restoreAllCodeHubTombstones,
+  permanentlyDeleteCodeHubTombstone,
 } from "@/storage/codehubStorage.js";
 import {
+  getCodeHubSyncConfig,
   checkCodeHubSyncDiff,
   restoreCodeHubSnapshot,
   uploadCodeHubSnapshot,
+  restoreFileFromCloud,
+  apiDeleteFileFromCloud,
+  apiDeleteMultipleFilesFromCloud,
+  fetchCloudTrashInfo,
 } from "@/storage/codehubSync.js";
 
 import JSZip from "jszip";
 import "./env.js";
+import cfsLogo from "@/img/svg/cfs.svg";
+const isItemSynced = (item) => Boolean(item?.cf_meta || item?.cf_content);
 let skipWatchSave = false;
 let isSwitchingItem = false; // 切换文件期间抑制自动保存 watch
 const route = useRoute();
@@ -847,15 +1149,30 @@ const checkRemoteSync = async () => {
     if (diff && diff.hasChanges) {
       syncDiffInfo.value = diff;
       if (diff.remoteNewCount > 0) {
+        const names = diff.downloadItems?.map((it) => it.name || it.id).slice(0, 3).join(", ");
         showToast({
-          message: `云端检测到 ${diff.remoteNewCount} 个更新，可点击“下载”获取`,
+          message: `云端检测到 ${diff.remoteNewCount} 个更新${names ? `（${names}${diff.downloadItems.length > 3 ? " 等" : ""}）` : ""}，可点击“下载”获取`,
           duration: 3500,
         });
       } else if (diff.localNewCount > 0) {
-        showToast({
-          message: `本地有 ${diff.localNewCount} 个待同步更新，可点击“上传”`,
-          duration: 3000,
-        });
+        if (diff.uploadItems && diff.uploadItems.length > 0) {
+          const names = diff.uploadItems.map((it) => it.name || it.id).slice(0, 3).join(", ");
+          showToast({
+            message: `本地有 ${diff.localNewCount} 个待同步更新（${names}${diff.uploadItems.length > 3 ? " 等" : ""}），可点击“上传”`,
+            duration: 3500,
+          });
+        } else if (diff.trashPendingUploadItems && diff.trashPendingUploadItems.length > 0) {
+          const trashNames = diff.trashPendingUploadItems.map((it) => it.name || it.id).slice(0, 3).join(", ");
+          showToast({
+            message: `本地有 ${diff.trashPendingUploadItems.length} 个回收站暂存待备份（${trashNames}），可点击“上传”`,
+            duration: 3500,
+          });
+        } else {
+          showToast({
+            message: `本地有 ${diff.localNewCount} 个待同步更新，可点击“上传”`,
+            duration: 3000,
+          });
+        }
       }
     } else {
       syncDiffInfo.value = null;
@@ -866,43 +1183,474 @@ const checkRemoteSync = async () => {
   }
 };
 
-const syncCodeHub = async (action) => {
-  if (action === "upload") {
-    const ok = await askConfirm("确定要将本地数据上传并覆盖云端吗？只会更新变化的文件");
-    if (!ok) return;
-  } else {
-    const ok = await askConfirm("确定要从云端拉取并同步到本地吗？会覆盖本地数据");
-    if (!ok) return;
+// ============================================
+// 回收站（已删除文件管理 / 60天墓碑机制）
+// ============================================
+const trashModalVisible = ref(false);
+const trashList = ref([]);
+const isRestoringTrash = ref(false);
+
+// 回收站当前正在执行的操作状态
+const trashAction = ref({
+  activeId: null, // null | 'all' | 具体 item.id
+  type: "", // 'restore' | 'delete'
+  stepText: "",
+});
+
+const loadTrashList = async () => {
+  try {
+    const list = await getDeletedTombstoneList();
+    trashList.value = list;
+
+    // 异步查询云端真实索引，给在云端有记录的文件精准打上 inCloud = true
+    fetchCloudTrashInfo()
+      .then((cloudInfo) => {
+        if (!cloudInfo || !trashList.value?.length) return;
+        const { keys = {}, tombstones = {} } = cloudInfo;
+        trashList.value = trashList.value.map((item) => {
+          const inCloud = Boolean(
+            item.inCloud ||
+              keys[metaKey(item.id)] ||
+              keys[contentKey(item.id)] ||
+              tombstones[item.id]
+          );
+          return { ...item, inCloud };
+        });
+      })
+      .catch(() => {});
+  } catch (err) {
+    console.debug("获取回收站列表失败:", err);
   }
+};
+
+const openTrashModal = async () => {
+  await loadTrashList();
+  trashModalVisible.value = true;
+};
+
+const closeTrashModal = () => {
+  if (trashAction.value.activeId) return;
+  trashModalVisible.value = false;
+};
+
+const formatTrashDate = (timestamp) => {
+  if (!timestamp) return "-";
+  const d = new Date(timestamp);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+const handleRestoreTrashItem = async (item) => {
+  if (!item?.id || trashAction.value.activeId) return;
+
+  const confirmed = await askConfirm(`确定要恢复文件 "${item.name || item.id}" 吗？`);
+  if (!confirmed) return;
+
+  trashAction.value = {
+    activeId: item.id,
+    type: "restore",
+    stepText: "正在恢复...",
+  };
+
+  try {
+    let ok = await restoreCodeHubTombstoneItem(item.id);
+    if (!ok) {
+      // 本地暂存若不存在（如在其他端），尝试从云端拉取恢复
+      trashAction.value.stepText = "正在从云端拉取备份...";
+      const cloudData = await restoreFileFromCloud(item.id);
+      if (cloudData) {
+        cloudData.isCloud = true;
+        ok = await restoreCodeHubTombstoneItem(item.id, cloudData);
+      }
+    }
+    if (ok) {
+      showToast(`已成功恢复: ${item.name || item.id}`);
+      await loadTrashList();
+      await loadSaves();
+    } else {
+      showToast(`恢复失败: 未找到可用的文件内容备份`, 3000);
+    }
+  } catch (err) {
+    showToast(`恢复出错: ${err?.message || err}`);
+  } finally {
+    trashAction.value = { activeId: null, type: "", stepText: "" };
+  }
+};
+
+const handleRestoreAllTrash = async () => {
+  const total = trashList.value.length;
+  if (!total || trashAction.value.activeId) return;
+
+  const confirmed = await askConfirm(`确定要恢复回收站中的全部 ${total} 个文件吗？`);
+  if (!confirmed) return;
+
+  trashAction.value = {
+    activeId: "all",
+    type: "restore",
+    stepText: `正在恢复 (0/${total})...`,
+  };
+
+  try {
+    let count = 0;
+    for (let i = 0; i < trashList.value.length; i++) {
+      const item = trashList.value[i];
+      trashAction.value.stepText = `正在恢复 (${i + 1}/${total}): ${item.name || item.id}`;
+      let ok = await restoreCodeHubTombstoneItem(item.id);
+      if (!ok) {
+        const cloudData = await restoreFileFromCloud(item.id);
+        if (cloudData) {
+          cloudData.isCloud = true;
+          ok = await restoreCodeHubTombstoneItem(item.id, cloudData);
+        }
+      }
+      if (ok) count++;
+    }
+    showToast(`成功恢复全部 ${count} 个文件`);
+    await loadTrashList();
+    await loadSaves();
+    if (!trashList.value.length) {
+      closeTrashModal();
+    }
+  } catch (err) {
+    showToast(`批量恢复出错: ${err?.message || err}`);
+  } finally {
+    trashAction.value = { activeId: null, type: "", stepText: "" };
+  }
+};
+
+const handlePermanentDeleteTrashItem = async (item) => {
+  if (!item?.id || trashAction.value.activeId) return;
+
+  const confirmed = await askConfirm(
+    `确定彻底删除 "${item.name || item.id}" 吗？\n该操作不可撤销，将永久删除${item.inCloud ? "云端与本地" : "本地"}记录与备份。`
+  );
+  if (!confirmed) return;
+
+  trashAction.value = {
+    activeId: item.id,
+    type: "delete",
+    stepText: "准备删除...",
+  };
+
+  const { url, token } = getCodeHubSyncConfig();
+  const hasCloudConfig = Boolean(url && token);
+
+  try {
+    // 1. 若配置了云端，提示并先从云端彻底删除文件与索引
+    if (hasCloudConfig) {
+      trashAction.value.stepText = "正在从云端彻底删除文件与元数据...";
+      try {
+        await apiDeleteFileFromCloud(item.id, {
+          onProgress: (p) => {
+            if (p.step === "updating_index") {
+              trashAction.value.stepText = "正在更新云端根索引并清除记录...";
+            } else if (p.step === "done") {
+              trashAction.value.stepText = "云端已彻底删除完毕";
+            }
+          },
+        });
+        trashAction.value.stepText = "云端删除完毕，正在清理本地数据...";
+      } catch (cloudErr) {
+        showToast(`云端删除失败: ${cloudErr?.message || cloudErr}，已终止操作以保护数据`, 4000);
+        trashAction.value = { activeId: null, type: "", stepText: "" };
+        return; // 云端未彻底删除前，不删除本地数据
+      }
+    } else {
+      trashAction.value.stepText = "正在清理本地回收站暂存与墓碑...";
+    }
+
+    // 2. 云端彻底删除完毕后，才删除本地
+    await permanentlyDeleteCodeHubTombstone(item.id);
+    trashAction.value.stepText = "删除成功";
+
+    showToast(
+      hasCloudConfig
+        ? `"${item.name || item.id}" 已彻底删除（云端与本地已同步清理）`
+        : `"${item.name || item.id}" 本地已彻底删除`
+    );
+    await loadTrashList();
+    await loadSaves();
+  } catch (err) {
+    showToast(`删除失败: ${err?.message || err}`);
+  } finally {
+    trashAction.value = { activeId: null, type: "", stepText: "" };
+  }
+};
+
+const handleClearAllTrash = async () => {
+  const total = trashList.value.length;
+  if (!total || trashAction.value.activeId) return;
+
+  const hasCloudItem = trashList.value.some((it) => it.inCloud);
+  const confirmed = await askConfirm(
+    `确定要彻底清空回收站中的全部 ${total} 个文件吗？\n将永久抹除所有文件${hasCloudItem ? "及其云端备份" : ""}，此操作不可撤销！`
+  );
+  if (!confirmed) return;
+
+  trashAction.value = {
+    activeId: "all",
+    type: "delete",
+    stepText: "正在准备清空...",
+  };
+
+  const { url, token } = getCodeHubSyncConfig();
+  const hasCloudConfig = Boolean(url && token);
+  const ids = trashList.value.map((it) => it.id);
+
+  try {
+    if (hasCloudConfig) {
+      trashAction.value.stepText = `正在从云端彻底删除 ${ids.length} 个文件...`;
+      try {
+        await apiDeleteMultipleFilesFromCloud(ids, {
+          onProgress: (p) => {
+            if (p.step === "deleting_files") {
+              trashAction.value.stepText = `正在删除云端文件 (${p.current}/${p.total})...`;
+            } else if (p.step === "updating_index") {
+              trashAction.value.stepText = "正在清理云端根索引记录...";
+            } else if (p.step === "done") {
+              trashAction.value.stepText = "云端批量删除完成，正在清空本地...";
+            }
+          },
+        });
+      } catch (cloudErr) {
+        showToast(`云端清空失败: ${cloudErr?.message || cloudErr}，已终止操作`, 4000);
+        trashAction.value = { activeId: null, type: "", stepText: "" };
+        return;
+      }
+    } else {
+      trashAction.value.stepText = "正在清空本地回收站...";
+    }
+
+    // 云端删除完毕后，清空本地
+    for (const id of ids) {
+      await permanentlyDeleteCodeHubTombstone(id);
+    }
+
+    showToast(
+      hasCloudConfig
+        ? `已彻底清空回收站（云端与本地已同步抹除）`
+        : `本地回收站已彻底清空`
+    );
+    await loadTrashList();
+    await loadSaves();
+    closeTrashModal();
+  } catch (err) {
+    showToast(`清空回收站失败: ${err?.message || err}`);
+  } finally {
+    trashAction.value = { activeId: null, type: "", stepText: "" };
+  }
+};
+
+// 同步确认与进度弹窗状态
+const syncModalState = ref({
+  visible: false,
+  action: "upload", // 'upload' | 'restore'
+  phase: "confirm", // 'confirm' | 'syncing' | 'done'
+  title: "",
+  items: [],
+  summary: "",
+  error: null,
+});
+
+const closeSyncModal = () => {
+  if (syncModalState.value.phase === "syncing") return;
+  syncModalState.value.visible = false;
+};
+
+const syncCodeHub = async (action) => {
+  const { url, token } = getCodeHubSyncConfig();
+  if (!url || !token) {
+    showToast({
+      message: "请先在右上角【云同步配置】中填写 Worker 接口地址和访问 Token",
+      duration: 3500,
+    });
+    toggleSyncSettings(true);
+    return;
+  }
+
+  // 立即弹出弹窗展示检查中状态，无需等待网络比对完成
+  syncModalState.value = {
+    visible: true,
+    action,
+    phase: "checking",
+    title: action === "upload" ? "上传同步到云端" : "从云端下载到本地",
+    items: [],
+    summary: "",
+    error: null,
+  };
 
   syncingCodeHub.value = true;
   try {
+    const diff = await checkCodeHubSyncDiff();
+    if (!syncModalState.value.visible) return;
+
+    if (!diff) {
+      syncModalState.value.phase = "done";
+      syncModalState.value.error = "检查云端数据失败，请检查网络与密钥";
+      return;
+    }
+
     if (action === "upload") {
-      const res = await uploadCodeHubSnapshot();
-      if (!res.changed) {
-        showToast("云端已是最新，无变更需同步");
-      } else {
-        const parts = [];
-        if (res.uploaded > 0) parts.push(`上传 ${res.uploaded} 个项目`);
-        if (res.deleted > 0) parts.push(`删除 ${res.deleted} 个云端废弃文件`);
-        if (res.failed > 0) parts.push(`${res.failed} 个文件项目失败`);
-        if (res.failedDeleted > 0) parts.push(`${res.failedDeleted} 个云端文件删除失败`);
-        showToast(
-          parts.length > 0 ? `同步完成：${parts.join("，")}` : "云端索引已更新",
-        );
+      const uploadItems = diff.uploadItems || [];
+      const trashItems = diff.trashPendingUploadItems || [];
+      const hasGist = Boolean(diff.gistListChanged);
+      const hasTombstone = Boolean(diff.tombstoneChanged);
+
+      if (uploadItems.length === 0 && trashItems.length === 0 && !hasGist && !hasTombstone) {
+        syncModalState.value.phase = "empty";
+        return;
       }
-      syncDiffInfo.value = null;
+
+      const modalItems = [
+        ...uploadItems.map((it) => ({
+          id: it.id,
+          name: it.name || it.id,
+          type: it.reason?.includes("缺失") ? "新增" : "更新",
+          reason: it.reason || "本地修改",
+          status: "pending",
+          error: null,
+        })),
+        ...trashItems.map((it) => ({
+          id: it.id,
+          name: it.name || it.id,
+          type: "回收站",
+          reason: "回收站暂存备份",
+          status: "pending",
+          error: null,
+        })),
+        ...(hasGist
+          ? [
+              {
+                id: "__gist_list__",
+                name: "Gist 收藏列表",
+                type: "列表",
+                reason: "本地 Gist 列表有变动",
+                status: "pending",
+                error: null,
+              },
+            ]
+          : []),
+        ...(hasTombstone && uploadItems.length === 0 && trashItems.length === 0 && !hasGist
+          ? [
+              {
+                id: "__tombstones__",
+                name: "删除标记记录",
+                type: "状态",
+                reason: "回收站墓碑状态同步",
+                status: "pending",
+                error: null,
+              },
+            ]
+          : []),
+      ];
+
+      syncModalState.value.items = modalItems;
+      syncModalState.value.phase = "confirm";
     } else {
-      const res = await restoreCodeHubSnapshot();
-      await loadSaves();
-      showToast(
-        res.downloaded > 0
-          ? `已同步下载 ${res.downloaded} 个文件`
-          : "本地已是最新，无文件需下载",
-      );
-      syncDiffInfo.value = null;
+      const downloadItems = diff.downloadItems || [];
+      const hasGist = Boolean(diff.gistListChanged);
+
+      if (downloadItems.length === 0 && !hasGist) {
+        syncModalState.value.phase = "empty";
+        return;
+      }
+
+      const modalItems = [
+        ...downloadItems.map((it) => ({
+          id: it.id,
+          name: it.name || it.id,
+          type: it.reason?.includes("缺失") ? "新增" : "更新",
+          reason: it.reason || "云端更新",
+          status: "pending",
+          error: null,
+        })),
+        ...(hasGist
+          ? [
+              {
+                id: "__gist_list__",
+                name: "Gist 收藏列表",
+                type: "列表",
+                reason: "云端 Gist 列表有更新",
+                status: "pending",
+                error: null,
+              },
+            ]
+          : []),
+      ];
+
+      syncModalState.value.items = modalItems;
+      syncModalState.value.phase = "confirm";
     }
   } catch (error) {
+    if (syncModalState.value.visible) {
+      syncModalState.value.phase = "done";
+      syncModalState.value.error = error.message || "检查云同步差异失败";
+    }
+  } finally {
+    syncingCodeHub.value = false;
+  }
+};
+
+const executeSyncModal = async () => {
+  if (syncModalState.value.phase !== "confirm") return;
+  const action = syncModalState.value.action;
+  syncModalState.value.phase = "syncing";
+  syncingCodeHub.value = true;
+  syncModalState.value.error = null;
+
+  const onProgress = ({ id, status, error }) => {
+    const target = syncModalState.value.items.find((it) => it.id === id);
+    if (target) {
+      target.status = status;
+      if (error) target.error = error?.message || String(error);
+    }
+  };
+
+  try {
+    if (action === "upload") {
+      const res = await uploadCodeHubSnapshot({ onProgress });
+      syncModalState.value.items.forEach((it) => {
+        if (it.status === "pending" || it.status === "uploading") {
+          it.status = "success";
+        }
+      });
+      await loadSaves();
+      syncDiffInfo.value = null;
+
+      const parts = [];
+      if (res.uploaded > 0) parts.push(`上传 ${res.uploaded} 个项目`);
+      if (res.deleted > 0) parts.push(`删除 ${res.deleted} 个云端废弃文件`);
+      if (res.failed > 0) parts.push(`${res.failed} 个文件项目失败`);
+      if (res.failedDeleted > 0) parts.push(`${res.failedDeleted} 个云端文件删除失败`);
+      if (parts.length === 0 && res.indexChanged) {
+        parts.push("已同步索引与墓碑记录");
+      }
+      const summaryText = parts.length > 0 ? parts.join("，") : "上传同步完成";
+      syncModalState.value.summary = summaryText;
+      syncModalState.value.phase = "done";
+      showToast(`同步完成：${summaryText}`);
+      await checkRemoteSync();
+    } else {
+      const res = await restoreCodeHubSnapshot({ onProgress });
+      syncModalState.value.items.forEach((it) => {
+        if (it.status === "pending" || it.status === "downloading") {
+          it.status = "success";
+        }
+      });
+      await loadSaves();
+      syncDiffInfo.value = null;
+
+      const summaryText =
+        res.downloaded > 0
+          ? `已同步下载 ${res.downloaded} 个文件`
+          : "下载同步完成";
+      syncModalState.value.summary = summaryText;
+      syncModalState.value.phase = "done";
+      showToast(summaryText);
+    }
+  } catch (error) {
+    syncModalState.value.phase = "done";
+    syncModalState.value.error = error?.message || "云同步失败";
     showToast(error.message || "云同步失败");
   } finally {
     syncingCodeHub.value = false;
@@ -1811,7 +2559,7 @@ const loadSaves = async () => {
           if (typeof key !== "string") continue;
 
           if (key.startsWith("codehub_save_meta:")) {
-            const id = key.slice(19);
+            const id = getLogicalFileId(key);
             if (!existingIds.has(id)) {
               const meta = await idbStorage.getItem(key);
               if (meta) {
@@ -1821,7 +2569,7 @@ const loadSaves = async () => {
               }
             }
           } else if (key.startsWith("codehub_save_content:")) {
-            const id = key.slice(21);
+            const id = getLogicalFileId(key);
             if (!existingIds.has(id)) {
               const content = await idbStorage.getItem(key);
               if (typeof content === "string" && content.length > 0) {
@@ -1852,9 +2600,21 @@ const loadSaves = async () => {
     }
 
     items = await hydrateGistDetails(items);
+
+    // ★ 自动去重与归一化：清除历史因切片错误导致的同一文件重复分裂（meta 与 content 变成两个独立项）
+    const cleanItems = [];
+    const seenItemIds = new Set();
+    for (const it of items) {
+      const lid = getLogicalFileId(it?.id);
+      if (!lid || seenItemIds.has(lid)) continue;
+      seenItemIds.add(lid);
+      cleanItems.push({ ...it, id: lid });
+    }
+    const hadDuplicates = cleanItems.length !== items.length;
+    items = cleanItems;
     savedItems.value = items;
 
-    if (!list || !list.version || list.version < 2) {
+    if (hadDuplicates || !list || !list.version || list.version < 2) {
       await persistIndex();
     }
   } catch (error) {
@@ -1862,6 +2622,7 @@ const loadSaves = async () => {
     savedItems.value = [];
   } finally {
     isLoadingSaves.value = false;
+    await loadTrashList();
   }
 };
 
@@ -1884,10 +2645,19 @@ const persistIndex = async () => {
   const existingParsed = parseSavesIndex(existingRawIndex);
   const existingSyncMap = new Map(existingParsed.items.map((it) => [it.id, it]));
 
+  const seenIds = new Set();
+  const dedupedItems = [];
+  for (const it of currentItems) {
+    const lid = getLogicalFileId(it?.id);
+    if (!lid || seenIds.has(lid)) continue;
+    seenIds.add(lid);
+    dedupedItems.push({ ...it, id: lid });
+  }
+
   const leanIndex = {
     version: 2,
     updatedAt: Date.now(),
-    items: currentItems.map((item) => {
+    items: dedupedItems.map((item) => {
       const existing = existingSyncMap.get(item.id);
       return {
         id: item.id,
@@ -4192,6 +4962,25 @@ onBeforeUnmount(() => {
   color: #348d61;
 }
 
+.saves-item-tag-cf {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5px 4px;
+  background: rgba(255, 153, 17, 0.15);
+  vertical-align: middle;
+  line-height: 1;
+
+  .saves-item-cf-icon {
+    width: 14px;
+    height: 9px;
+    display: inline-block;
+    vertical-align: middle;
+    object-fit: contain;
+    pointer-events: none;
+  }
+}
+
 .saves-item-child-count {
   display: inline-block;
   margin-left: 4px;
@@ -4593,7 +5382,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   /* ★ 需高于宽屏文件列表面板(1001/1002)，避免弹窗被左侧列表覆盖 */
-  z-index: 1100;
+  z-index: 1000;
   padding: 0 8%;
 }
 
@@ -5020,5 +5809,660 @@ onBeforeUnmount(() => {
   .saves-vresize-handle:active .saves-vresize-bar {
     background: rgba(128, 128, 128, 0.55);
   }
+}
+
+/* ===== 回收站 / 已删除文件管理弹窗 ===== */
+.modal-box.trash-box {
+  width: calc(100vw - 32px);
+  max-width: 500px;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px 16px;
+  box-sizing: border-box;
+}
+
+.trash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.trash-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.trash-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(92, 125, 190, 0.18);
+  color: #5c7dbe;
+  font-weight: 600;
+}
+
+.trash-close-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text, #666);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  opacity: 0.65;
+  transition: opacity 0.2s;
+}
+
+.trash-close-btn:hover {
+  opacity: 1;
+}
+
+.trash-close-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.trash-tip {
+  font-size: 12px;
+  opacity: 0.72;
+  line-height: 1.45;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(128, 128, 128, 0.06);
+  border: 0.5px solid rgba(128, 128, 128, 0.12);
+}
+
+.trash-global-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 0.5px solid rgba(59, 130, 246, 0.25);
+  font-size: 12px;
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.trash-list-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 140px;
+  max-height: 48vh;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding-right: 4px;
+}
+
+.trash-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  opacity: 0.55;
+}
+
+.trash-empty-icon {
+  font-size: 34px;
+  margin-bottom: 8px;
+}
+
+.trash-empty-text {
+  font-size: 13px;
+}
+
+.trash-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(128, 128, 128, 0.05);
+  border: 0.5px solid rgba(128, 128, 128, 0.14);
+  transition: all 0.2s ease;
+}
+
+.trash-item-row:hover {
+  background: rgba(128, 128, 128, 0.09);
+  border-color: rgba(128, 128, 128, 0.24);
+  transform: translateY(-1px);
+}
+
+.trash-item-row.is-busy {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.trash-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.trash-item-name-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.trash-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+/* 回收站通用 Tag */
+.trash-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  padding: 1.5px 6.5px;
+  border-radius: 6px;
+  font-weight: 500;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.trash-tag.cloud {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+  border: 0.5px solid rgba(59, 130, 246, 0.28);
+}
+
+.trash-tag.cloud .trash-tag-icon {
+  flex-shrink: 0;
+}
+
+.trash-tag.gist {
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+  border: 0.5px solid rgba(245, 158, 11, 0.28);
+}
+
+.trash-tag.lang {
+  background: rgba(100, 116, 139, 0.12);
+  color: #64748b;
+  border: 0.5px solid rgba(100, 116, 139, 0.2);
+}
+
+.trash-item-meta-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  opacity: 0.65;
+}
+
+.trash-countdown.near-expired {
+  color: #ef4444;
+  font-weight: 500;
+}
+
+/* 行内操作进度提示条 */
+.trash-row-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  animation: fadeInRow 0.2s ease;
+}
+
+.trash-row-progress.delete {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 0.5px solid rgba(239, 68, 68, 0.22);
+}
+
+.trash-row-progress.restore {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  border: 0.5px solid rgba(59, 130, 246, 0.22);
+}
+
+.trash-inline-spinner {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spinTrash 0.75s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@keyframes spinTrash {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeInRow {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.trash-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.trash-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.trash-btn-restore {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+  border: 0.5px solid rgba(59, 130, 246, 0.22);
+}
+
+.trash-btn-restore:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.24);
+  transform: translateY(-1px);
+}
+
+.trash-btn-delete {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 0.5px solid rgba(239, 68, 68, 0.2);
+}
+
+.trash-btn-delete:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.22);
+  transform: translateY(-1px);
+}
+
+.trash-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.trash-footer-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.trash-btn-batch-restore {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trash-btn-batch-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #ef4444 !important;
+  border: 0.5px solid rgba(239, 68, 68, 0.3) !important;
+}
+
+.trash-btn-batch-clear:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.26) !important;
+}
+
+/* ===== 同步确认与进度展示弹窗样式 ===== */
+.sync-mask {
+  z-index: 999;
+}
+
+.modal-box.sync-box {
+  width: min(92vw, 480px);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+}
+
+.sync-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.sync-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sync-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sync-count-tag {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(92, 125, 190, 0.15);
+  color: #5c7dbe;
+  font-weight: 600;
+}
+
+.sync-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 4px;
+  border-radius: 6px;
+  line-height: 1;
+  color: inherit;
+}
+
+.sync-close-btn:hover {
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.sync-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.sync-tip {
+  font-size: 12px;
+  opacity: 0.75;
+  line-height: 1.5;
+}
+
+.sync-tip-success {
+  color: #28a745;
+  font-weight: 500;
+}
+
+.sync-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 48vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.sync-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(128, 128, 128, 0.08);
+  border: 0.5px solid rgba(128, 128, 128, 0.15);
+  transition: all 0.2s ease;
+}
+
+.sync-item-row.status-uploading,
+.sync-item-row.status-downloading {
+  background: rgba(92, 125, 190, 0.1);
+  border-color: rgba(92, 125, 190, 0.35);
+}
+
+.sync-item-row.status-success {
+  background: rgba(40, 167, 69, 0.08);
+  border-color: rgba(40, 167, 69, 0.25);
+}
+
+.sync-item-row.status-error {
+  background: rgba(220, 53, 69, 0.08);
+  border-color: rgba(220, 53, 69, 0.25);
+}
+
+.sync-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.sync-item-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sync-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-item-type-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(128, 128, 128, 0.15);
+  flex-shrink: 0;
+}
+
+.sync-item-type-badge.新增 {
+  background: rgba(40, 167, 69, 0.15);
+  color: #28a745;
+}
+
+.sync-item-type-badge.更新 {
+  background: rgba(92, 125, 190, 0.15);
+  color: #5c7dbe;
+}
+
+.sync-item-type-badge.回收站 {
+  background: rgba(240, 140, 0, 0.15);
+  color: #e67700;
+}
+
+.sync-item-type-badge.配置,
+.sync-item-type-badge.列表,
+.sync-item-type-badge.状态 {
+  background: rgba(111, 66, 193, 0.15);
+  color: #6f42c1;
+}
+
+.sync-item-reason {
+  font-size: 11px;
+  opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-item-status {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.status-badge.pending {
+  background: rgba(128, 128, 128, 0.12);
+  opacity: 0.7;
+}
+
+.status-badge.progress {
+  background: rgba(92, 125, 190, 0.18);
+  color: #3b82f6;
+  animation: pulseProgress 1.5s infinite;
+}
+
+.status-badge.success {
+  background: rgba(40, 167, 69, 0.15);
+  color: #28a745;
+  font-weight: 600;
+}
+
+.status-badge.error {
+  background: rgba(220, 53, 69, 0.15);
+  color: #dc3545;
+  cursor: help;
+}
+
+@keyframes pulseProgress {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; }
+  100% { opacity: 0.8; }
+}
+
+.sync-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: syncSpin 0.75s linear infinite;
+}
+
+.sync-spinner.white {
+  border-color: #ffffff;
+  border-right-color: transparent;
+}
+
+@keyframes syncSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.sync-footer {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.sync-btn {
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sync-btn.cancel {
+  background: rgba(128, 128, 128, 0.12);
+  color: inherit;
+}
+
+.sync-btn.cancel:hover {
+  background: rgba(128, 128, 128, 0.2);
+}
+
+.sync-btn.confirm {
+  background: #5c7dbe;
+  color: #ffffff;
+}
+
+.sync-btn.confirm:hover:not(:disabled) {
+  background: #4a6aa7;
+}
+
+.sync-btn.confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sync-loading-box,
+.sync-empty-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 42px 16px;
+  gap: 12px;
+  opacity: 0.85;
+}
+
+.sync-spinner.large {
+  width: 28px;
+  height: 28px;
+  border-width: 2.5px;
+  color: #5c7dbe;
+}
+
+.sync-loading-text {
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.sync-empty-icon {
+  font-size: 32px;
+  color: #28a745;
+  line-height: 1;
+}
+
+.sync-empty-text {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.8;
 }
 </style>
