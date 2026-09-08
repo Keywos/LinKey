@@ -62,6 +62,9 @@ export const getCodeHubSyncConfig = () => {
   };
 };
 
+// 默认请求超时时间（15 秒），防止网络异常或 Worker 无响应时无限挂起
+const DEFAULT_FETCH_TIMEOUT = 15000;
+
 const apiFetch = async (path, options = {}) => {
   const { url, token } = getCodeHubSyncConfig();
   if (!url || !token) throw new Error("请先在设置中填写 CF 同步地址和访问 Token");
@@ -75,14 +78,25 @@ const apiFetch = async (path, options = {}) => {
     ...(options.headers || {}),
   };
 
+  // 使用 AbortController 实现超时，避免 fetch 无限挂起
+  const timeout = options.timeout || DEFAULT_FETCH_TIMEOUT;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
   let response;
   try {
     response = await fetch(`${baseUrl}${normalizedPath}`, {
       ...options,
       headers,
+      signal: controller.signal,
     });
   } catch (netErr) {
+    if (netErr.name === "AbortError") {
+      throw new Error(`请求超时 (${timeout / 1000}秒)，请检查网络连接和 Worker 地址是否正确`);
+    }
     throw new Error(`网络连接失败 (${netErr.message || "无法连接到 Worker"})`);
+  } finally {
+    clearTimeout(timer);
   }
 
   if (!response.ok) {

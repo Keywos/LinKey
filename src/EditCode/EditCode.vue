@@ -51,22 +51,11 @@
           <button
             class="saves-btn"
             :disabled="syncingCodeHub"
-            @click="syncCodeHub('upload')"
+            @click="openSyncModal"
           >
-            {{ syncingCodeHub ? "同步中…" : "上传" }}
+            {{ syncingCodeHub ? "同步中…" : "同步" }}
             <span
-              v-if="syncDiffInfo && syncDiffInfo.localNewCount > 0"
-              class="saves-btn-badge"
-            ></span>
-          </button>
-          <button
-            class="saves-btn"
-            :disabled="syncingCodeHub"
-            @click="syncCodeHub('restore')"
-          >
-            下载
-            <span
-              v-if="syncDiffInfo && syncDiffInfo.remoteNewCount > 0"
+              v-if="syncDiffInfo && (syncDiffInfo.localNewCount > 0 || syncDiffInfo.remoteNewCount > 0)"
               class="saves-btn-badge"
             ></span>
           </button>
@@ -962,7 +951,7 @@
         <div class="sync-title-line">
           <span class="sync-title">{{ syncModalState.title }}</span>
           <span v-if="syncModalState.phase !== 'checking' && syncModalState.phase !== 'empty'" class="sync-count-tag">
-            {{ syncModalState.items.length }} 项
+            {{ syncModalState.activeItems.length }} 项
           </span>
         </div>
         <button
@@ -972,6 +961,38 @@
           title="关闭"
         >
           ✕
+        </button>
+      </div>
+
+      <!-- 上传 / 下载 Tab 切换导航 -->
+      <div class="sync-tab-nav">
+        <button
+          class="sync-tab-btn"
+          :class="{ active: syncModalState.tab === 'upload' }"
+          :disabled="syncModalState.phase === 'syncing'"
+          @click="switchSyncTab('upload')"
+        >
+          <span>上传到云端</span>
+          <span
+            v-if="syncModalState.uploadItems.length > 0"
+            class="sync-tab-badge"
+          >
+            {{ syncModalState.uploadItems.length }}
+          </span>
+        </button>
+        <button
+          class="sync-tab-btn"
+          :class="{ active: syncModalState.tab === 'download' }"
+          :disabled="syncModalState.phase === 'syncing'"
+          @click="switchSyncTab('download')"
+        >
+          <span>从云端下载</span>
+          <span
+            v-if="syncModalState.downloadItems.length > 0"
+            class="sync-tab-badge"
+          >
+            {{ syncModalState.downloadItems.length }}
+          </span>
         </button>
       </div>
 
@@ -986,7 +1007,7 @@
         <div v-else-if="syncModalState.phase === 'empty'" class="sync-empty-box">
           <div class="sync-empty-icon">✓</div>
           <div class="sync-empty-text">
-            {{ syncModalState.action === 'upload' ? '云端已是最新，无变更需上传' : '本地已是最新，无文件需下载' }}
+            {{ syncModalState.tab === 'upload' ? '云端已是最新，无变更需上传' : '本地已是最新，无文件需下载' }}
           </div>
         </div>
 
@@ -994,7 +1015,7 @@
         <template v-else>
           <div class="sync-tip">
             <span v-if="syncModalState.phase === 'confirm'">
-              请确认以下需要{{ syncModalState.action === 'upload' ? '上传同步到云端' : '从云端下载到本地' }}的项目：
+              请确认以下需要{{ syncModalState.tab === 'upload' ? '上传同步到云端' : '从云端下载到本地' }}的项目：
             </span>
             <span v-else-if="syncModalState.phase === 'syncing'">
               正在同步中，请勿关闭页面…
@@ -1009,7 +1030,7 @@
 
           <div class="sync-item-list">
             <div
-              v-for="item in syncModalState.items"
+              v-for="item in syncModalState.activeItems"
               :key="item.id"
               class="sync-item-row"
               :class="`status-${item.status}`"
@@ -1023,7 +1044,7 @@
               </div>
               <div class="sync-item-status">
                 <span v-if="item.status === 'pending'" class="status-badge pending">
-                  {{ syncModalState.action === 'upload' ? '待上传' : '待下载' }}
+                  {{ syncModalState.tab === 'upload' ? '待上传' : '待下载' }}
                 </span>
                 <span v-else-if="item.status === 'uploading'" class="status-badge progress">
                   <span class="sync-spinner"></span> 上传中...
@@ -1051,12 +1072,18 @@
           </button>
         </template>
         <template v-else-if="syncModalState.phase === 'empty'">
-          <button class="sync-btn confirm" @click="closeSyncModal">我知道了</button>
+          <button class="sync-btn cancel" @click="closeSyncModal">关闭</button>
+          <button
+            class="sync-btn confirm"
+            @click="openSyncModal(syncModalState.tab)"
+          >
+            重新检查
+          </button>
         </template>
         <template v-else-if="syncModalState.phase === 'confirm'">
           <button class="sync-btn cancel" @click="closeSyncModal">取消</button>
           <button class="sync-btn confirm" @click="executeSyncModal">
-            确认{{ syncModalState.action === 'upload' ? '上传' : '下载' }}
+            确认{{ syncModalState.tab === 'upload' ? '上传' : '下载' }}
           </button>
         </template>
         <template v-else-if="syncModalState.phase === 'syncing'">
@@ -1141,36 +1168,42 @@ const cmStore = useCmStore();
 const syncingCodeHub = ref(false);
 const syncDiffInfo = ref(null); // 云端与本地差异信息
 
-// 检查云端差异（静默拉取索引并对比）
-const checkRemoteSync = async () => {
+const checkRemoteSync = async (silent = false) => {
   try {
     const diff = await checkCodeHubSyncDiff();
     if (diff && diff.hasChanges) {
       syncDiffInfo.value = diff;
-      if (diff.remoteNewCount > 0) {
-        const names = diff.downloadItems?.map((it) => it.name || it.id).slice(0, 3).join(", ");
-        showToast({
-          message: `云端检测到 ${diff.remoteNewCount} 个更新${names ? `（${names}${diff.downloadItems.length > 3 ? " 等" : ""}）` : ""}，可点击“下载”获取`,
-          duration: 3500,
-        });
-      } else if (diff.localNewCount > 0) {
-        if (diff.uploadItems && diff.uploadItems.length > 0) {
-          const names = diff.uploadItems.map((it) => it.name || it.id).slice(0, 3).join(", ");
+      if (!silent) {
+        if (diff.remoteNewCount > 0 && diff.localNewCount > 0) {
           showToast({
-            message: `本地有 ${diff.localNewCount} 个待同步更新（${names}${diff.uploadItems.length > 3 ? " 等" : ""}），可点击“上传”`,
+            message: `云端有 ${diff.remoteNewCount} 个更新，本地有 ${diff.localNewCount} 个待上传，点击“同步”查看`,
             duration: 3500,
           });
-        } else if (diff.trashPendingUploadItems && diff.trashPendingUploadItems.length > 0) {
-          const trashNames = diff.trashPendingUploadItems.map((it) => it.name || it.id).slice(0, 3).join(", ");
+        } else if (diff.remoteNewCount > 0) {
+          const names = diff.downloadItems?.map((it) => it.name || it.id).slice(0, 3).join(", ");
           showToast({
-            message: `本地有 ${diff.trashPendingUploadItems.length} 个回收站暂存待备份（${trashNames}），可点击“上传”`,
+            message: `云端检测到 ${diff.remoteNewCount} 个更新${names ? `（${names}${diff.downloadItems.length > 3 ? " 等" : ""}）` : ""}，点击“同步”可下载`,
             duration: 3500,
           });
-        } else {
-          showToast({
-            message: `本地有 ${diff.localNewCount} 个待同步更新，可点击“上传”`,
-            duration: 3000,
-          });
+        } else if (diff.localNewCount > 0) {
+          if (diff.uploadItems && diff.uploadItems.length > 0) {
+            const names = diff.uploadItems.map((it) => it.name || it.id).slice(0, 3).join(", ");
+            showToast({
+              message: `本地有 ${diff.localNewCount} 个待同步更新（${names}${diff.uploadItems.length > 3 ? " 等" : ""}），点击“同步”可上传`,
+              duration: 3500,
+            });
+          } else if (diff.trashPendingUploadItems && diff.trashPendingUploadItems.length > 0) {
+            const trashNames = diff.trashPendingUploadItems.map((it) => it.name || it.id).slice(0, 3).join(", ");
+            showToast({
+              message: `本地有 ${diff.trashPendingUploadItems.length} 个回收站暂存待备份（${trashNames}），点击“同步”可上传`,
+              duration: 3500,
+            });
+          } else {
+            showToast({
+              message: `本地有 ${diff.localNewCount} 个待同步更新，点击“同步”可上传`,
+              duration: 3000,
+            });
+          }
         }
       }
     } else {
@@ -1443,10 +1476,13 @@ const handleClearAllTrash = async () => {
 // 同步确认与进度弹窗状态
 const syncModalState = ref({
   visible: false,
-  action: "upload", // 'upload' | 'restore'
-  phase: "confirm", // 'confirm' | 'syncing' | 'done'
-  title: "",
-  items: [],
+  tab: "upload", // 'upload' | 'download'
+  phase: "confirm", // 'checking' | 'confirm' | 'empty' | 'syncing' | 'done'
+  title: "CodeHub 云端同步",
+  diff: null,
+  uploadItems: [],
+  downloadItems: [],
+  activeItems: [],
   summary: "",
   error: null,
 });
@@ -1456,149 +1492,188 @@ const closeSyncModal = () => {
   syncModalState.value.visible = false;
 };
 
-const syncCodeHub = async (action) => {
+// 切换弹窗内的标签页（上传 / 下载）
+const switchSyncTab = (tab) => {
+  if (syncModalState.value.phase === "syncing") return;
+  syncModalState.value.tab = tab;
+  updateSyncModalActiveItems();
+};
+
+const updateSyncModalActiveItems = () => {
+  const isUpload = syncModalState.value.tab === "upload";
+  const items = isUpload ? syncModalState.value.uploadItems : syncModalState.value.downloadItems;
+  syncModalState.value.activeItems = items;
+  if (syncModalState.value.phase !== "syncing") {
+    syncModalState.value.phase = items.length === 0 ? "empty" : "confirm";
+  }
+};
+
+// 打开统一云同步弹窗（优先比对差异并展示）
+const openSyncModal = async (defaultTab) => {
   const { url, token } = getCodeHubSyncConfig();
   if (!url || !token) {
     showToast({
-      message: "请先在右上角【云同步配置】中填写 Worker 接口地址和访问 Token",
+      message: "请先在【设置】中填写 Worker 接口地址和访问 Token",
       duration: 3500,
     });
-    toggleSyncSettings(true);
     return;
   }
-
-  // 立即弹出弹窗展示检查中状态，无需等待网络比对完成
+  console.log("======1")
+  // 计算默认优先展示的标签页：优先展示有待处理项的一侧
+  let initialTab = defaultTab;  console.log("======2")
+  if (!initialTab) {
+    if (syncDiffInfo.value) {
+      if (syncDiffInfo.value.remoteNewCount > 0 && syncDiffInfo.value.localNewCount === 0) {
+        initialTab = "download";
+      } else {
+        initialTab = "upload";
+      }
+    } else {
+      initialTab = "upload";
+    }
+  }
+console.log("======3")
   syncModalState.value = {
     visible: true,
-    action,
+    tab: initialTab,
     phase: "checking",
-    title: action === "upload" ? "上传同步到云端" : "从云端下载到本地",
-    items: [],
+    title: "CodeHub 云端同步",
+    diff: null,
+    uploadItems: [],
+    downloadItems: [],
+    activeItems: [],
     summary: "",
     error: null,
   };
 
   syncingCodeHub.value = true;
-  try {
-    const diff = await checkCodeHubSyncDiff();
+  try { console.log("======4")
+    // 添加超时保护，防止 checkCodeHubSyncDiff 内部 fetch 无限挂起
+    const diff = await Promise.race([
+      checkCodeHubSyncDiff(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("检查云端差异超时，请检查网络连接和 Worker 地址")), 20000)
+      ),
+    ]);
     if (!syncModalState.value.visible) return;
-
+console.log("======5")
     if (!diff) {
       syncModalState.value.phase = "done";
-      syncModalState.value.error = "检查云端数据失败，请检查网络与密钥";
+      syncModalState.value.error = "检查云端数据失败，请检查网络与配置";
       return;
     }
 
-    if (action === "upload") {
-      const uploadItems = diff.uploadItems || [];
-      const trashItems = diff.trashPendingUploadItems || [];
-      const hasGist = Boolean(diff.gistListChanged);
-      const hasTombstone = Boolean(diff.tombstoneChanged);
+    syncModalState.value.diff = diff;
+    syncDiffInfo.value = diff.hasChanges ? diff : null;
 
-      if (uploadItems.length === 0 && trashItems.length === 0 && !hasGist && !hasTombstone) {
-        syncModalState.value.phase = "empty";
-        return;
-      }
+    // 解析上传项
+    const uploadItems = diff.uploadItems || [];
+    const trashItems = diff.trashPendingUploadItems || [];
+    const hasGist = Boolean(diff.gistListChanged);
+    const hasTombstone = Boolean(diff.tombstoneChanged);
+console.log("======6")
+    const formattedUploadItems = [
+      ...uploadItems.map((it) => ({
+        id: it.id,
+        name: it.name || it.id,
+        type: it.reason?.includes("缺失") ? "新增" : "更新",
+        reason: it.reason || "本地修改",
+        status: "pending",
+        error: null,
+      })),
+      ...trashItems.map((it) => ({
+        id: it.id,
+        name: it.name || it.id,
+        type: "回收站",
+        reason: "回收站暂存备份",
+        status: "pending",
+        error: null,
+      })),
+      ...(hasGist
+        ? [
+            {
+              id: "__gist_list__",
+              name: "Gist 收藏列表",
+              type: "列表",
+              reason: "本地 Gist 列表有变动",
+              status: "pending",
+              error: null,
+            },
+          ]
+        : []),
+      ...(hasTombstone && uploadItems.length === 0 && trashItems.length === 0 && !hasGist
+        ? [
+            {
+              id: "__tombstones__",
+              name: "删除标记记录",
+              type: "状态",
+              reason: "回收站墓碑状态同步",
+              status: "pending",
+              error: null,
+            },
+          ]
+        : []),
+    ];
 
-      const modalItems = [
-        ...uploadItems.map((it) => ({
-          id: it.id,
-          name: it.name || it.id,
-          type: it.reason?.includes("缺失") ? "新增" : "更新",
-          reason: it.reason || "本地修改",
-          status: "pending",
-          error: null,
-        })),
-        ...trashItems.map((it) => ({
-          id: it.id,
-          name: it.name || it.id,
-          type: "回收站",
-          reason: "回收站暂存备份",
-          status: "pending",
-          error: null,
-        })),
-        ...(hasGist
-          ? [
-              {
-                id: "__gist_list__",
-                name: "Gist 收藏列表",
-                type: "列表",
-                reason: "本地 Gist 列表有变动",
-                status: "pending",
-                error: null,
-              },
-            ]
-          : []),
-        ...(hasTombstone && uploadItems.length === 0 && trashItems.length === 0 && !hasGist
-          ? [
-              {
-                id: "__tombstones__",
-                name: "删除标记记录",
-                type: "状态",
-                reason: "回收站墓碑状态同步",
-                status: "pending",
-                error: null,
-              },
-            ]
-          : []),
-      ];
+    // 解析下载项
+    const downloadItems = diff.downloadItems || [];
+    const formattedDownloadItems = [
+      ...downloadItems.map((it) => ({
+        id: it.id,
+        name: it.name || it.id,
+        type: it.reason?.includes("缺失") ? "新增" : "更新",
+        reason: it.reason || "云端更新",
+        status: "pending",
+        error: null,
+      })),
+      ...(hasGist
+        ? [
+            {
+              id: "__gist_list__",
+              name: "Gist 收藏列表",
+              type: "列表",
+              reason: "云端 Gist 列表有更新",
+              status: "pending",
+              error: null,
+            },
+          ]
+        : []),
+    ];
 
-      syncModalState.value.items = modalItems;
-      syncModalState.value.phase = "confirm";
-    } else {
-      const downloadItems = diff.downloadItems || [];
-      const hasGist = Boolean(diff.gistListChanged);
+    syncModalState.value.uploadItems = formattedUploadItems;
+    syncModalState.value.downloadItems = formattedDownloadItems;
 
-      if (downloadItems.length === 0 && !hasGist) {
-        syncModalState.value.phase = "empty";
-        return;
-      }
-
-      const modalItems = [
-        ...downloadItems.map((it) => ({
-          id: it.id,
-          name: it.name || it.id,
-          type: it.reason?.includes("缺失") ? "新增" : "更新",
-          reason: it.reason || "云端更新",
-          status: "pending",
-          error: null,
-        })),
-        ...(hasGist
-          ? [
-              {
-                id: "__gist_list__",
-                name: "Gist 收藏列表",
-                type: "列表",
-                reason: "云端 Gist 列表有更新",
-                status: "pending",
-                error: null,
-              },
-            ]
-          : []),
-      ];
-
-      syncModalState.value.items = modalItems;
-      syncModalState.value.phase = "confirm";
+    // 如果未明确指定标签，且上传为空但下载有项，自动切到下载
+    if (!defaultTab && formattedUploadItems.length === 0 && formattedDownloadItems.length > 0) {
+      syncModalState.value.tab = "download";
     }
+  console.log("======7")
+    updateSyncModalActiveItems();console.log("======8")
   } catch (error) {
     if (syncModalState.value.visible) {
       syncModalState.value.phase = "done";
       syncModalState.value.error = error.message || "检查云同步差异失败";
     }
   } finally {
+    console.log("======9")
     syncingCodeHub.value = false;
   }
 };
 
+// 兼容旧调用的入口函数
+// const syncCodeHub = async (action = "upload") => {
+//   openSyncModal(action === "restore" ? "download" : action);
+// };
+
 const executeSyncModal = async () => {
   if (syncModalState.value.phase !== "confirm") return;
-  const action = syncModalState.value.action;
+  const isUpload = syncModalState.value.tab === "upload";
   syncModalState.value.phase = "syncing";
   syncingCodeHub.value = true;
   syncModalState.value.error = null;
 
   const onProgress = ({ id, status, error }) => {
-    const target = syncModalState.value.items.find((it) => it.id === id);
+    const target = syncModalState.value.activeItems.find((it) => it.id === id);
     if (target) {
       target.status = status;
       if (error) target.error = error?.message || String(error);
@@ -1606,15 +1681,14 @@ const executeSyncModal = async () => {
   };
 
   try {
-    if (action === "upload") {
+    if (isUpload) {
       const res = await uploadCodeHubSnapshot({ onProgress });
-      syncModalState.value.items.forEach((it) => {
+      syncModalState.value.activeItems.forEach((it) => {
         if (it.status === "pending" || it.status === "uploading") {
           it.status = "success";
         }
       });
       await loadSaves();
-      syncDiffInfo.value = null;
 
       const parts = [];
       if (res.uploaded > 0) parts.push(`上传 ${res.uploaded} 个项目`);
@@ -1628,16 +1702,16 @@ const executeSyncModal = async () => {
       syncModalState.value.summary = summaryText;
       syncModalState.value.phase = "done";
       showToast(`同步完成：${summaryText}`);
-      await checkRemoteSync();
+      // 上传后重新比对一次差异（静默）
+      await checkRemoteSync(true);
     } else {
       const res = await restoreCodeHubSnapshot({ onProgress });
-      syncModalState.value.items.forEach((it) => {
+      syncModalState.value.activeItems.forEach((it) => {
         if (it.status === "pending" || it.status === "downloading") {
           it.status = "success";
         }
       });
       await loadSaves();
-      syncDiffInfo.value = null;
 
       const summaryText =
         res.downloaded > 0
@@ -1646,6 +1720,8 @@ const executeSyncModal = async () => {
       syncModalState.value.summary = summaryText;
       syncModalState.value.phase = "done";
       showToast(summaryText);
+      // 下载后重新比对一次差异（静默）
+      await checkRemoteSync(true);
     }
   } catch (error) {
     syncModalState.value.phase = "done";
@@ -6236,6 +6312,60 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   line-height: 1;
   color: inherit;
+}
+
+.sync-tab-nav {
+  display: flex;
+  background: rgba(128, 128, 128, 0.08);
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 12px;
+  gap: 4px;
+}
+
+.sync-tab-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.72;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.sync-tab-btn:hover:not(:disabled) {
+  opacity: 0.95;
+}
+
+.sync-tab-btn.active {
+  background: var(--bg-card, #ffffff);
+  color: var(--primary, #5c7dbe);
+  opacity: 1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  font-weight: 600;
+}
+
+.sync-tab-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.sync-tab-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #ff5252;
+  color: #ffffff;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .sync-close-btn:hover {
