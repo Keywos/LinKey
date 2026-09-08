@@ -40,8 +40,8 @@
         <div class="saves-toolbar">
           <div v-if="!selectMode" class="saves-toolbar-primary">
             <button class="saves-btn" @click="toggleSelectMode">选择</button>
-            <div class="saves-more-wrap">
-              <button class="saves-btn saves-more-btn" @click="toggleToolbar">
+            <div ref="moreMenuWrapRef" class="saves-more-wrap">
+              <button class="saves-btn saves-more-btn" @click.stop="toggleToolbar">
                 更多
               </button>
               <div v-if="moreMenuOpen" class="saves-more-menu">
@@ -75,7 +75,7 @@
                 </button>
                 <button
                   class="saves-menu-item"
-                  @click="openTrashModal"
+                  @click="runMoreAction(openTrashModal)"
                   title="管理被墓碑标记的已删除文件（保留60天内可恢复）"
                 >
                   回收站{{ trashList.length ? ` (${trashList.length})` : "" }}
@@ -90,14 +90,14 @@
                 <button
                   class="saves-menu-item"
                   :disabled="backupInProgress"
-                  @click="backupDatabase"
+                  @click="runMoreAction(backupDatabase)"
                 >
                   {{ backupInProgress ? "备份中…" : "导出本地数据" }}
                 </button>
                 <button
                   class="saves-menu-item"
                   :disabled="restoreInProgress"
-                  @click.stop="triggerBackupRestore"
+                  @click.stop="runMoreAction(triggerBackupRestore)"
                 >
                   {{ restoreInProgress ? "恢复中…" : "导入备份数据" }}
                 </button>
@@ -2819,6 +2819,30 @@ const toggleSelectMode = () => {
   }
 };
 
+const moreMenuWrapRef = ref(null);
+
+const onMoreMenuClickOutside = (e) => {
+  if (moreMenuWrapRef.value && !moreMenuWrapRef.value.contains(e.target)) {
+    moreMenuOpen.value = false;
+  }
+};
+
+const onMoreMenuKeydown = (e) => {
+  if (e.key === "Escape") {
+    moreMenuOpen.value = false;
+  }
+};
+
+watch(moreMenuOpen, (isOpen) => {
+  if (isOpen) {
+    document.addEventListener("pointerdown", onMoreMenuClickOutside);
+    document.addEventListener("keydown", onMoreMenuKeydown);
+  } else {
+    document.removeEventListener("pointerdown", onMoreMenuClickOutside);
+    document.removeEventListener("keydown", onMoreMenuKeydown);
+  }
+});
+
 const toggleToolbar = () => {
   moreMenuOpen.value = !moreMenuOpen.value;
 };
@@ -5175,6 +5199,8 @@ watchEffect(() => {
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener("pointerdown", onMoreMenuClickOutside);
+  document.removeEventListener("keydown", onMoreMenuKeydown);
   cleanupDragListeners();
   cleanupResizeListeners();
   cleanupSavesResizeListeners();
