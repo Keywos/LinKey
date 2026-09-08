@@ -1199,7 +1199,9 @@
                   class="status-badge pending"
                 >
                   {{
-                    item.syncAction === "cleanup-local"
+                    item.syncAction === "cleanup-local" ||
+                    item.syncAction === "sync-tombstones" ||
+                    item.id === "__tombstones__"
                       ? "待同步"
                       : syncModalState.tab === "upload"
                         ? "待上传"
@@ -1210,7 +1212,13 @@
                   v-else-if="item.status === 'uploading'"
                   class="status-badge progress"
                 >
-                  <span class="sync-spinner"></span> 上传中...
+                  <span class="sync-spinner"></span>
+                  {{
+                    item.id === "__tombstones__" ||
+                    item.syncAction === "sync-tombstones"
+                      ? "同步中..."
+                      : "上传中..."
+                  }}
                 </span>
                 <span
                   v-else-if="item.status === 'downloading'"
@@ -1261,7 +1269,15 @@
                       (item) => item.syncAction === "cleanup-local",
                     )
                   ? "清理"
-                  : "上传"
+                  : syncModalState.activeItems.length > 0 &&
+                      syncModalState.activeItems.every(
+                        (item) =>
+                          item.syncAction === "cleanup-local" ||
+                          item.syncAction === "sync-tombstones" ||
+                          item.id === "__tombstones__",
+                      )
+                    ? "同步"
+                    : "上传"
             }}
           </button>
         </template>
@@ -1880,6 +1896,7 @@ const openSyncModal = async (defaultTab) => {
               type: "状态",
               reason: "回收站墓碑状态同步",
               status: "pending",
+              syncAction: "sync-tombstones",
               error: null,
             },
           ]
@@ -5502,7 +5519,7 @@ onBeforeUnmount(() => {
 .saves-item-tags {
   display: inline-block;
   width: fit-content;
-  margin-left: 5px;
+  /* margin-left: 5px; */
   margin-top: 2px;
   vertical-align: middle;
   opacity: 0.72;
@@ -5510,11 +5527,13 @@ onBeforeUnmount(() => {
 
 .saves-item-tag {
   display: inline-block;
-  margin-right: 3px;
-  padding: 1.5px 5px;
+  margin-right: 5px;
+  padding: 1.5px 5px 0.5px 5px;
   border-radius: 16px;
+  height:10px;
   background: #8f98c61a;
   color: var(--text);
+  /* font-family: "SF Mono", "Fira Code", "Consolas", monospace; */
 }
 
 .saves-item-tag:last-child {
@@ -5534,13 +5553,17 @@ onBeforeUnmount(() => {
 .saves-item-tag-url {
   background: rgba(67, 156, 113, 0.2);
   color: #348d61;
+  /* padding: 2px 4px 1px 4px; */
+  /* margin-top: 1px; */
+  /* height: 10px; */
 }
 
 .saves-item-tag-cf {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 1px 4px 2px 4px;
+  padding: 1.2px 4px 1.8px 4px;
+  margin-bottom: 1px;
   background: rgba(255, 153, 17, 0.15);
   vertical-align: middle;
   line-height: 1;
@@ -5564,7 +5587,7 @@ onBeforeUnmount(() => {
   color: var(--text);
   font-size: 9px;
   line-height: 1;
-  margin-top: 2px;
+  margin-top: 1px;
   vertical-align: middle;
   opacity: 0.75;
 }
@@ -5718,7 +5741,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   padding-right: 12px;
   opacity: 0.8;
   overflow: hidden;
@@ -5733,7 +5756,8 @@ onBeforeUnmount(() => {
   display: inline-block;
   flex: 0 0 auto;
   max-width: 100%;
-  padding: 1px 5px;
+  padding: 1.6px 5px;
+  margin-bottom: 1px;
   border-radius: 16px;
   background: rgba(211, 146, 74, 0.1);
   color: #c27a2e9c;
@@ -5879,6 +5903,7 @@ onBeforeUnmount(() => {
   font-size: 10px;
   /* ★ 按钮文字紧凑时避免折行显示 */
   white-space: nowrap;
+  /* font-family: "SF Mono", "Fira Code", "Consolas", monospace; */
 }
 
 .saves-sync-btn:disabled {
