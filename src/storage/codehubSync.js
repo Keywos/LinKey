@@ -18,8 +18,24 @@ export const CODEHUB_SYNC_URL_KEY = "CodeHubSyncUrl";
 export const CODEHUB_SYNC_TOKEN_KEY = "CodeHubSyncToken";
 export const CODEHUB_SYNC_SECRET_KEY = "CodeHubSyncKey";
 export const CODEHUB_SYNC_KEY_KEY = CODEHUB_SYNC_SECRET_KEY;
+export const CODEHUB_SYNC_AUTO_CHECK_KEY = "CodeHubSyncAutoCheck";
 export const MAX_SYNC_FILE_SIZE = 50 * 1024 * 1024; // 单个文件最大 50MB
 const SHOW_SAVES_KEY = "SHOW_SAVES_KEY";
+
+/**
+ * 判断是否开启了“进入时自动检查更新”（默认开启）
+ */
+export const isCodeHubSyncAutoCheckEnabled = () => {
+  const val = localStorage.getItem(CODEHUB_SYNC_AUTO_CHECK_KEY);
+  return val === null || val === "1" || val === "true";
+};
+
+/**
+ * 设置“进入时自动检查更新”状态
+ */
+export const setCodeHubSyncAutoCheckEnabled = (enabled) => {
+  localStorage.setItem(CODEHUB_SYNC_AUTO_CHECK_KEY, enabled ? "1" : "0");
+};
 
 const isSyncableStoreKey = (key) =>
   key !== SAVES_INDEX_KEY &&

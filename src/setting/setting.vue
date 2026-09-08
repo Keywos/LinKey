@@ -28,6 +28,11 @@
         placeholder="本地端到端加解密密钥"
         clearable
       />
+      <van-cell class="van-cell-sw" center title="自动检查云端更新" inset>
+        <template #right-icon>
+          <van-switch v-model="codeHubSyncAutoCheck" @change="onCodeHubSyncAutoCheckChange" />
+        </template>
+      </van-cell>
       <van-cell
         title="测试连接并保存"
         is-link
@@ -333,6 +338,8 @@ import {
   CODEHUB_SYNC_KEY_KEY,
   CODEHUB_SYNC_TOKEN_KEY,
   CODEHUB_SYNC_URL_KEY,
+  isCodeHubSyncAutoCheckEnabled,
+  setCodeHubSyncAutoCheckEnabled,
   testCodeHubSyncConfig,
 } from "@/storage/codehubSync.js";
 // import { defaultHomeCards, getHomeCards, saveHomeCards } from "@/homeCards.js";
@@ -350,6 +357,12 @@ const codeHubSyncToken = ref(
   localStorage.getItem(CODEHUB_SYNC_TOKEN_KEY) || "",
 );
 const codeHubSyncKey = ref(localStorage.getItem(CODEHUB_SYNC_KEY_KEY) || "");
+const codeHubSyncAutoCheck = ref(isCodeHubSyncAutoCheckEnabled());
+
+const onCodeHubSyncAutoCheckChange = (val) => {
+  setCodeHubSyncAutoCheckEnabled(val);
+  showToast(val ? "已开启自动检查云端更新" : "已关闭自动检查云端更新");
+};
 
 const savingSync = ref(false);
 

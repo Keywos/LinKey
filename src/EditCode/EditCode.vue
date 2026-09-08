@@ -813,7 +813,7 @@
   <!-- 已删除文件管理（回收站）弹窗 -->
   <div
     v-if="trashModalVisible"
-    style="z-index:998;"
+    style="z-index:2000;"
     class="modal-mask trash-mask"
     @click.self="closeTrashModal"
   >
@@ -864,18 +864,16 @@
                 class="trash-tag cloud"
                 title="云端已备份，彻底删除时将同步抹除云端记录"
               >
-                <svg class="trash-tag-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-                  <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
-                </svg>
-                云端
+                <img :src="cfsLogo" class="trash-tag-icon" alt="Cloud" />
+                
               </span>
               <span v-if="item.isGist" class="trash-tag gist">Gist</span>
               <span v-else-if="item.language" class="trash-tag lang">{{ item.language }}</span>
             </div>
             <div class="trash-item-meta-line">
-              <span class="trash-time">删除于 {{ formatTrashDate(item.deletedAt) }}</span>
+              <span class="trash-time">{{ formatTrashDate(item.deletedAt) }} 删除</span>
               <span class="trash-countdown" :class="{ 'near-expired': item.remainingDays <= 7 }">
-                剩余 {{ item.remainingDays }} 天
+                余 {{ item.remainingDays }} 天
               </span>
             </div>
             <!-- 行内操作进度提示条 -->
@@ -940,7 +938,7 @@
             v-if="trashAction.activeId === 'all' && trashAction.type === 'delete'"
             class="trash-inline-spinner"
           ></span>
-          {{ trashAction.activeId === "all" && trashAction.type === "delete" ? trashAction.stepText : "清空回收站" }}
+          {{ trashAction.activeId === "all" && trashAction.type === "delete" ? trashAction.stepText : "全部清空" }}
         </button>
         <button
           class="modal-btn"
@@ -1125,6 +1123,7 @@ import {
   apiDeleteFileFromCloud,
   apiDeleteMultipleFilesFromCloud,
   fetchCloudTrashInfo,
+  isCodeHubSyncAutoCheckEnabled,
 } from "@/storage/codehubSync.js";
 
 import JSZip from "jszip";
@@ -4386,8 +4385,10 @@ onMounted(async () => {
   // ★ 初始加载完成后，如果有当前项且面板显示，滚动到该项
   scrollToCurrentItem();
 
-  // ★ 每次进入时后台静默拉取云端 index 进行差异比对并提示
-  checkRemoteSync();
+  // ★ 每次进入时后台静默拉取云端 index 进行差异比对并提示（若开启自动检查）
+  if (isCodeHubSyncAutoCheckEnabled()) {
+    checkRemoteSync();
+  }
 });
 
 // ★ 面板打开/关闭时，打开后自动滚动到当前项
@@ -5382,7 +5383,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   /* ★ 需高于宽屏文件列表面板(1001/1002)，避免弹窗被左侧列表覆盖 */
-  z-index: 1000;
+  z-index: 2001;
   padding: 0 8%;
 }
 
@@ -5413,8 +5414,16 @@ onBeforeUnmount(() => {
   width: calc(100dvw - 40px);
   max-width: 360px;
   box-sizing: border-box;
-  transition: top 0.5s cubic-bezier(0.25, 1, 0.5, 1), left 0.5s cubic-bezier(0.25, 1, 0.5, 1);
-  will-change: top, left;
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* 窄屏幕 (如 iOS 手机端竖屏) 确保左右各有至少20px边距 */
@@ -5498,17 +5507,23 @@ onBeforeUnmount(() => {
 
 .modal-btn {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   font-size: 14px;
   padding: 7px 18px;
   border-radius: 20px;
   border: 0;
   background: rgba(92, 125, 190, 0.12);
   color: inherit;
+  
 }
 
 .modal-btn-primary {
   border-color: #5c7dbe;
   color: #5c7dbe;
+  
 }
 
 /* ===== 可拖拽控制台面板 ===== */
@@ -5662,7 +5677,7 @@ onBeforeUnmount(() => {
 .saves-footers {
   justify-content: center;
   align-items: center;
-  padding: 66px;
+  padding: 33px 10px;
   display: flex;
   gap: 16px;
 }
@@ -5994,6 +6009,9 @@ onBeforeUnmount(() => {
 }
 
 .trash-tag.cloud .trash-tag-icon {
+  width: 12px;
+  height: 12px;
+  object-fit: contain;
   flex-shrink: 0;
 }
 
@@ -6082,6 +6100,21 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
+@media (max-width: 520px) {
+  .trash-item-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+  }
+
+  .trash-item-actions .trash-btn {
+    justify-content: center;
+    padding: 4px 8px;
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+}
+
 .trash-btn {
   display: inline-flex;
   align-items: center;
@@ -6133,12 +6166,16 @@ onBeforeUnmount(() => {
 .trash-btn-batch-restore {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: 6px;
 }
 
 .trash-btn-batch-clear {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   gap: 6px;
   background: rgba(239, 68, 68, 0.15) !important;
   color: #ef4444 !important;
@@ -6151,7 +6188,7 @@ onBeforeUnmount(() => {
 
 /* ===== 同步确认与进度展示弹窗样式 ===== */
 .sync-mask {
-  z-index: 999;
+  z-index: 2000;
 }
 
 .modal-box.sync-box {
