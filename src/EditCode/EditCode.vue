@@ -14,7 +14,7 @@
     >
       <span
         class="edit-code-editor-title"
-        style="opacity: 0.6" 
+        style="opacity: 0.6"
         @click="goFunction()"
         >Code Hub</span
       >
@@ -38,83 +38,143 @@
     <div v-if="showSaves" class="saves-panel">
       <div class="saves-body" :style="{ height: savesPanelHeight + 'px' }">
         <div class="saves-toolbar">
-          <button class="saves-btn" @click="toggleToolbar">
-            {{ toolbarExpanded ? "折叠" : "展开" }}
-          </button>
-          <!-- <button class="saves-btn" @click="createNewBlank">新建</button> -->
-          <!-- <button class="saves-btn" @click="toggleTimeSort">
-            {{ timeSortDescending ? "顺序" : "倒序" }}
-          </button> -->
-          <button class="saves-btn" @click="requestUrlContent">URL</button>
-          <button class="saves-btn" @click="triggerImport">导入</button>
-          <button class="saves-btn" @click="exportCurrent">导出</button>
-          <button
-            class="saves-btn"
-            :disabled="syncingCodeHub"
-            @click="openSyncModal()"
-          >
-            {{ syncingCodeHub ? "同步中…" : "同步" }}
-            <span
-              v-if="syncDiffInfo && (syncDiffInfo.localNewCount > 0 || syncDiffInfo.remoteNewCount > 0)"
-              class="saves-btn-badge"
-            ></span>
-          </button>
-
-          <div v-if="toolbarExpanded" class="saves-toolbar-actions">
-            <template v-if="selectMode">
-              <button class="saves-btn" @click="toggleSelectMode">完成</button>
-              <label class="saves-check-all">
-                <input
-                  type="checkbox"
-                  :checked="allChecked"
-                  @change="toggleCheckAll"
-                />
-                全选
-              </label>
-              <button
-                class="saves-btn"
-                :disabled="checkedIds.size === 0"
-                @click="deleteSelected"
-              >
-                删除({{ checkedIds.size }})
+          <div v-if="!selectMode" class="saves-toolbar-primary">
+            <button class="saves-btn" @click="toggleSelectMode">选择</button>
+            <div class="saves-more-wrap">
+              <button class="saves-btn saves-more-btn" @click="toggleToolbar">
+                更多
               </button>
-              <button
-                class="saves-btn"
-                :disabled="checkedIds.size === 0"
-                @click="exportSelected"
-              >
-                导出选中({{ checkedIds.size }})
-              </button>
-            </template>
-
-            <template v-else>
-              <button class="saves-btn" @click="toggleSelectMode">选择</button>
-              <button class="saves-btn" @click="toggleTimeSort">
-                {{ timeSortDescending ? "顺序" : "倒序" }}
-              </button>
-              <button
-                class="saves-btn"
-                :disabled="syncingAllGists"
-                @click="downloadAllGists"
-              >
-                {{ syncingAllGists ? "获取中…" : "GIST" }}
-              </button>
-              <div v-if="toolbarExpanded" class="saves-toolbar-search">
-                <input
-                  v-model="saveSearchQuery"
-                  class="saves-search-input"
-                  type="search"
-                  placeholder=" 搜索"
-                  @input="searchSavedContent"
-                />
-                <span v-if="searchingSavedContent" class="saves-search-status"
-                  >搜索中…</span
+              <div v-if="moreMenuOpen" class="saves-more-menu">
+                <button class="saves-menu-item" @click="openSearchFromMenu">
+                  搜索
+                </button>
+                <button class="saves-menu-item" @click="openFiltersFromMenu">
+                  筛选
+                </button>
+                <button
+                  class="saves-menu-item"
+                  @click="runMoreAction(triggerImport)"
                 >
+                  导入文件
+                </button>
+                <button
+                  class="saves-menu-item"
+                  @click="runMoreAction(exportCurrent)"
+                >
+                  导出文件
+                </button>
+                <button
+                  class="saves-menu-item"
+                  @click="runMoreAction(toggleTimeSort)"
+                >
+                  {{ timeSortDescending ? "时间顺序" : "时间倒序" }}
+                </button>
+
+                <button class="saves-menu-item" @click="push_home">
+                  返回首页
+                </button>
+                <button
+                  class="saves-menu-item"
+                  @click="openTrashModal"
+                  title="管理被墓碑标记的已删除文件（保留60天内可恢复）"
+                >
+                  回收站{{ trashList.length ? ` (${trashList.length})` : "" }}
+                </button>
+                <button
+                  class="saves-menu-item"
+                  :disabled="syncingAllGists"
+                  @click="runMoreAction(downloadAllGists)"
+                >
+                  {{ syncingAllGists ? "获取中…" : "下载所有 GIST" }}
+                </button>
+                <button
+                  class="saves-menu-item"
+                  :disabled="backupInProgress"
+                  @click="backupDatabase"
+                >
+                  {{ backupInProgress ? "备份中…" : "导出本地数据" }}
+                </button>
+                <button
+                  class="saves-menu-item"
+                  :disabled="restoreInProgress"
+                  @click.stop="triggerBackupRestore"
+                >
+                  {{ restoreInProgress ? "恢复中…" : "导入备份数据" }}
+                </button>
               </div>
+            </div>
+            <template v-if="!selectMode">
+              <button class="saves-btn" @click="requestUrlContent">URL</button>
+              <button
+                class="saves-btn"
+                :disabled="syncingCodeHub"
+                @click="openSyncModal()"
+              >
+                {{ syncingCodeHub ? "同步中…" : "同步" }}
+                <span
+                  v-if="
+                    syncDiffInfo &&
+                    (syncDiffInfo.localNewCount > 0 ||
+                      syncDiffInfo.remoteNewCount > 0)
+                  "
+                  class="saves-btn-badge"
+                ></span>
+              </button>
             </template>
           </div>
 
-          <div v-if="toolbarExpanded" class="saves-toolbar-filters">
+          <div v-if="searchExpanded" class="saves-toolbar-search">
+            <input
+              v-model="saveSearchQuery"
+              class="saves-search-input"
+              type="search"
+              placeholder="搜索"
+              @input="searchSavedContent"
+            />
+            <span v-if="searchingSavedContent" class="saves-search-status"
+              >搜索中…</span
+            >
+            <button
+              class="saves-search-close"
+              type="button"
+              aria-label="关闭搜索框"
+              title="关闭搜索框"
+              @click="searchExpanded = false"
+            >
+              ×
+            </button>
+          </div>
+
+          <div
+            v-if="selectMode"
+            class="saves-toolbar-actions saves-selection-actions"
+          >
+            <button class="saves-btn" @click="toggleSelectMode">完成</button>
+            <label class="saves-check-all">
+              <input
+                type="checkbox"
+                :checked="allChecked"
+                @change="toggleCheckAll"
+              />
+              全选
+            </label>
+            <button
+              class="saves-btn"
+              :disabled="checkedIds.size === 0"
+              @click="deleteSelected"
+            >
+              删除({{ checkedIds.size }})
+            </button>
+            <button
+              class="saves-btn"
+              :disabled="checkedIds.size === 0"
+              @click="exportSelected"
+            >
+              导出({{ checkedIds.size }})
+            </button>
+          </div>
+
+          <div v-if="filtersExpanded" class="saves-toolbar-filters">
             <span class="saves-filter-label">&nbsp; 筛选：</span>
             <button
               class="saves-filter-btn"
@@ -131,6 +191,15 @@
               @click="toggleTagFilter(tag)"
             >
               {{ tag }}
+            </button>
+            <button
+              class="saves-filter-close"
+              type="button"
+              aria-label="关闭筛选"
+              title="关闭筛选"
+              @click="filtersExpanded = false"
+            >
+              ×
             </button>
           </div>
 
@@ -203,7 +272,11 @@
                         class="saves-item-tag saves-item-tag-cf"
                         title="已同步至云端"
                       >
-                        <img :src="cfsLogo" class="saves-item-cf-icon" alt="Cloud" />
+                        <img
+                          :src="cfsLogo"
+                          class="saves-item-cf-icon"
+                          alt="Cloud"
+                        />
                       </span>
                     </span>
                   </span>
@@ -390,7 +463,11 @@
                             class="saves-item-tag saves-item-tag-cf"
                             title="已同步至云端"
                           >
-                            <img :src="cfsLogo" class="saves-item-cf-icon" alt="Cloud" />
+                            <img
+                              :src="cfsLogo"
+                              class="saves-item-cf-icon"
+                              alt="Cloud"
+                            />
                           </span>
                         </span>
                       </span>
@@ -547,7 +624,7 @@
             </Transition>
           </template>
           <div class="saves-footers">
-            <button
+            <!-- <button
               class="saves-sync-btn saves-trash-btn"
               @click.stop="openTrashModal"
               title="管理被墓碑标记的已删除文件（保留60天内可恢复）"
@@ -570,7 +647,7 @@
               @click.stop="triggerBackupRestore"
             >
               {{ restoreInProgress ? "恢复中…" : "恢复备份" }}
-            </button>
+            </button> -->
           </div>
         </div>
       </div>
@@ -802,7 +879,7 @@
   <!-- 已删除文件管理（回收站）弹窗 -->
   <div
     v-if="trashModalVisible"
-    style="z-index:2000;"
+    style="z-index: 2000"
     class="modal-mask trash-mask"
     @click.self="closeTrashModal"
   >
@@ -810,7 +887,9 @@
       <div class="trash-header">
         <div class="trash-title">
           <span>已删除文件管理</span>
-          <span v-if="trashList.length" class="trash-badge">{{ trashList.length }}</span>
+          <span v-if="trashList.length" class="trash-badge">{{
+            trashList.length
+          }}</span>
         </div>
         <button
           class="trash-close-btn"
@@ -822,7 +901,8 @@
         </button>
       </div>
       <div class="trash-tip">
-        提示：已删除文件在本地与云端暂存保留 60 天。彻底删除将同时永久抹除云端与本地记录。
+        提示：已删除文件在本地与云端暂存保留 60
+        天。彻底删除将同时永久抹除云端与本地记录。
       </div>
 
       <!-- 全局批量操作进度条 -->
@@ -841,12 +921,16 @@
           :key="item.id"
           class="trash-item-row"
           :class="{
-            'is-busy': trashAction.activeId === item.id || trashAction.activeId === 'all'
+            'is-busy':
+              trashAction.activeId === item.id ||
+              trashAction.activeId === 'all',
           }"
         >
           <div class="trash-item-info">
             <div class="trash-item-name-line">
-              <span class="trash-item-name" :title="item.name">{{ item.name }}</span>
+              <span class="trash-item-name" :title="item.name">{{
+                item.name
+              }}</span>
               <!-- 云端备份 Tag -->
               <span
                 v-if="item.inCloud"
@@ -854,14 +938,20 @@
                 title="云端已备份，彻底删除时将同步抹除云端记录"
               >
                 <img :src="cfsLogo" class="trash-tag-icon" alt="Cloud" />
-                
               </span>
               <span v-if="item.isGist" class="trash-tag gist">Gist</span>
-              <span v-else-if="item.language" class="trash-tag lang">{{ item.language }}</span>
+              <span v-else-if="item.language" class="trash-tag lang">{{
+                item.language
+              }}</span>
             </div>
             <div class="trash-item-meta-line">
-              <span class="trash-time">{{ formatTrashDate(item.deletedAt) }} 删除</span>
-              <span class="trash-countdown" :class="{ 'near-expired': item.remainingDays <= 7 }">
+              <span class="trash-time"
+                >{{ formatTrashDate(item.deletedAt) }} 删除</span
+              >
+              <span
+                class="trash-countdown"
+                :class="{ 'near-expired': item.remainingDays <= 7 }"
+              >
                 余 {{ item.remainingDays }} 天
               </span>
             </div>
@@ -872,7 +962,9 @@
               :class="trashAction.type"
             >
               <span class="trash-inline-spinner"></span>
-              <span class="trash-progress-text">{{ trashAction.stepText }}</span>
+              <span class="trash-progress-text">{{
+                trashAction.stepText
+              }}</span>
             </div>
           </div>
           <div class="trash-item-actions">
@@ -883,10 +975,18 @@
               title="恢复文件"
             >
               <span
-                v-if="trashAction.activeId === item.id && trashAction.type === 'restore'"
+                v-if="
+                  trashAction.activeId === item.id &&
+                  trashAction.type === 'restore'
+                "
                 class="trash-inline-spinner"
               ></span>
-              {{ trashAction.activeId === item.id && trashAction.type === "restore" ? "恢复中…" : "恢复" }}
+              {{
+                trashAction.activeId === item.id &&
+                trashAction.type === "restore"
+                  ? "恢复中…"
+                  : "恢复"
+              }}
             </button>
             <button
               class="trash-btn trash-btn-delete"
@@ -895,10 +995,18 @@
               title="彻底删除（先清除云端再删除本地）"
             >
               <span
-                v-if="trashAction.activeId === item.id && trashAction.type === 'delete'"
+                v-if="
+                  trashAction.activeId === item.id &&
+                  trashAction.type === 'delete'
+                "
                 class="trash-inline-spinner"
               ></span>
-              {{ trashAction.activeId === item.id && trashAction.type === "delete" ? "删除中…" : "彻底删除" }}
+              {{
+                trashAction.activeId === item.id &&
+                trashAction.type === "delete"
+                  ? "删除中…"
+                  : "彻底删除"
+              }}
             </button>
           </div>
         </div>
@@ -912,10 +1020,16 @@
           @click="handleRestoreAllTrash"
         >
           <span
-            v-if="trashAction.activeId === 'all' && trashAction.type === 'restore'"
+            v-if="
+              trashAction.activeId === 'all' && trashAction.type === 'restore'
+            "
             class="trash-inline-spinner"
           ></span>
-          {{ trashAction.activeId === "all" && trashAction.type === "restore" ? trashAction.stepText : "全部恢复" }}
+          {{
+            trashAction.activeId === "all" && trashAction.type === "restore"
+              ? trashAction.stepText
+              : "全部恢复"
+          }}
         </button>
         <button
           v-if="trashList.length"
@@ -924,10 +1038,16 @@
           @click="handleClearAllTrash"
         >
           <span
-            v-if="trashAction.activeId === 'all' && trashAction.type === 'delete'"
+            v-if="
+              trashAction.activeId === 'all' && trashAction.type === 'delete'
+            "
             class="trash-inline-spinner"
           ></span>
-          {{ trashAction.activeId === "all" && trashAction.type === "delete" ? trashAction.stepText : "全部清空" }}
+          {{
+            trashAction.activeId === "all" && trashAction.type === "delete"
+              ? trashAction.stepText
+              : "全部清空"
+          }}
         </button>
         <button
           class="modal-btn"
@@ -946,11 +1066,22 @@
     class="modal-mask sync-mask"
     @click.self="closeSyncModal"
   >
-    <div class="modal-box sync-box" @click.stop>
+    <div
+      ref="syncBoxRef"
+      class="modal-box sync-box"
+      :style="syncBoxHeight ? { height: `${syncBoxHeight}px` } : undefined"
+      @click.stop
+    >
       <div class="sync-header">
         <div class="sync-title-line">
           <span class="sync-title">{{ syncModalState.title }}</span>
-          <span v-if="syncModalState.phase !== 'checking' && syncModalState.phase !== 'empty'" class="sync-count-tag">
+          <span
+            v-if="
+              syncModalState.phase !== 'checking' &&
+              syncModalState.phase !== 'empty'
+            "
+            class="sync-count-tag"
+          >
             {{ syncModalState.activeItems.length }} 项
           </span>
         </div>
@@ -998,16 +1129,26 @@
 
       <div class="sync-body">
         <!-- 检查中骨架/懒加载 -->
-        <div v-if="syncModalState.phase === 'checking'" class="sync-loading-box">
+        <div
+          v-if="syncModalState.phase === 'checking'"
+          class="sync-loading-box"
+        >
           <span class="sync-spinner large"></span>
           <span class="sync-loading-text">正在检查云端与本地差异…</span>
         </div>
 
         <!-- 无变动空状态 -->
-        <div v-else-if="syncModalState.phase === 'empty'" class="sync-empty-box">
+        <div
+          v-else-if="syncModalState.phase === 'empty'"
+          class="sync-empty-box"
+        >
           <div class="sync-empty-icon">✓</div>
           <div class="sync-empty-text">
-            {{ syncModalState.tab === 'upload' ? '云端已是最新，无变更需上传' : '本地已是最新，无文件需下载' }}
+            {{
+              syncModalState.tab === "upload"
+                ? "云端已是最新，无变更需上传"
+                : "本地已是最新，无文件需下载"
+            }}
           </div>
         </div>
 
@@ -1015,16 +1156,20 @@
         <template v-else>
           <div class="sync-tip">
             <span v-if="syncModalState.phase === 'confirm'">
-              请确认以下需要{{ syncModalState.tab === 'upload' ? '上传同步到云端' : '从云端下载到本地' }}的项目：
+              请确认以下需要{{
+                syncModalState.tab === "upload"
+                  ? "上传同步到云端"
+                  : "从云端下载到本地"
+              }}的项目：
             </span>
             <span v-else-if="syncModalState.phase === 'syncing'">
               正在同步中，请勿关闭页面…
             </span>
-            <span v-else-if="syncModalState.error" style="color: #dc3545;">
+            <span v-else-if="syncModalState.error" style="color: #dc3545">
               ✗ {{ syncModalState.error }}
             </span>
             <span v-else class="sync-tip-success">
-              ✓ {{ syncModalState.summary || '同步已完成' }}
+              ✓ {{ syncModalState.summary || "同步已完成" }}
             </span>
           </div>
 
@@ -1037,25 +1182,47 @@
             >
               <div class="sync-item-info">
                 <div class="sync-item-top">
-                  <span class="sync-item-name" :title="item.name">{{ item.name }}</span>
-                  <span class="sync-item-type-badge" :class="item.type">{{ item.type }}</span>
+                  <span class="sync-item-name" :title="item.name">{{
+                    item.name
+                  }}</span>
+                  <span class="sync-item-type-badge" :class="item.type">{{
+                    item.type
+                  }}</span>
                 </div>
-                <div class="sync-item-reason" :title="item.reason">{{ item.reason }}</div>
+                <div class="sync-item-reason" :title="item.reason">
+                  {{ item.reason }}
+                </div>
               </div>
               <div class="sync-item-status">
-                <span v-if="item.status === 'pending'" class="status-badge pending">
-                  {{ syncModalState.tab === 'upload' ? '待上传' : '待下载' }}
+                <span
+                  v-if="item.status === 'pending'"
+                  class="status-badge pending"
+                >
+                  {{ syncModalState.tab === "upload" ? "待上传" : "待下载" }}
                 </span>
-                <span v-else-if="item.status === 'uploading'" class="status-badge progress">
+                <span
+                  v-else-if="item.status === 'uploading'"
+                  class="status-badge progress"
+                >
                   <span class="sync-spinner"></span> 上传中...
                 </span>
-                <span v-else-if="item.status === 'downloading'" class="status-badge progress">
+                <span
+                  v-else-if="item.status === 'downloading'"
+                  class="status-badge progress"
+                >
                   <span class="sync-spinner"></span> 下载中...
                 </span>
-                <span v-else-if="item.status === 'success'" class="status-badge success">
+                <span
+                  v-else-if="item.status === 'success'"
+                  class="status-badge success"
+                >
                   ✓ 成功
                 </span>
-                <span v-else-if="item.status === 'error'" class="status-badge error" :title="item.error">
+                <span
+                  v-else-if="item.status === 'error'"
+                  class="status-badge error"
+                  :title="item.error"
+                >
                   ✗ 失败
                 </span>
               </div>
@@ -1073,17 +1240,14 @@
         </template>
         <template v-else-if="syncModalState.phase === 'empty'">
           <button class="sync-btn cancel" @click="closeSyncModal">关闭</button>
-          <button
-            class="sync-btn confirm"
-            @click="openSyncModal()"
-          >
+          <button class="sync-btn confirm" @click="openSyncModal()">
             重新检查
           </button>
         </template>
         <template v-else-if="syncModalState.phase === 'confirm'">
           <button class="sync-btn cancel" @click="closeSyncModal">取消</button>
           <button class="sync-btn confirm" @click="executeSyncModal">
-            确认{{ syncModalState.tab === 'upload' ? '上传' : '下载' }}
+            确认{{ syncModalState.tab === "upload" ? "上传" : "下载" }}
           </button>
         </template>
         <template v-else-if="syncModalState.phase === 'syncing'">
@@ -1180,20 +1344,32 @@ const checkRemoteSync = async (silent = false) => {
             duration: 3500,
           });
         } else if (diff.remoteNewCount > 0) {
-          const names = diff.downloadItems?.map((it) => it.name || it.id).slice(0, 3).join(", ");
+          const names = diff.downloadItems
+            ?.map((it) => it.name || it.id)
+            .slice(0, 3)
+            .join(", ");
           showToast({
             message: `云端检测到 ${diff.remoteNewCount} 个更新${names ? `（${names}${diff.downloadItems.length > 3 ? " 等" : ""}）` : ""}，点击“同步”可下载`,
             duration: 3500,
           });
         } else if (diff.localNewCount > 0) {
           if (diff.uploadItems && diff.uploadItems.length > 0) {
-            const names = diff.uploadItems.map((it) => it.name || it.id).slice(0, 3).join(", ");
+            const names = diff.uploadItems
+              .map((it) => it.name || it.id)
+              .slice(0, 3)
+              .join(", ");
             showToast({
               message: `本地有 ${diff.localNewCount} 个待同步更新（${names}${diff.uploadItems.length > 3 ? " 等" : ""}），点击“同步”可上传`,
               duration: 3500,
             });
-          } else if (diff.trashPendingUploadItems && diff.trashPendingUploadItems.length > 0) {
-            const trashNames = diff.trashPendingUploadItems.map((it) => it.name || it.id).slice(0, 3).join(", ");
+          } else if (
+            diff.trashPendingUploadItems &&
+            diff.trashPendingUploadItems.length > 0
+          ) {
+            const trashNames = diff.trashPendingUploadItems
+              .map((it) => it.name || it.id)
+              .slice(0, 3)
+              .join(", ");
             showToast({
               message: `本地有 ${diff.trashPendingUploadItems.length} 个回收站暂存待备份（${trashNames}），点击“同步”可上传`,
               duration: 3500,
@@ -1242,9 +1418,9 @@ const loadTrashList = async () => {
         trashList.value = trashList.value.map((item) => {
           const inCloud = Boolean(
             item.inCloud ||
-              keys[metaKey(item.id)] ||
-              keys[contentKey(item.id)] ||
-              tombstones[item.id]
+            keys[metaKey(item.id)] ||
+            keys[contentKey(item.id)] ||
+            tombstones[item.id],
           );
           return { ...item, inCloud };
         });
@@ -1275,7 +1451,9 @@ const formatTrashDate = (timestamp) => {
 const handleRestoreTrashItem = async (item) => {
   if (!item?.id || trashAction.value.activeId) return;
 
-  const confirmed = await askConfirm(`确定要恢复文件 "${item.name || item.id}" 吗？`);
+  const confirmed = await askConfirm(
+    `确定要恢复文件 "${item.name || item.id}" 吗？`,
+  );
   if (!confirmed) return;
 
   trashAction.value = {
@@ -1313,7 +1491,9 @@ const handleRestoreAllTrash = async () => {
   const total = trashList.value.length;
   if (!total || trashAction.value.activeId) return;
 
-  const confirmed = await askConfirm(`确定要恢复回收站中的全部 ${total} 个文件吗？`);
+  const confirmed = await askConfirm(
+    `确定要恢复回收站中的全部 ${total} 个文件吗？`,
+  );
   if (!confirmed) return;
 
   trashAction.value = {
@@ -1354,7 +1534,7 @@ const handlePermanentDeleteTrashItem = async (item) => {
   if (!item?.id || trashAction.value.activeId) return;
 
   const confirmed = await askConfirm(
-    `确定彻底删除 "${item.name || item.id}" 吗？\n该操作不可撤销，将永久删除${item.inCloud ? "云端与本地" : "本地"}记录与备份。`
+    `确定彻底删除 "${item.name || item.id}" 吗？\n该操作不可撤销，将永久删除${item.inCloud ? "云端与本地" : "本地"}记录与备份。`,
   );
   if (!confirmed) return;
 
@@ -1383,7 +1563,10 @@ const handlePermanentDeleteTrashItem = async (item) => {
         });
         trashAction.value.stepText = "云端删除完毕，正在清理本地数据...";
       } catch (cloudErr) {
-        showToast(`云端删除失败: ${cloudErr?.message || cloudErr}，已终止操作以保护数据`, 4000);
+        showToast(
+          `云端删除失败: ${cloudErr?.message || cloudErr}，已终止操作以保护数据`,
+          4000,
+        );
         trashAction.value = { activeId: null, type: "", stepText: "" };
         return; // 云端未彻底删除前，不删除本地数据
       }
@@ -1398,7 +1581,7 @@ const handlePermanentDeleteTrashItem = async (item) => {
     showToast(
       hasCloudConfig
         ? `"${item.name || item.id}" 已彻底删除（云端与本地已同步清理）`
-        : `"${item.name || item.id}" 本地已彻底删除`
+        : `"${item.name || item.id}" 本地已彻底删除`,
     );
     await loadTrashList();
     await loadSaves();
@@ -1415,7 +1598,7 @@ const handleClearAllTrash = async () => {
 
   const hasCloudItem = trashList.value.some((it) => it.inCloud);
   const confirmed = await askConfirm(
-    `确定要彻底清空回收站中的全部 ${total} 个文件吗？\n将永久抹除所有文件${hasCloudItem ? "及其云端备份" : ""}，此操作不可撤销！`
+    `确定要彻底清空回收站中的全部 ${total} 个文件吗？\n将永久抹除所有文件${hasCloudItem ? "及其云端备份" : ""}，此操作不可撤销！`,
   );
   if (!confirmed) return;
 
@@ -1445,7 +1628,10 @@ const handleClearAllTrash = async () => {
           },
         });
       } catch (cloudErr) {
-        showToast(`云端清空失败: ${cloudErr?.message || cloudErr}，已终止操作`, 4000);
+        showToast(
+          `云端清空失败: ${cloudErr?.message || cloudErr}，已终止操作`,
+          4000,
+        );
         trashAction.value = { activeId: null, type: "", stepText: "" };
         return;
       }
@@ -1461,7 +1647,7 @@ const handleClearAllTrash = async () => {
     showToast(
       hasCloudConfig
         ? `已彻底清空回收站（云端与本地已同步抹除）`
-        : `本地回收站已彻底清空`
+        : `本地回收站已彻底清空`,
     );
     await loadTrashList();
     await loadSaves();
@@ -1478,7 +1664,7 @@ const syncModalState = ref({
   visible: false,
   tab: "upload", // 'upload' | 'download'
   phase: "confirm", // 'checking' | 'confirm' | 'empty' | 'syncing' | 'done'
-  title: "CodeHub 云端同步",
+  title: "CodeHub CF 云同步",
   diff: null,
   uploadItems: [],
   downloadItems: [],
@@ -1486,6 +1672,43 @@ const syncModalState = ref({
   summary: "",
   error: null,
 });
+const syncBoxRef = ref(null);
+const syncBoxHeight = ref(null);
+let syncBoxHeightTimer = null;
+
+const animateSyncBoxHeight = async () => {
+  await nextTick();
+  const element = syncBoxRef.value;
+  if (!element) return;
+
+  const currentHeight = element.getBoundingClientRect().height;
+  const styles = getComputedStyle(element);
+  const verticalPadding =
+    parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+  const currentContentHeight = Math.max(currentHeight - verticalPadding, 0);
+  const targetHeight = element.scrollHeight - verticalPadding;
+
+  syncBoxHeight.value = currentContentHeight;
+  requestAnimationFrame(() => {
+    syncBoxHeight.value = Math.max(targetHeight, 0);
+  });
+
+  clearTimeout(syncBoxHeightTimer);
+  syncBoxHeightTimer = setTimeout(() => {
+    syncBoxHeight.value = null;
+  }, 300);
+};
+
+watch(
+  () => [
+    syncModalState.value.visible,
+    syncModalState.value.phase,
+    syncModalState.value.tab,
+    syncModalState.value.activeItems.length,
+  ],
+  animateSyncBoxHeight,
+  { flush: "post" },
+);
 
 const closeSyncModal = () => {
   if (syncModalState.value.phase === "syncing") return;
@@ -1501,7 +1724,9 @@ const switchSyncTab = (tab) => {
 
 const updateSyncModalActiveItems = () => {
   const isUpload = syncModalState.value.tab === "upload";
-  const items = isUpload ? syncModalState.value.uploadItems : syncModalState.value.downloadItems;
+  const items = isUpload
+    ? syncModalState.value.uploadItems
+    : syncModalState.value.downloadItems;
   syncModalState.value.activeItems = items;
   if (syncModalState.value.phase !== "syncing") {
     syncModalState.value.phase = items.length === 0 ? "empty" : "confirm";
@@ -1518,9 +1743,10 @@ const openSyncModal = async (defaultTab) => {
     });
     return;
   }
-  console.log("======1")
+
   // 计算默认优先展示的标签页：优先展示有待处理项的一侧
-  let initialTab = defaultTab;  console.log("======2")
+  let initialTab = defaultTab;
+
   if (!initialTab) {
     if (syncDiffInfo.value) {
       if (syncDiffInfo.value.remoteNewCount > 0) {
@@ -1532,12 +1758,12 @@ const openSyncModal = async (defaultTab) => {
       initialTab = "upload";
     }
   }
-console.log("======3")
+
   syncModalState.value = {
     visible: true,
     tab: initialTab,
     phase: "checking",
-    title: "CodeHub 云端同步",
+    title: "CodeHub CF 云同步",
     diff: null,
     uploadItems: [],
     downloadItems: [],
@@ -1547,16 +1773,20 @@ console.log("======3")
   };
 
   syncingCodeHub.value = true;
-  try { console.log("======4")
+  try {
     // 添加超时保护，防止 checkCodeHubSyncDiff 内部 fetch 无限挂起
     const diff = await Promise.race([
       checkCodeHubSyncDiff(),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("检查云端差异超时，请检查网络连接和 Worker 地址")), 20000)
+        setTimeout(
+          () =>
+            reject(new Error("检查云端差异超时，请检查网络连接和 Worker 地址")),
+          20000,
+        ),
       ),
     ]);
     if (!syncModalState.value.visible) return;
-console.log("======5")
+
     if (!diff) {
       syncModalState.value.phase = "done";
       syncModalState.value.error = "检查云端数据失败，请检查网络与配置";
@@ -1572,7 +1802,7 @@ console.log("======5")
     const hasGistUpload = Boolean(diff.gistListUploadNeeded);
     const hasGistDownload = Boolean(diff.gistListDownloadNeeded);
     const hasTombstone = Boolean(diff.tombstoneChanged);
-console.log("======6")
+
     const formattedUploadItems = [
       ...uploadItems.map((it) => ({
         id: it.id,
@@ -1602,7 +1832,10 @@ console.log("======6")
             },
           ]
         : []),
-      ...(hasTombstone && uploadItems.length === 0 && trashItems.length === 0 && !hasGistUpload
+      ...(hasTombstone &&
+      uploadItems.length === 0 &&
+      trashItems.length === 0 &&
+      !hasGistUpload
         ? [
             {
               id: "__tombstones__",
@@ -1653,15 +1886,14 @@ console.log("======6")
             ? "upload"
             : syncModalState.value.tab;
     }
-  console.log("======7")
-    updateSyncModalActiveItems();console.log("======8")
+
+    updateSyncModalActiveItems();
   } catch (error) {
     if (syncModalState.value.visible) {
       syncModalState.value.phase = "done";
       syncModalState.value.error = error.message || "检查云同步差异失败";
     }
   } finally {
-    console.log("======9")
     syncingCodeHub.value = false;
   }
 };
@@ -1714,7 +1946,8 @@ const executeSyncModal = async () => {
       if (res.uploaded > 0) parts.push(`上传 ${res.uploaded} 个项目`);
       if (res.deleted > 0) parts.push(`删除 ${res.deleted} 个云端废弃文件`);
       if (res.failed > 0) parts.push(`${res.failed} 个文件项目失败`);
-      if (res.failedDeleted > 0) parts.push(`${res.failedDeleted} 个云端文件删除失败`);
+      if (res.failedDeleted > 0)
+        parts.push(`${res.failedDeleted} 个云端文件删除失败`);
       if (parts.length === 0 && res.indexChanged) {
         parts.push("已同步索引与墓碑记录");
       }
@@ -1905,12 +2138,12 @@ function getViewportSize() {
   const vw = Math.min(
     window.innerWidth || 0,
     document.documentElement.clientWidth || window.innerWidth || 0,
-    vv ? vv.width : window.innerWidth
+    vv ? vv.width : window.innerWidth,
   );
   const vh = Math.min(
     window.innerHeight || 0,
     document.documentElement.clientHeight || window.innerHeight || 0,
-    vv ? vv.height : window.innerHeight
+    vv ? vv.height : window.innerHeight,
   );
   return {
     vw: vw > 0 ? vw : window.innerWidth,
@@ -1933,11 +2166,18 @@ function adjustPopupForKeyboard() {
   }
 
   // 纠正 prompt 弹窗避免被键盘遮挡
-  if (promptState.value.visible && promptDialogRef.value && promptState.value.position) {
+  if (
+    promptState.value.visible &&
+    promptDialogRef.value &&
+    promptState.value.position
+  ) {
     const rect = promptDialogRef.value.getBoundingClientRect();
     let currentY = promptState.value.position.y;
     if (currentY + rect.height > currentVh - margin) {
-      const newY = Math.max(margin, Math.round(currentVh - rect.height - margin));
+      const newY = Math.max(
+        margin,
+        Math.round(currentVh - rect.height - margin),
+      );
       if (newY !== currentY) {
         promptState.value.position = {
           ...promptState.value.position,
@@ -1948,11 +2188,18 @@ function adjustPopupForKeyboard() {
   }
 
   // 纠正 confirm 弹窗避免被键盘遮挡
-  if (confirmState.value.visible && confirmDialogRef.value && confirmState.value.position) {
+  if (
+    confirmState.value.visible &&
+    confirmDialogRef.value &&
+    confirmState.value.position
+  ) {
     const rect = confirmDialogRef.value.getBoundingClientRect();
     let currentY = confirmState.value.position.y;
     if (currentY + rect.height > currentVh - margin) {
-      const newY = Math.max(margin, Math.round(currentVh - rect.height - margin));
+      const newY = Math.max(
+        margin,
+        Math.round(currentVh - rect.height - margin),
+      );
       if (newY !== currentY) {
         confirmState.value.position = {
           ...confirmState.value.position,
@@ -2093,7 +2340,10 @@ watch(
             targetY = margin;
           }
 
-          confirmState.value.position = { x: Math.round(targetX), y: Math.round(targetY) };
+          confirmState.value.position = {
+            x: Math.round(targetX),
+            y: Math.round(targetY),
+          };
         }
       });
     }
@@ -2246,7 +2496,10 @@ const recordClickPosition = (e) => {
 
 function askConfirm(title, inputValue) {
   return new Promise((resolve) => {
-    const position = calcPopupPosition(340, inputValue !== undefined ? 170 : 120);
+    const position = calcPopupPosition(
+      340,
+      inputValue !== undefined ? 170 : 120,
+    );
     confirmState.value = {
       visible: true,
       title,
@@ -2276,7 +2529,8 @@ const toStoredValue = (value) =>
 const sanitizeGistForStorage = (gist) => {
   if (!gist || typeof gist !== "object") return null;
   const rawGist = toStoredValue(gist);
-  const gistHash = rawGist.gistHash || (rawGist.id ? computeGistHash(rawGist.id) : "");
+  const gistHash =
+    rawGist.gistHash || (rawGist.id ? computeGistHash(rawGist.id) : "");
   // 移除真实的 gist.id，改用安全的单向散列 gistHash
   const { id, ...rest } = rawGist;
   return {
@@ -2349,7 +2603,9 @@ const sortedSavedItems = computed(() =>
     ),
 );
 const showSaves = ref(false);
-const toolbarExpanded = ref(false);
+const moreMenuOpen = ref(false);
+const searchExpanded = ref(false);
+const filtersExpanded = ref(false);
 const loadingItemId = ref(null);
 const refreshingUrlItemId = ref(null);
 const selectMode = ref(false);
@@ -2489,10 +2745,22 @@ const toggleSelectMode = () => {
 };
 
 const toggleToolbar = () => {
-  toolbarExpanded.value = !toolbarExpanded.value;
-  if (!toolbarExpanded.value && selectMode.value) {
-    toggleSelectMode();
-  }
+  moreMenuOpen.value = !moreMenuOpen.value;
+};
+
+const runMoreAction = async (action) => {
+  moreMenuOpen.value = false;
+  await action();
+};
+
+const openSearchFromMenu = () => {
+  moreMenuOpen.value = false;
+  searchExpanded.value = true;
+};
+
+const openFiltersFromMenu = () => {
+  moreMenuOpen.value = false;
+  filtersExpanded.value = true;
 };
 
 const toggleTimeSort = () => {
@@ -2608,8 +2876,16 @@ const hydrateGistDetails = async (items) => {
             ...item.gist,
             id: matchedGist.id,
             htmlUrl: item.gist.htmlUrl || matchedGist.html_url || "",
-            description: item.gist.description || matchedGist.description || matchedGist.desc || "",
-            user: item.gist.user || matchedGist.user || matchedGist.owner?.login || "",
+            description:
+              item.gist.description ||
+              matchedGist.description ||
+              matchedGist.desc ||
+              "",
+            user:
+              item.gist.user ||
+              matchedGist.user ||
+              matchedGist.owner?.login ||
+              "",
           },
         };
       }
@@ -2754,7 +3030,9 @@ const persistIndex = async () => {
   // 获取当前已有索引中的分项同步状态，避免保存时丢失状态
   const existingRawIndex = await idbStorage.getItem(SAVES_INDEX_KEY);
   const existingParsed = parseSavesIndex(existingRawIndex);
-  const existingSyncMap = new Map(existingParsed.items.map((it) => [it.id, it]));
+  const existingSyncMap = new Map(
+    existingParsed.items.map((it) => [it.id, it]),
+  );
 
   const seenIds = new Set();
   const dedupedItems = [];
@@ -2775,8 +3053,12 @@ const persistIndex = async () => {
         name: item.name || "",
         updatedAt: item.updatedAt || Date.now(),
         ...(item.gist ? { isGist: true } : {}),
-        ...(item.cf_meta === true || existing?.cf_meta === true ? { cf_meta: true } : {}),
-        ...(item.cf_content === true || existing?.cf_content === true ? { cf_content: true } : {}),
+        ...(item.cf_meta === true || existing?.cf_meta === true
+          ? { cf_meta: true }
+          : {}),
+        ...(item.cf_content === true || existing?.cf_content === true
+          ? { cf_content: true }
+          : {}),
       };
     }),
   };
@@ -3181,6 +3463,11 @@ const downloadAllGists = async () => {
     return;
   }
 
+  const ok = await askConfirm(
+    "确定要下载所有 GIST 吗？这会覆盖所有本地 GIST 文件",
+  );
+  if (!ok) return;
+
   syncingAllGists.value = true;
   try {
     const gists = [];
@@ -3412,11 +3699,7 @@ const deleteSelected = async () => {
     return;
   }
   try {
-    await Promise.all(
-      ids.map((id) =>
-        markCodeHubItemsDeleted([id]),
-      ),
-    );
+    await Promise.all(ids.map((id) => markCodeHubItemsDeleted([id])));
   } catch (error) {
     console.error("删除内容失败", error);
   }
@@ -3881,6 +4164,9 @@ const downloadBlob = (filename, blob) => {
 
 const backupDatabase = async () => {
   if (backupInProgress.value) return;
+  const ok = await askConfirm("确定要导出本地数据库数据吗？");
+  if (!ok) return;
+
   backupInProgress.value = true;
   try {
     await flushCurrentSave();
@@ -4037,7 +4323,7 @@ const dedupeFilename = (name, usedNames) => {
   return candidate;
 };
 
-const exportCurrent = () => {
+const exportCurrent = async () => {
   const content = cmStore.CmCode || "";
   if (!content) {
     showToast("当前内容为空，无需导出");
@@ -4050,6 +4336,9 @@ const exportCurrent = () => {
   const finalName = buildExportFilename(
     cmStore.currentFileName || fallbackName,
   );
+  const ok = await askConfirm(`确定导出文件 "${finalName}" 吗？`);
+  if (!ok) return;
+
   downloadTextFile(finalName, content);
   showToast("已导出");
 };
@@ -4063,6 +4352,15 @@ const exportSelected = async () => {
   const items = savedItems.value.filter((item) =>
     checkedIds.value.has(item.id),
   );
+
+  if (items.length === 0) return;
+
+  const ok = await askConfirm(
+    items.length === 1
+      ? `确定导出 "${items[0].name}" 吗？`
+      : `确定导出选中的 ${items.length} 项吗？`,
+  );
+  if (!ok) return;
 
   if (items.length === 1) {
     const item = items[0];
@@ -4908,6 +5206,8 @@ onBeforeUnmount(() => {
 }
 
 .saves-toolbar {
+  position: relative;
+  z-index: 1000;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -4916,8 +5216,74 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.saves-toolbar-primary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.saves-more-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.saves-more-wrap > .saves-btn {
+  width: 100%;
+  flex: none;
+}
+
+.saves-more-menu {
+  position: absolute;
+  z-index: 9999;
+  top: calc(100% + 7px);
+  left: -26px;
+  width: 120px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid rgba(128, 128, 128, 0.12);
+  border-radius: 23px;
+  background: rgba(248, 249, 252, 0.78);
+  box-shadow: 0 10px 24px rgba(30, 35, 55, 0.16);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .saves-more-menu {
+    background: rgba(37, 41, 56, 0.05);
+    border-color: rgba(220, 225, 240, 0.06);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  }
+}
+
+.saves-menu-item {
+  min-height: 30px;
+  padding: 9px 4px;
+  border: 0;
+  border-radius: 23px;
+  background: transparent;
+  color: var(--text);
+  text-align: center;
+  font-size: 12px;
+  cursor: pointer;
+  background: #8f98c606;
+}
+
+.saves-menu-item:hover {
+  background: #8f98c61c;
+}
+
+.saves-menu-item:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .saves-body {
-  overflow: hidden;
+  overflow: visible;
   border-radius: 20px;
   display: flex;
   flex-direction: column;
@@ -4968,13 +5334,35 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 
+.saves-selection-actions {
+  align-items: center;
+  gap: 6px;
+  flex: 1 0 100%;
+  width: 100%;
+  margin-top: 0;
+}
+
 .saves-toolbar-search {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 4 1 0;
+  flex: 1 0 100%;
   min-width: 0;
   position: relative;
+}
+
+.saves-search-close {
+  flex: 0 0 23px;
+  width: 23px;
+  height: 23px;
+  padding: 0px 0px 1px;
+  border: 0;
+  border-radius: 24px;
+  background: #8f98c61a;
+  color: var(--text);
+  font-size: 20px;
+  line-height: 22px;
+  cursor: pointer;
 }
 
 .saves-toolbar-filters {
@@ -5020,11 +5408,26 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.saves-filter-close {
+  margin-left: auto;
+  flex: 0 0 23px;
+  width: 23px;
+  height: 23px;
+  padding: 0px 0px 1px;
+  border: 0;
+  border-radius: 24px;
+  background: #8f98c61a;
+  color: var(--text);
+  font-size: 20px;
+  line-height: 22px;
+  cursor: pointer;
+}
+
 .saves-filter-btn,
 .saves-item-tags {
   border: 0;
   border-radius: 10px;
-  background: #8f98c61a;
+  background: transparent;
   color: var(--text);
   font-size: 9px;
   line-height: 1;
@@ -5079,7 +5482,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 1px 4px  2px 4px  ;
+  padding: 1px 4px 2px 4px;
   background: rgba(255, 153, 17, 0.15);
   vertical-align: middle;
   line-height: 1;
@@ -5120,8 +5523,17 @@ onBeforeUnmount(() => {
 .saves-check-all {
   display: flex;
   align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 29px;
+  padding: 5px 8px;
+  border-radius: 14px;
+  background: #8f98c60b;
   font-size: 13px;
   opacity: 0.8;
+  white-space: nowrap;
 }
 
 .saves-list {
@@ -5633,13 +6045,11 @@ onBeforeUnmount(() => {
   border: 0;
   background: rgba(92, 125, 190, 0.12);
   color: inherit;
-  
 }
 
 .modal-btn-primary {
   border-color: #5c7dbe;
   color: #5c7dbe;
-  
 }
 
 /* ===== 可拖拽控制台面板 ===== */
@@ -5965,6 +6375,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-left: 8px;
   font-size: 16px;
   font-weight: 600;
 }
@@ -6008,9 +6419,10 @@ onBeforeUnmount(() => {
   opacity: 0.72;
   line-height: 1.45;
   margin-bottom: 10px;
-  padding: 6px 10px;
+
+  padding: 6px 9px 10px 7px;
   border-radius: 23px;
-  background: rgba(128, 128, 128, 0.06);
+  background: transparent;
   border: 0.5px solid rgba(128, 128, 128, 0.05);
 }
 
@@ -6063,7 +6475,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 14px;
-  border-radius: 23px;
+  border-radius: 25px;
   background: rgba(128, 128, 128, 0.05);
   border: 0.5px solid rgba(128, 128, 128, 0.14);
   transition: all 0.2s ease;
@@ -6083,7 +6495,7 @@ onBeforeUnmount(() => {
 .trash-item-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 7px;
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -6220,7 +6632,7 @@ onBeforeUnmount(() => {
   .trash-item-actions {
     flex-direction: column;
     align-items: stretch;
-    gap: 5px;
+    gap: 7px;
   }
 
   .trash-item-actions .trash-btn {
@@ -6313,6 +6725,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   padding: 18px 20px;
+  transition: height 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .sync-header {
@@ -6389,7 +6802,9 @@ onBeforeUnmount(() => {
   background: var(--sync-tab-active-bg, rgba(79, 142, 234, 0.16));
   color: var(--sync-tab-active-color, #3d78c5);
   opacity: 1;
-  box-shadow: inset 0 0 0 1px rgba(79, 142, 234, 0.05), 0 1px 3px rgba(30, 80, 140, 0.08);
+  box-shadow:
+    inset 0 0 0 1px rgba(79, 142, 234, 0.05),
+    0 1px 3px rgba(30, 80, 140, 0.08);
   font-weight: 600;
 }
 
@@ -6417,7 +6832,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin:0 -4px 0 2px;
+  margin: 0 -4px 0 2px;
   min-height: 0;
   flex: 1 1 auto;
 }
@@ -6496,7 +6911,7 @@ onBeforeUnmount(() => {
 .sync-item-type-badge {
   font-size: 10px;
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: 16px;
   background: rgba(128, 128, 128, 0.15);
   flex-shrink: 0;
 }
@@ -6542,7 +6957,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 5px;
   font-size: 11px;
-  padding: 3px 8px;
+  padding: 5px 7px;
   border-radius: 16px;
   font-weight: 500;
 }
@@ -6571,9 +6986,15 @@ onBeforeUnmount(() => {
 }
 
 @keyframes pulseProgress {
-  0% { opacity: 0.8; }
-  50% { opacity: 1; }
-  100% { opacity: 0.8; }
+  0% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.8;
+  }
 }
 
 .sync-spinner {
@@ -6592,8 +7013,12 @@ onBeforeUnmount(() => {
 }
 
 @keyframes syncSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .sync-footer {
