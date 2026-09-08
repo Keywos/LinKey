@@ -24,12 +24,16 @@
       />
       <van-field
         v-model="codeHubSyncKey"
-        
         label="加密密钥"
         placeholder="本地端到端加解密密钥"
         clearable
       />
-      <van-cell title="保存配置" is-link @click="saveCodeHubSyncConfig" />
+      <van-cell
+        title="测试连接并保存"
+        is-link
+        :value="savingSync ? '验证中…' : ''"
+        @click="saveCodeHubSyncConfig"
+      />
     </van-cell-group>
     <div style="padding: 0 22px; opacity: 0.6; font-size: 12px">
       <p>
@@ -329,6 +333,7 @@ import {
   CODEHUB_SYNC_KEY_KEY,
   CODEHUB_SYNC_TOKEN_KEY,
   CODEHUB_SYNC_URL_KEY,
+  testCodeHubSyncConfig,
 } from "@/storage/codehubSync.js";
 // import { defaultHomeCards, getHomeCards, saveHomeCards } from "@/homeCards.js";
 import AddShortcut from "@/AddShortcut.vue";
@@ -345,15 +350,66 @@ const codeHubSyncToken = ref(
   localStorage.getItem(CODEHUB_SYNC_TOKEN_KEY) || "",
 );
 const codeHubSyncKey = ref(localStorage.getItem(CODEHUB_SYNC_KEY_KEY) || "");
-const saveCodeHubSyncConfig = () => {
-  localStorage.setItem(
-    CODEHUB_SYNC_URL_KEY,
-    codeHubSyncUrl.value.trim().replace(/\/$/, ""),
-  );
-  localStorage.setItem(CODEHUB_SYNC_TOKEN_KEY, codeHubSyncToken.value);
-  localStorage.setItem(CODEHUB_SYNC_KEY_KEY, codeHubSyncKey.value);
+
+const savingSync = ref(false);
+
+const applySaveSyncConfig = () => {
+  let url = codeHubSyncUrl.value.trim();
+  if (url && !/^https?:\/\//i.test(url)) {
+    url = `https://${url}`;
+  }
+  url = url.replace(/\/+$/, "");
+  codeHubSyncUrl.value = url;
+
+  localStorage.setItem(CODEHUB_SYNC_URL_KEY, url);
+  localStorage.setItem(CODEHUB_SYNC_TOKEN_KEY, codeHubSyncToken.value.trim());
+  localStorage.setItem(CODEHUB_SYNC_KEY_KEY, codeHubSyncKey.value.trim());
   window.dispatchEvent(new Event("codehub-sync-config-change"));
-  showToast("配置已保存");
+};
+
+const saveCodeHubSyncConfig = async () => {
+  if (savingSync.value) return;
+
+  const url = codeHubSyncUrl.value.trim();
+  const token = codeHubSyncToken.value.trim();
+  const secretKey = codeHubSyncKey.value.trim();
+
+  // 若全部为空，视为清空云同步配置
+  if (!url && !token && !secretKey) {
+    applySaveSyncConfig();
+    showToast("已清除云同步配置");
+    return;
+  }
+
+  if (!url || !token) {
+    showToast("请填写完整的 Worker 地址和访问令牌");
+    return;
+  }
+
+  savingSync.value = true;
+  showToast("正在验证 Worker 连接与密钥…");
+
+  try {
+    const result = await testCodeHubSyncConfig({ url, token, secretKey });
+    applySaveSyncConfig();
+    showToast(result.message || "验证通过，配置已保存");
+  } catch (err) {
+    const errMsg = err?.message || String(err);
+    try {
+      await showConfirmDialog({
+        title: "配置验证未通过",
+        message: `${errMsg}\n\n是否仍然强制保存此配置？`,
+        confirmButtonText: "仍然保存",
+        cancelButtonText: "返回修改",
+      });
+      applySaveSyncConfig();
+      showToast("已强制保存配置");
+    } catch {
+      // 用户取消强制保存
+    }
+  } finally {
+    savingSync.value = false;
+  }
 };
 // const homeCards = ref(getHomeCards());
 const showShortcutPopup = ref(false);

@@ -1067,3 +1067,87 @@ export const apiDeleteMultipleFilesFromCloud = async (ids = [], options = {}) =>
     throw err;
   }
 };
+
+/**
+ * 验证/测试 CodeHub Worker 同步配置与端到端密钥
+ * @param {Object} [customConfig] 可选自定义配置 { url, token, secretKey }，默认读取本地存储
+ * @returns {Promise<{ success: boolean, message: string, isNewCloud: boolean }>}
+ */
+export const testCodeHubSyncConfig = async (customConfig = null) => {
+  let { url, token, secretKey } = customConfig || getCodeHubSyncConfig();
+  if (!url) throw new Error("Worker 地址不能为空");
+  if (!token) throw new Error("访问令牌 (Token) 不能为空");
+
+  if (!/^https?:\/\//i.test(url)) {
+    url = `https://${url}`;
+  }
+  url = url.trim().replace(/\/+$/, "");
+  token = token.trim();
+  secretKey = (secretKey || token).trim();
+
+  // 1. 发起网络请求测试 Worker /index 连通性与 Token 鉴权
+  let response;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时防护
+    response = await fetch(`${url}/index`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+  } catch (netErr) {
+    if (netErr.name === "AbortError") {
+      throw new Error("连接超时 (10秒)，请检查 Worker 地址或网络连接");
+    }
+    throw new Error(`无法连接到 Worker: ${netErr.message || "网络请求失败，请检查 Worker 地址"}`);
+  }
+
+  // 2. HTTP 状态码判定
+  if (response.status === 401) {
+    throw new Error("访问令牌 (Token) 错误，Worker 鉴权未通过");
+  }
+  if (response.status === 404) {
+    throw new Error("Worker 路由未匹配 (404)，请检查 Worker 是否正确部署 codehub-sync-worker");
+  }
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const errJson = await response.json();
+      if (errJson?.error) {
+        detail = errJson.error === "no router" ? "Token 鉴权失败" : errJson.error;
+      }
+    } catch {}
+    throw new Error(`Worker 响应异常: ${detail}`);
+  }
+
+  // 3. 验证端到端加密密钥与数据格式
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("Worker 返回了非 JSON 格式数据，请检查 Worker 路由地址是否正确");
+  }
+
+  const rawIndex = data?.index;
+  // 若云端有加密数据，测试能否成功解密
+  if (rawIndex && typeof rawIndex === "string" && rawIndex.trim()) {
+    try {
+      const decrypted = await decryptContent(rawIndex, secretKey);
+      JSON.parse(decrypted);
+    } catch (decryptErr) {
+      throw new Error(`Worker 连接成功，但端到端加密密钥与云端数据不匹配 (${decryptErr.message || "解密失败"})`);
+    }
+  }
+
+  const isNewCloud = !rawIndex;
+  return {
+    success: true,
+    isNewCloud,
+    message: isNewCloud
+      ? "Worker 连接与令牌验证通过（云端尚无数据，准备就绪）"
+      : "Worker 连接、令牌及端到端密钥全部验证通过！",
+  };
+};
