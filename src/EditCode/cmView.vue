@@ -3,6 +3,7 @@
     class="cmviewRef"
     :style="{ '--cm-editor-height': `${cmEditorHeight}px` }"
   >
+  
     <div class="cm-toolbar-row cm-toolbar-row--locked-y">
       <!-- 展开态：完整工具栏 -->
       <div class="cm-toolbar-wrapper">
