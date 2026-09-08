@@ -863,7 +863,11 @@ export const checkCodeHubSyncDiff = async () => {
     }
   }
 
-  const gistListChanged = Number(localIndexData.gistListUpdatedAt) !== Number(remoteIndexData.gistListUpdatedAt);
+  const localGistListTime = Number(localIndexData.gistListUpdatedAt) || 0;
+  const remoteGistListTime = Number(remoteIndexData.gistListUpdatedAt) || 0;
+  const gistListUploadNeeded = localGistListTime > remoteGistListTime;
+  const gistListDownloadNeeded = remoteGistListTime > localGistListTime;
+  const gistListChanged = gistListUploadNeeded || gistListDownloadNeeded;
   const changedKeyCount = gistListChanged ? 1 : 0;
 
   const tombstoneChanged = !areTombstonesEqual(
@@ -955,6 +959,8 @@ export const checkCodeHubSyncDiff = async () => {
     downloadItems,
     trashPendingUploadItems,
     gistListChanged,
+    gistListUploadNeeded,
+    gistListDownloadNeeded,
     tombstoneChanged,
   };
 };

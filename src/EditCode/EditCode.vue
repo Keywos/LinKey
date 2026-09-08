@@ -51,7 +51,7 @@
           <button
             class="saves-btn"
             :disabled="syncingCodeHub"
-            @click="openSyncModal"
+            @click="openSyncModal()"
           >
             {{ syncingCodeHub ? "同步中…" : "同步" }}
             <span
@@ -1075,7 +1075,7 @@
           <button class="sync-btn cancel" @click="closeSyncModal">关闭</button>
           <button
             class="sync-btn confirm"
-            @click="openSyncModal(syncModalState.tab)"
+            @click="openSyncModal()"
           >
             重新检查
           </button>
@@ -1523,7 +1523,7 @@ const openSyncModal = async (defaultTab) => {
   let initialTab = defaultTab;  console.log("======2")
   if (!initialTab) {
     if (syncDiffInfo.value) {
-      if (syncDiffInfo.value.remoteNewCount > 0 && syncDiffInfo.value.localNewCount === 0) {
+      if (syncDiffInfo.value.remoteNewCount > 0) {
         initialTab = "download";
       } else {
         initialTab = "upload";
@@ -1569,7 +1569,8 @@ console.log("======5")
     // 解析上传项
     const uploadItems = diff.uploadItems || [];
     const trashItems = diff.trashPendingUploadItems || [];
-    const hasGist = Boolean(diff.gistListChanged);
+    const hasGistUpload = Boolean(diff.gistListUploadNeeded);
+    const hasGistDownload = Boolean(diff.gistListDownloadNeeded);
     const hasTombstone = Boolean(diff.tombstoneChanged);
 console.log("======6")
     const formattedUploadItems = [
@@ -1589,7 +1590,7 @@ console.log("======6")
         status: "pending",
         error: null,
       })),
-      ...(hasGist
+      ...(hasGistUpload
         ? [
             {
               id: "__gist_list__",
@@ -1601,7 +1602,7 @@ console.log("======6")
             },
           ]
         : []),
-      ...(hasTombstone && uploadItems.length === 0 && trashItems.length === 0 && !hasGist
+      ...(hasTombstone && uploadItems.length === 0 && trashItems.length === 0 && !hasGistUpload
         ? [
             {
               id: "__tombstones__",
@@ -1626,7 +1627,7 @@ console.log("======6")
         status: "pending",
         error: null,
       })),
-      ...(hasGist
+      ...(hasGistDownload
         ? [
             {
               id: "__gist_list__",
@@ -1643,9 +1644,14 @@ console.log("======6")
     syncModalState.value.uploadItems = formattedUploadItems;
     syncModalState.value.downloadItems = formattedDownloadItems;
 
-    // 如果未明确指定标签，且上传为空但下载有项，自动切到下载
-    if (!defaultTab && formattedUploadItems.length === 0 && formattedDownloadItems.length > 0) {
-      syncModalState.value.tab = "download";
+    // 未明确指定标签时，以本次检查结果为准：下载优先，只有上传时切到上传
+    if (!defaultTab) {
+      syncModalState.value.tab =
+        formattedDownloadItems.length > 0
+          ? "download"
+          : formattedUploadItems.length > 0
+            ? "upload"
+            : syncModalState.value.tab;
     }
   console.log("======7")
     updateSyncModalActiveItems();console.log("======8")
@@ -1682,6 +1688,20 @@ const executeSyncModal = async () => {
 
   try {
     if (isUpload) {
+      // 用户确认后可能有其他设备写入云端，上传前重新比对，避免覆盖云端新版本。
+      const latestDiff = await checkCodeHubSyncDiff();
+      const latestRemoteIds = new Set(
+        (latestDiff?.downloadItems || []).map((item) => item.id),
+      );
+      const uploadConflicts = syncModalState.value.activeItems.filter(
+        (item) => !item.id.startsWith("__") && latestRemoteIds.has(item.id),
+      );
+      if (uploadConflicts.length > 0) {
+        const names = uploadConflicts.map((item) => item.name).join("、");
+        syncModalState.value.phase = "done";
+        syncModalState.value.error = `检测到云端已有更新，已取消上传：${names}。请重新检查后再选择同步方向。`;
+        return;
+      }
       const res = await uploadCodeHubSnapshot({ onProgress });
       syncModalState.value.activeItems.forEach((it) => {
         if (it.status === "pending" || it.status === "uploading") {
@@ -1702,8 +1722,8 @@ const executeSyncModal = async () => {
       syncModalState.value.summary = summaryText;
       syncModalState.value.phase = "done";
       showToast(`同步完成：${summaryText}`);
-      // 上传后重新比对一次差异（静默）
-      await checkRemoteSync(true);
+      // 上传后重新检查弹窗差异，刷新列表并切换到剩余的同步方向
+      await openSyncModal();
     } else {
       const res = await restoreCodeHubSnapshot({ onProgress });
       syncModalState.value.activeItems.forEach((it) => {
@@ -1720,8 +1740,8 @@ const executeSyncModal = async () => {
       syncModalState.value.summary = summaryText;
       syncModalState.value.phase = "done";
       showToast(summaryText);
-      // 下载后重新比对一次差异（静默）
-      await checkRemoteSync(true);
+      // 下载后重新检查弹窗差异，清除已完成项目并切换到剩余上传方向
+      await openSyncModal();
     }
   } catch (error) {
     syncModalState.value.phase = "done";
@@ -1945,7 +1965,11 @@ function adjustPopupForKeyboard() {
 
 function syncModalScrollLock() {
   if (typeof document === "undefined") return;
-  const isAnyModalOpen = promptState.value.visible || confirmState.value.visible;
+  const isAnyModalOpen =
+    promptState.value.visible ||
+    confirmState.value.visible ||
+    trashModalVisible.value ||
+    syncModalState.value.visible;
   if (isAnyModalOpen) {
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
@@ -2073,6 +2097,18 @@ watch(
         }
       });
     }
+  },
+);
+
+watch(
+  () => [
+    trashModalVisible.value,
+    syncModalState.value.visible,
+    promptState.value.visible,
+    confirmState.value.visible,
+  ],
+  () => {
+    syncModalScrollLock();
   },
 );
 
@@ -5043,7 +5079,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5px 4px;
+  padding: 1px 4px  2px 4px  ;
   background: rgba(255, 153, 17, 0.15);
   vertical-align: middle;
   line-height: 1;
@@ -5451,6 +5487,10 @@ onBeforeUnmount(() => {
 }
 
 /* ===== 自定义弹窗样式 ===== */
+:root {
+  --modal-button-radius: 20px;
+}
+
 .modal-mask {
   position: fixed;
   inset: 0;
@@ -5589,7 +5629,7 @@ onBeforeUnmount(() => {
   text-align: center;
   font-size: 14px;
   padding: 7px 18px;
-  border-radius: 20px;
+  border-radius: var(--modal-button-radius);
   border: 0;
   background: rgba(92, 125, 190, 0.12);
   color: inherit;
@@ -5969,9 +6009,9 @@ onBeforeUnmount(() => {
   line-height: 1.45;
   margin-bottom: 10px;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: 23px;
   background: rgba(128, 128, 128, 0.06);
-  border: 0.5px solid rgba(128, 128, 128, 0.12);
+  border: 0.5px solid rgba(128, 128, 128, 0.05);
 }
 
 .trash-global-bar {
@@ -6023,7 +6063,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: 23px;
   background: rgba(128, 128, 128, 0.05);
   border: 0.5px solid rgba(128, 128, 128, 0.14);
   transition: all 0.2s ease;
@@ -6072,7 +6112,7 @@ onBeforeUnmount(() => {
   gap: 3px;
   font-size: 10.5px;
   padding: 1.5px 6.5px;
-  border-radius: 6px;
+  border-radius: 16px;
   font-weight: 500;
   line-height: 1.3;
   flex-shrink: 0;
@@ -6081,7 +6121,7 @@ onBeforeUnmount(() => {
 .trash-tag.cloud {
   background: rgba(59, 130, 246, 0.12);
   color: #3b82f6;
-  border: 0.5px solid rgba(59, 130, 246, 0.28);
+  border: 0.5px solid rgba(59, 131, 246, 0.08);
 }
 
 .trash-tag.cloud .trash-tag-icon {
@@ -6094,13 +6134,13 @@ onBeforeUnmount(() => {
 .trash-tag.gist {
   background: rgba(245, 158, 11, 0.14);
   color: #d97706;
-  border: 0.5px solid rgba(245, 158, 11, 0.28);
+  border: 0.5px solid rgba(245, 158, 11, 0.05);
 }
 
 .trash-tag.lang {
   background: rgba(100, 116, 139, 0.12);
   color: #64748b;
-  border: 0.5px solid rgba(100, 116, 139, 0.2);
+  border: 0.5px solid rgba(100, 116, 139, 0.05);
 }
 
 .trash-item-meta-line {
@@ -6132,13 +6172,13 @@ onBeforeUnmount(() => {
 .trash-row-progress.delete {
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
-  border: 0.5px solid rgba(239, 68, 68, 0.22);
+  border: 0.5px solid rgba(239, 68, 68, 0.05);
 }
 
 .trash-row-progress.restore {
   background: rgba(59, 130, 246, 0.1);
   color: #3b82f6;
-  border: 0.5px solid rgba(59, 130, 246, 0.22);
+  border: 0.5px solid rgba(59, 130, 246, 0.05);
 }
 
 .trash-inline-spinner {
@@ -6196,7 +6236,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 4px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--modal-button-radius);
   padding: 5px 11px;
   font-size: 12px;
   font-weight: 500;
@@ -6207,7 +6247,7 @@ onBeforeUnmount(() => {
 .trash-btn-restore {
   background: rgba(59, 130, 246, 0.12);
   color: #3b82f6;
-  border: 0.5px solid rgba(59, 130, 246, 0.22);
+  border: 0.5px solid rgba(59, 130, 246, 0.05);
 }
 
 .trash-btn-restore:hover:not(:disabled) {
@@ -6218,7 +6258,7 @@ onBeforeUnmount(() => {
 .trash-btn-delete {
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
-  border: 0.5px solid rgba(239, 68, 68, 0.2);
+  border: 0.5px solid rgba(239, 68, 68, 0.05);
 }
 
 .trash-btn-delete:hover:not(:disabled) {
@@ -6255,7 +6295,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   background: rgba(239, 68, 68, 0.15) !important;
   color: #ef4444 !important;
-  border: 0.5px solid rgba(239, 68, 68, 0.3) !important;
+  border: 0.5px solid rgba(239, 68, 68, 0.1) !important;
 }
 
 .trash-btn-batch-clear:hover:not(:disabled) {
@@ -6309,7 +6349,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   opacity: 0.6;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--modal-button-radius);
   line-height: 1;
   color: inherit;
 }
@@ -6317,7 +6357,7 @@ onBeforeUnmount(() => {
 .sync-tab-nav {
   display: flex;
   background: rgba(128, 128, 128, 0.08);
-  border-radius: 8px;
+  border-radius: 20px;
   padding: 3px;
   margin-bottom: 12px;
   gap: 4px;
@@ -6333,7 +6373,7 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 500;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--modal-button-radius);
   background: transparent;
   color: inherit;
   opacity: 0.72;
@@ -6346,10 +6386,10 @@ onBeforeUnmount(() => {
 }
 
 .sync-tab-btn.active {
-  background: var(--bg-card, #ffffff);
-  color: var(--primary, #5c7dbe);
+  background: var(--sync-tab-active-bg, rgba(79, 142, 234, 0.16));
+  color: var(--sync-tab-active-color, #3d78c5);
   opacity: 1;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(79, 142, 234, 0.05), 0 1px 3px rgba(30, 80, 140, 0.08);
   font-weight: 600;
 }
 
@@ -6377,6 +6417,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin:0 -4px 0 2px;
   min-height: 0;
   flex: 1 1 auto;
 }
@@ -6406,8 +6447,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 9px 12px;
-  border-radius: 10px;
+  padding: 12px 16px;
+  border-radius: 23px;
   background: rgba(128, 128, 128, 0.08);
   border: 0.5px solid rgba(128, 128, 128, 0.15);
   transition: all 0.2s ease;
@@ -6502,7 +6543,7 @@ onBeforeUnmount(() => {
   gap: 5px;
   font-size: 11px;
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: 16px;
   font-weight: 500;
 }
 
@@ -6558,13 +6599,15 @@ onBeforeUnmount(() => {
 .sync-footer {
   margin-top: 16px;
   display: flex;
-  justify-content: flex-end;
+  width: 100%;
+  justify-content: center;
   gap: 10px;
 }
 
 .sync-btn {
+  flex: 1 1 0;
   padding: 7px 16px;
-  border-radius: 8px;
+  border-radius: var(--modal-button-radius);
   font-size: 13px;
   cursor: pointer;
   border: none;
@@ -6572,6 +6615,7 @@ onBeforeUnmount(() => {
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
 }
 
