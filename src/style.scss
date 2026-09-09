@@ -225,22 +225,38 @@
   color: #252c8bcc;
 }
 
-.gicdeimg,
-.kcard-imggit,
-.kcardimg {
-  /*  图标 反转 */
-  /* opacity: ; */
-  filter: invert(1);
-  /* filter: brightness(0) invert(1); */
-  /* filter: grayscale(50%); */
+@media (prefers-color-scheme: light) {
+  .gicdeimg,
+  .kcard-imggit,
+  .kcardimg {
+    &:not(.is-color-icon) {
+      filter: invert(1);
+    }
+  }
+  .shortcut-panel__picker img,
+  .icon-picker__item img {
+    &:not(.is-color-icon) {
+      filter: invert(1);
+    }
+  }
 }
-.shortcut-panel__picker img,
-.icon-picker__item img {
-  /*  图标 反转 */
-  /* opacity: ; */
-  filter: invert(1);
-  /* filter: brightness(0) invert(1); */
-  /* filter: grayscale(50%); */
+
+@media (prefers-color-scheme: dark) {
+  .gicdeimg,
+  .kcard-imggit,
+  .kcardimg {
+    filter: none;
+  }
+  .shortcut-panel__picker img,
+  .icon-picker__item img {
+    filter: none;
+  }
+}
+
+/* 彩色图标/c: true 强制不反转，不受模式干扰 */
+.is-color-icon,
+img.is-color-icon {
+  filter: none !important;
 }
 #searchForm .van-search__content--round {
   background-color: #fdffff13;

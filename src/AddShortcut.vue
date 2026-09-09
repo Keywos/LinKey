@@ -1,14 +1,27 @@
 <template>
   <div v-if="show" class="shortcut-overlay" @click.self="show = false">
-    <section class="shortcut-panel" role="dialog" aria-modal="true" :aria-label="panelTitle">
+    <section
+      class="shortcut-panel"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="panelTitle"
+    >
       <div class="shortcut-panel__header">
         <strong style="padding-left: 4px">{{ panelTitle }}</strong>
-        <button style="padding-right: 4px" type="button" aria-label="关闭" @click="show = false">
+        <button
+          style="padding-right: 4px"
+          type="button"
+          aria-label="关闭"
+          @click="show = false"
+        >
           <van-icon name="cross" />
         </button>
       </div>
 
-      <div v-if="isBuiltInShortcut && !isSpecialShortcut" class="shortcut-panel__builtin">
+      <div
+        v-if="isBuiltInShortcut && !isSpecialShortcut"
+        class="shortcut-panel__builtin"
+      >
         <div>
           <strong>{{ shortcutName }}</strong>
           <!-- <span>首页内置图标</span> -->
@@ -18,14 +31,25 @@
 
       <label v-if="!isSpecialShortcut" class="shortcut-panel__control">
         <span>
-          <span style="padding-left: 4px">名称{{ isBuiltInShortcut ? " (只读)" : "" }}</span>
+          <span style="padding-left: 4px"
+            >名称{{ isBuiltInShortcut ? " (只读)" : "" }}</span
+          >
         </span>
-        <input v-model.trim="shortcutName" type="text" placeholder="例如：Bing" :readonly="isBuiltInShortcut" :tabindex="isBuiltInShortcut ? -1 : 0" @mousedown="onReadonlyMousedown" />
+        <input
+          v-model.trim="shortcutName"
+          type="text"
+          placeholder="例如：Bing"
+          :readonly="isBuiltInShortcut"
+          :tabindex="isBuiltInShortcut ? -1 : 0"
+          @mousedown="onReadonlyMousedown"
+        />
       </label>
 
       <label v-if="!isSpecialShortcut" class="shortcut-panel__control">
         <span>
-          <span style="padding-left: 4px">跳转地址{{ isBuiltInShortcut ? " (只读)" : "" }}</span>
+          <span style="padding-left: 4px"
+            >跳转地址{{ isBuiltInShortcut ? " (只读)" : "" }}</span
+          >
         </span>
         <input
           v-model.trim="shortcutUrl"
@@ -42,13 +66,22 @@
           <span style="padding-left: 4px">图标</span>
         </span>
         <div class="shortcut-panel__segmented">
-          <button v-for="option in iconTypeOptions" :key="option.value" type="button" :class="{ 'is-active': shortcutIconType === option.value }" @click="selectIconType(option.value)">
+          <button
+            v-for="option in iconTypeOptions"
+            :key="option.value"
+            type="button"
+            :class="{ 'is-active': shortcutIconType === option.value }"
+            @click="selectIconType(option.value)"
+          >
             {{ option.label }}
           </button>
         </div>
       </div>
 
-      <label v-if="shortcutIconType === 'emoji'" class="shortcut-panel__control">
+      <label
+        v-if="shortcutIconType === 'emoji'"
+        class="shortcut-panel__control"
+      >
         <span>
           <span>Emoji</span>
         </span>
@@ -60,7 +93,11 @@
           <span>
             <span>图标网址</span>
           </span>
-          <input v-model.trim="shortcutIcon" type="url" placeholder="https://example.com/icon.png" />
+          <input
+            v-model.trim="shortcutIcon"
+            type="url"
+            placeholder="https://example.com/icon.png"
+          />
         </label>
         <label class="shortcut-panel__control shortcut-panel__range">
           <span>
@@ -68,36 +105,93 @@
             <b>{{ selectedIconSize }}px</b>
           </span>
           <div style="height: 12px" />
-          <van-slider v-model="selectedIconSize" bar-height="20px" :step="1" :min="18" :max="66" />
+          <van-slider
+            v-model="selectedIconSize"
+            bar-height="20px"
+            :step="1"
+            :min="18"
+            :max="66"
+          />
           <!-- <input v-model.number="selectedIconSize" type="range" min="18" max="66" step="1" /> -->
         </label>
       </template>
 
-      <button v-else type="button" class="shortcut-panel__picker" @click="showBuiltInIconPicker = true">
-        <img v-if="isCurrentBuiltInIcon" :src="shortcutIcon" :alt="shortcutBuiltInIcon" class="shortcut-panel__picker-icon" />
+      <button
+        v-else
+        type="button"
+        class="shortcut-panel__picker"
+        @click="showBuiltInIconPicker = true"
+      >
+        <img
+          v-if="isCurrentBuiltInIcon"
+          :src="shortcutIcon"
+          :alt="shortcutBuiltInIcon"
+          class="shortcut-panel__picker-icon"
+          :class="{ 'is-color-icon': isCurrentColorBuiltInIcon }"
+        />
         <span>内置图标</span>
         <b>{{ shortcutBuiltInIcon || "选择图标" }}</b>
       </button>
 
       <div class="shortcut-panel__actions">
-        <button type="button" class="shortcut-panel__btn shortcut-panel__btn--ghost" @click="show = false">取消</button>
-        <button v-if="editingShortcut && !isBuiltInShortcut && !isSpecialShortcut" type="button" class="shortcut-panel__btn shortcut-panel__btn--danger" @click="deleteShortcut">删除</button>
-        <button type="button" class="shortcut-panel__btn shortcut-panel__btn--primary" @click="saveShortcut">
+        <button
+          type="button"
+          class="shortcut-panel__btn shortcut-panel__btn--ghost"
+          @click="show = false"
+        >
+          取消
+        </button>
+        <button
+          v-if="editingShortcut && !isBuiltInShortcut && !isSpecialShortcut"
+          type="button"
+          class="shortcut-panel__btn shortcut-panel__btn--danger"
+          @click="deleteShortcut"
+        >
+          删除
+        </button>
+        <button
+          type="button"
+          class="shortcut-panel__btn shortcut-panel__btn--primary"
+          @click="saveShortcut"
+        >
           {{ isSpecialShortcut ? "保存" : editingShortcut ? "保存" : "添加" }}
         </button>
       </div>
     </section>
   </div>
 
-  <van-popup v-model:show="showIconSizePicker" round position="bottom" :lock-scroll="false">
-    <van-picker :columns="iconSizeOptions" @cancel="showIconSizePicker = false" @confirm="onIconSizeConfirm" />
+  <van-popup
+    v-model:show="showIconSizePicker"
+    round
+    position="bottom"
+    :lock-scroll="false"
+  >
+    <van-picker
+      :columns="iconSizeOptions"
+      @cancel="showIconSizePicker = false"
+      @confirm="onIconSizeConfirm"
+    />
   </van-popup>
 
-  <div v-if="showBuiltInIconPicker" class="icon-picker-overlay" @click.self="showBuiltInIconPicker = false">
-    <section class="icon-picker" role="dialog" aria-modal="true" aria-label="选择内置图标">
+  <div
+    v-if="showBuiltInIconPicker"
+    class="icon-picker-overlay"
+    @click.self="showBuiltInIconPicker = false"
+  >
+    <section
+      class="icon-picker"
+      role="dialog"
+      aria-modal="true"
+      aria-label="选择内置图标"
+    >
       <div class="icon-picker__header">
         <strong>&nbsp;选择内置图标</strong>
-        <button style="padding-right: 4px" type="button" aria-label="关闭" @click="showBuiltInIconPicker = false">
+        <button
+          style="padding-right: 4px"
+          type="button"
+          aria-label="关闭"
+          @click="showBuiltInIconPicker = false"
+        >
           <van-icon name="cross" />
         </button>
       </div>
@@ -110,9 +204,17 @@
           :class="{ 'is-active': shortcutIcon === option.value }"
           @click="onBuiltInIconConfirm(option)"
         >
-          <img :src="option.value" :alt="option.text" />
+          <img
+            :src="option.value"
+            :alt="option.text"
+            :class="{ 'is-color-icon': option.c }"
+          />
           <span>{{ option.text }}</span>
-          <van-icon v-if="shortcutIcon === option.value" name="success" class="icon-picker__check" />
+          <van-icon
+            v-if="shortcutIcon === option.value"
+            name="success"
+            class="icon-picker__check"
+          />
         </button>
       </div>
     </section>
@@ -135,6 +237,39 @@ import editIcon from "@/img/svg/edit.svg";
 import moreIcon from "@/img/svg/more.svg";
 import yjurlIcon from "@/img/svg/yjurl.svg";
 import vscode from "@/img/new_svg/vscode.svg";
+import claude from "@/img/new_svg/claude.svg";
+
+import c1 from "@/img/new_svg/c1.svg";
+import c6 from "@/img/new_svg/c6.svg";
+
+import w1 from "@/img/svg/w1.svg";
+import p from "@/img/svg/p.svg";
+import s from "@/img/svg/s.svg";
+import c from "@/img/svg/c2.svg";
+
+const builtInIconOptions = [
+  { text: "编辑", value: editIcon },
+  { text: "更多", value: moreIcon },
+  { text: "链接", value: yjurlIcon },
+  { text: "Time", value: ts },
+  { text: "Success", value: success },
+  { text: "Ping", value: carry },
+  { text: "CNY", value: cny },
+  { text: "SF", value: sf },
+  { text: "Search", value: safa },
+  { text: "GitHub", value: hgithub },
+  { text: "Code", value: w },
+  { text: "c", value: c },
+  { text: "Speed", value: s },
+  { text: "Pinh", value: p },
+  { text: "WCode", value: w1 },
+
+  { text: "Vs Code", value: vscode, c: true },
+  { text: "Claude", value: claude, c: true },
+  { text: "C1", value: c1, c: true },
+  { text: "C6", value: c6, c: true },
+];
+
 const props = defineProps({
   show: { type: Boolean, default: false },
   card: { type: Object, default: null },
@@ -157,11 +292,20 @@ watch(
         shortcutName.value = props.card.id;
         shortcutUrl.value = props.card.r;
         shortcutIcon.value = props.card.img;
-        const builtInIcon = builtInIconOptions.find((option) => option.value === props.card.img);
-        shortcutIconType.value = builtInIcon ? "builtin" : /^https?:\/\//.test(props.card.img) ? "url" : "emoji";
+        const builtInIcon = builtInIconOptions.find(
+          (option) => option.value === props.card.img,
+        );
+        shortcutIconType.value = builtInIcon
+          ? "builtin"
+          : /^https?:\/\//.test(props.card.img)
+            ? "url"
+            : "emoji";
         shortcutBuiltInIcon.value = builtInIcon?.text || "";
         selectedIconSize.value = props.card.iconSize || 20;
-        shortcutIconSize.value = iconSizeOptions.find((option) => option.value === selectedIconSize.value)?.text || "默认（20px）";
+        shortcutIconSize.value =
+          iconSizeOptions.find(
+            (option) => option.value === selectedIconSize.value,
+          )?.text || "默认（20px）";
         shortcutEnabled.value = props.card.enabled !== false;
       } else {
         resetShortcutForm();
@@ -184,31 +328,32 @@ const iconSizeOptions = [
   { text: "默认（34px）", value: 34 },
   { text: "大（66px）", value: 66 },
 ];
-const builtInIconOptions = [
-  { text: "编辑", value: editIcon },
-  { text: "更多", value: moreIcon },
-  { text: "添加", value: yjurlIcon },
-  { text: "Time", value: ts },
-  { text: "Success", value: success },
-  { text: "Ping", value: carry },
-  { text: "CNY", value: cny },
-  { text: "SF", value: sf },
-  { text: "Search", value: safa },
-  { text: "GitHub", value: hgithub },
-  { text: "Code", value: w },
-{ text: "Vs Code", value: vscode },
-  
-];
+
 const selectedIconSize = ref(20);
 const shortcutEnabled = ref(true);
-const isBuiltInShortcut = computed(() => Boolean(editingShortcut.value?.builtIn));
-const isSpecialShortcut = computed(() => Boolean(editingShortcut.value?.special));
+const isBuiltInShortcut = computed(() =>
+  Boolean(editingShortcut.value?.builtIn),
+);
+const isSpecialShortcut = computed(() =>
+  Boolean(editingShortcut.value?.special),
+);
 const panelTitle = computed(() => {
   if (isSpecialShortcut.value) return "自定义图标";
   return editingShortcut.value ? "编辑快捷方式" : "添加快捷方式";
 });
 const shortcutBuiltInIcon = ref("");
-const isCurrentBuiltInIcon = computed(() => shortcutIconType.value === "builtin" && builtInIconOptions.some((option) => option.value === shortcutIcon.value));
+const isCurrentBuiltInIcon = computed(
+  () =>
+    shortcutIconType.value === "builtin" &&
+    builtInIconOptions.some((option) => option.value === shortcutIcon.value),
+);
+const isCurrentColorBuiltInIcon = computed(
+  () =>
+    shortcutIconType.value === "builtin" &&
+    builtInIconOptions.some(
+      (option) => option.value === shortcutIcon.value && option.c,
+    ),
+);
 const selectIconType = (type) => {
   shortcutIconType.value = type;
   if (type === "builtin" && !isCurrentBuiltInIcon.value) {
@@ -246,13 +391,26 @@ const addShortcut = () => {
       if (!shortcutIcon.value) {
         throw new Error("请选择图标");
       }
-      if (shortcutIconType.value === "url" && !["http:", "https:"].includes(new URL(shortcutIcon.value).protocol)) {
+      if (
+        shortcutIconType.value === "url" &&
+        !["http:", "https:"].includes(new URL(shortcutIcon.value).protocol)
+      ) {
         throw new Error("请填写有效的图标网址");
       }
-      const specialIcons = JSON.parse(localStorage.getItem("HomeSpecialIcons") || "{}");
+      const specialIcons = JSON.parse(
+        localStorage.getItem("HomeSpecialIcons") || "{}",
+      );
+      const isColorIcon = Boolean(
+        shortcutIconType.value === "builtin" &&
+        builtInIconOptions.find((option) => option.value === shortcutIcon.value)
+          ?.c,
+      );
       specialIcons[editingShortcut.value.id] = {
         img: shortcutIcon.value,
-        ...(shortcutIconType.value === "url" ? { iconSize: selectedIconSize.value } : {}),
+        c: isColorIcon,
+        ...(shortcutIconType.value === "url"
+          ? { iconSize: selectedIconSize.value }
+          : {}),
       };
       localStorage.setItem("HomeSpecialIcons", JSON.stringify(specialIcons));
       show.value = false;
@@ -265,23 +423,44 @@ const addShortcut = () => {
     if (!shortcutName.value || !shortcutUrl.value || !shortcutIcon.value) {
       throw new Error("请填写名称、跳转地址和图标");
     }
-    if (shortcutIconType.value === "url" && !["http:", "https:"].includes(new URL(shortcutIcon.value).protocol)) {
+    if (
+      shortcutIconType.value === "url" &&
+      !["http:", "https:"].includes(new URL(shortcutIcon.value).protocol)
+    ) {
       throw new Error("请填写有效的图标网址");
     }
     const homeCards = getHomeCards();
-    if (homeCards.some((card) => card.id === shortcutName.value && card.id !== editingShortcut.value?.id)) {
+    if (
+      homeCards.some(
+        (card) =>
+          card.id === shortcutName.value &&
+          card.id !== editingShortcut.value?.id,
+      )
+    ) {
       throw new Error("快捷方式名称已存在");
     }
+    const isColorIcon = Boolean(
+      shortcutIconType.value === "builtin" &&
+      builtInIconOptions.find((option) => option.value === shortcutIcon.value)
+        ?.c,
+    );
     const shortcut = {
       id: shortcutName.value,
       img: shortcutIcon.value,
       r: shortcutUrl.value,
-      enabled: isBuiltInShortcut.value ? shortcutEnabled.value : (editingShortcut.value?.enabled ?? true),
-      ...(shortcutIconType.value === "url" ? { iconSize: selectedIconSize.value } : {}),
+      c: isColorIcon,
+      enabled: isBuiltInShortcut.value
+        ? shortcutEnabled.value
+        : (editingShortcut.value?.enabled ?? true),
+      ...(shortcutIconType.value === "url"
+        ? { iconSize: selectedIconSize.value }
+        : {}),
     };
     const isEditing = Boolean(editingShortcut.value);
     if (isEditing) {
-      const storedCard = homeCards.find((card) => card.id === editingShortcut.value.id);
+      const storedCard = homeCards.find(
+        (card) => card.id === editingShortcut.value.id,
+      );
       if (storedCard) {
         Object.assign(storedCard, shortcut);
         if (isBuiltInShortcut.value) storedCard.builtIn = true;
@@ -294,7 +473,13 @@ const addShortcut = () => {
     show.value = false;
     const savedBuiltIn = isBuiltInShortcut.value;
     resetShortcutForm();
-    showToast(savedBuiltIn ? "图标已保存" : isEditing ? "快捷方式已保存" : "快捷方式已添加");
+    showToast(
+      savedBuiltIn
+        ? "图标已保存"
+        : isEditing
+          ? "快捷方式已保存"
+          : "快捷方式已添加",
+    );
     emit("saved", shortcut);
   } catch (error) {
     showToast(error.message);
@@ -307,7 +492,9 @@ const onReadonlyMousedown = (event) => {
 const deleteShortcut = () => {
   try {
     const homeCards = getHomeCards();
-    const index = homeCards.findIndex((card) => card.id === editingShortcut.value?.id);
+    const index = homeCards.findIndex(
+      (card) => card.id === editingShortcut.value?.id,
+    );
     if (index === -1) {
       throw new Error("快捷方式不存在");
     }
@@ -490,6 +677,11 @@ const deleteShortcut = () => {
   height: 22px;
   margin-right: 8px;
   object-fit: contain;
+}
+
+.shortcut-panel__picker-icon.is-color-icon,
+.icon-picker__item img.is-color-icon {
+  filter: none !important;
 }
 
 .shortcut-panel__actions {
