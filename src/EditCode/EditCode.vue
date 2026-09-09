@@ -41,11 +41,14 @@
           <div v-if="!selectMode" class="saves-toolbar-primary">
             <button class="saves-btn" @click="toggleSelectMode">选择</button>
             <div ref="moreMenuWrapRef" class="saves-more-wrap">
-              <button class="saves-btn saves-more-btn" @click.stop="toggleToolbar">
+              <button
+                class="saves-btn saves-more-btn"
+                @click.stop="toggleToolbar"
+              >
                 更多
               </button>
               <div v-if="moreMenuOpen" class="saves-more-menu">
-                 <button class="saves-menu-item" @click="push_setting">
+                <button class="saves-menu-item" @click="push_setting">
                   设置
                 </button>
                 <button class="saves-menu-item" @click="openSearchFromMenu">
@@ -1257,7 +1260,10 @@
         </template>
         <template v-else-if="syncModalState.phase === 'empty'">
           <button class="sync-btn cancel" @click="closeSyncModal">关闭</button>
-          <button class="sync-btn confirm" @click="openSyncModal(undefined, true)">
+          <button
+            class="sync-btn confirm"
+            @click="openSyncModal(undefined, true)"
+          >
             重新检查
           </button>
         </template>
@@ -1796,7 +1802,11 @@ const closeSyncModal = () => {
 
 // 切换弹窗内的标签页（上传 / 下载）
 const switchSyncTab = (tab) => {
-  if (syncModalState.value.phase === "syncing" || syncModalState.value.tab === tab) return;
+  if (
+    syncModalState.value.phase === "syncing" ||
+    syncModalState.value.tab === tab
+  )
+    return;
   animateSyncBoxHeight(() => {
     syncModalState.value.tab = tab;
     updateSyncModalActiveItems();
@@ -2606,7 +2616,6 @@ const push_home = () => {
 const push_setting = () => {
   router.push("/setting");
 };
- 
 
 async function pasteToPromptInput() {
   try {
@@ -3590,7 +3599,7 @@ const downloadGistItem = async (
     }
     const rawUrl = toStableGistRawUrl(item.gist.rawUrl);
     if (item.gist.rawUrl !== rawUrl) item.gist.rawUrl = rawUrl;
-    const response = await sendReq("GET", rawUrl);
+    const response = await sendReq("GET", rawUrl + "?" + Date.now());
     if (response.status !== 200) throw new Error(response.status || "请求失败");
     const content =
       typeof response.data === "string"
@@ -4037,9 +4046,8 @@ async function refreshUrlItem(item) {
       // ★ 补充失败原因：区分网络异常（Error）与 HTTP 状态错误，并展示服务端返回的具体信息
       let failReason = "无响应数据";
       if (res instanceof Error) {
-        
         failReason = res.message || "网络错误";
-      } else if (res?.status) {  
+      } else if (res?.status) {
         failReason = `HTTP ${res.status}${res.message ? `：${res.message}` : ""}`;
       }
       showToast(`请求失败：${failReason}`);
@@ -5700,7 +5708,7 @@ onBeforeUnmount(() => {
   margin-right: 5px;
   padding: 1.5px 5px 0.5px 5px;
   border-radius: 16px;
-  height:10px;
+  height: 10px;
   background: #8f98c61a;
   color: var(--text);
   /* font-family: "SF Mono", "Fira Code", "Consolas", monospace; */
