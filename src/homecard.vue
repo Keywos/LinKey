@@ -169,7 +169,7 @@ const layout = ref(localStorage.getItem("HomeCardLayout") === "card" ? "card" : 
 const storedIconRadius = localStorage.getItem("HomeIconRadius");
 const storedIconSpacing = localStorage.getItem("HomeIconSpacing");
 const iconRadius = ref(storedIconRadius === null ? 18 : Number(storedIconRadius));
-const iconSpacing = ref(storedIconSpacing === null ? 18 : Number(storedIconSpacing));
+const iconSpacing = ref(storedIconSpacing === null ? 27 : Number(storedIconSpacing));
 const showIconLayoutSettings = ref(false);
 const isEditMode = ref(false);
 const editingCard = ref(null);
