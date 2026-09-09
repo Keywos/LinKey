@@ -7,8 +7,9 @@ import safa from "@/img/svg/safa.svg";
 import hgithub from "@/img/svg/hgithub.svg";
 import w from "@/img/svg/w.svg";
 
-export const HOME_CARDS_KEY = "HomePageCards";
 
+export const HOME_CARDS_KEY = "HomePageCards";
+ 
 export const defaultHomeCards = [
   { id: "极简搜索", img: safa, r: "/s" },
   { id: "URL 工具箱", img: sf, r: "/codeurl" },

@@ -134,7 +134,7 @@ import w from "@/img/svg/w.svg";
 import editIcon from "@/img/svg/edit.svg";
 import moreIcon from "@/img/svg/more.svg";
 import yjurlIcon from "@/img/svg/yjurl.svg";
-
+import vscode from "@/img/new_svg/vscode.svg";
 const props = defineProps({
   show: { type: Boolean, default: false },
   card: { type: Object, default: null },
@@ -196,6 +196,8 @@ const builtInIconOptions = [
   { text: "Search", value: safa },
   { text: "GitHub", value: hgithub },
   { text: "Code", value: w },
+{ text: "Vs Code", value: vscode },
+  
 ];
 const selectedIconSize = ref(20);
 const shortcutEnabled = ref(true);
