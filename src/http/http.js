@@ -12,7 +12,23 @@ export const sendReq = async (method, url, headers, body) => {
     });
 
     if (!response.ok) {
-      return { status: response.status, message: "Not Found" };
+      let errorBody = "";
+      try {
+        const errText = await response.text();
+        if (errText) {
+          const parsed = JSON.parse(errText);
+          errorBody = parsed?.message || JSON.stringify(parsed);
+        } else {
+          errorBody = errText;
+        }
+      } catch {
+        errorBody = "";
+      }
+      return {
+        status: response.status,
+        statusText: response.statusText,
+        message: errorBody || response.statusText || "请求失败",
+      };
     }
 
     const text = await response.text();

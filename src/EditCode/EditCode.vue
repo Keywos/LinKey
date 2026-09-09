@@ -3050,6 +3050,11 @@ const hydrateGistDetails = async (items) => {
               matchedGist.user ||
               matchedGist.owner?.login ||
               "",
+            // ★ 补充远程 Gist 完整文件清单，供删除时判断是否为最后一个文件（避免本地只缓存部分文件时误删整个远程 Gist）
+            filesNames:
+              item.gist.filesNames ||
+              matchedGist.filesNames ||
+              (matchedGist.files ? Object.keys(matchedGist.files) : []),
           },
         };
       }
@@ -3779,7 +3784,14 @@ const deleteSingleItem = async (item) => {
       return;
     }
     const gistItemsToDelete = gistItems(item.gist.id);
-    const isLastGistFile = gistItemsToDelete.length <= 1;
+    // ★ 优先使用远程 Gist 的完整文件清单判断是否为最后一个文件；
+    // 只有本地缓存了全部文件时 gistItemsToDelete 才与远程一致，否则可能误删整个远程 Gist
+    const remoteFileNames = Array.isArray(item.gist.filesNames)
+      ? item.gist.filesNames
+      : [];
+    const isLastGistFile = remoteFileNames.length
+      ? remoteFileNames.length <= 1
+      : gistItemsToDelete.length <= 1;
     try {
       const response = await sendReq(
         isLastGistFile ? "DELETE" : "PATCH",
@@ -3802,12 +3814,16 @@ const deleteSingleItem = async (item) => {
         deletedFiles,
       );
       await removeGistFilesFromCache(item.gist.id, deletedFiles);
-      const removed = new Set(removedIds);
+      // ★ 修复：removeGistFilesFromCodeHub 返回的是 { id, meta, item } 对象数组，
+      // 不能直接把对象放入 Set 再按字符串 id 匹配（会永远匹配不上，列表无法刷新）
+      const removed = new Set(removedIds.map((r) => r.id));
       savedItems.value = savedItems.value.filter(
         (savedItem) => !removed.has(savedItem.id),
       );
       if (currentItemId.value && removed.has(currentItemId.value))
         await setCurrentItem(null, "");
+      // ★ 删除产生墓碑记录，同步刷新回收站列表
+      await loadTrashList();
       showToast(
         remoteMissing
           ? "远程 Gist 不存在，已清理本地数据"
@@ -4018,9 +4034,18 @@ async function refreshUrlItem(item) {
       res = await sendReq("GET", localURL);
     }
     if (!res || !res.data) {
-      showToast("请求失败");
+      // ★ 补充失败原因：区分网络异常（Error）与 HTTP 状态错误，并展示服务端返回的具体信息
+      let failReason = "无响应数据";
+      if (res instanceof Error) {
+        
+        failReason = res.message || "网络错误";
+      } else if (res?.status) {  
+        failReason = `HTTP ${res.status}${res.message ? `：${res.message}` : ""}`;
+      }
+      showToast(`请求失败：${failReason}`);
       return;
     }
+
     let content = res.data;
     if (typeof content !== "string") {
       content = JSON.stringify(content, null, 2);
@@ -4773,7 +4798,14 @@ async function loadUrlContent(inputUrl, inputUserAgent = "") {
     }
 
     if (!res || !res.data) {
-      showToast("请求失败");
+      // ★ 补充失败原因：区分网络异常（Error）与 HTTP 状态错误，并展示服务端返回的具体信息
+      let failReason = "无响应数据";
+      if (res instanceof Error) {
+        failReason = res.message || "网络错误";
+      } else if (res?.status) {
+        failReason = `HTTP ${res.status}${res.message ? `：${res.message}` : ""}`;
+      }
+      showToast(`请求失败：${failReason}`);
       return;
     }
 
@@ -4824,7 +4856,7 @@ async function loadUrlContent(inputUrl, inputUserAgent = "") {
     showToast("载入成功");
   } catch (e) {
     console.log(e);
-    showToast("请求失败");
+    showToast(`请求失败：${e?.message || e || "未知错误"}`);
     isSwitchingItem = false;
     // ★ 失败时清理可能残留的临时项，防止幽灵项
     if (addedItemId) {
