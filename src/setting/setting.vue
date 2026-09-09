@@ -4,7 +4,11 @@
 
     <van-cell-group inset title="重置排序顺序">
       <van-cell title="清除 搜索页 拖动排序缓存" @click="clearhs()" is-link />
-      <van-cell title="重置 PWA 缓存" @click="rePwa()" is-link />
+      <van-cell
+        :title="'重置 PWA 缓存 &nbsp; Ver ' + version"
+        @click="rePwa()"
+        is-link
+      />
       <van-cell title="重置 首页 快捷方式缓存" @click="reHome()" is-link />
     </van-cell-group>
 
@@ -17,7 +21,6 @@
       />
       <van-field
         v-model="codeHubSyncToken"
-       
         label="访问令牌"
         placeholder="Worker SYNC_TOKEN 鉴权"
         clearable
@@ -28,18 +31,23 @@
         placeholder="本地端到端加解密密钥"
         clearable
       />
-      <van-cell class="van-cell-sw" center title="自动检查云端更新" inset>
-        <template #right-icon>
-          <van-switch v-model="codeHubSyncAutoCheck" @change="onCodeHubSyncAutoCheckChange" />
-        </template>
-      </van-cell>
       <van-cell
         title="测试连接并保存"
         is-link
         :value="savingSync ? '验证中…' : ''"
         @click="saveCodeHubSyncConfig"
       />
+      <van-cell class="van-cell-sw" center title="自动检查云端更新" inset>
+        <template #right-icon>
+          <van-switch
+            v-model="codeHubSyncAutoCheck"
+            @change="onCodeHubSyncAutoCheckChange"
+          />
+        </template>
+      </van-cell>
+
     </van-cell-group>
+    
     <div style="padding: 0 22px; opacity: 0.6; font-size: 12px">
       <p>
         令牌用于请求 Worker
@@ -47,90 +55,6 @@
       </p>
       <p>本地端到端加解密密钥 (选填，留空默认同令牌)</p>
     </div>
-
-    <van-cell-group inset title="默认启动页设置">
-      <van-field
-        v-model="fieldValue"
-        is-link
-        readonly
-        label="首页"
-        placeholder="选择启动页"
-        @click="showPicker = true"
-      />
-      <van-popup v-model:show="showPicker" round position="bottom">
-        <van-picker
-          :columns="columns"
-          @cancel="showPicker = false"
-          @confirm="onConfirm"
-        />
-      </van-popup>
-      <!-- </van-cell-group>
-    <van-cell-group inset title="界面设置"> -->
-      <van-cell
-        class="van-cell-sw"
-        center
-        title="隐藏页面返回按钮"
-        label="关闭后，带返回功能的页面左下角不显示返回按钮"
-      >
-        <template #right-icon>
-          <van-switch v-model="hideBackButton" @change="setHideBackButton" />
-        </template>
-      </van-cell>
-    </van-cell-group>
-    <van-cell-group inset title="搜索引擎快捷切换">
-      <van-cell
-        title="选择搜索框下方显示的引擎"
-        label="可在首页搜索框下方点击切换，也可以拖动排序"
-      />
-      <van-cell v-for="item in searchEngines" :key="item" :title="item" center>
-        <template #right-icon>
-          <van-switch
-            :model-value="searchTabs.includes(item)"
-            @update:model-value="(enabled) => toggleSearchEngine(item, enabled)"
-          />
-        </template>
-      </van-cell>
-    </van-cell-group>
-
-    <!-- <van-cell-group inset title="主页卡片">
-      <van-cell title="整理主页卡片" label="关闭后将不会显示在主页" />
-      <van-cell
-        v-for="card in homeCards"
-        :key="card.id"
-        class="home-card-cell"
-        :class="{ 'home-card-cell--editable': isCustomCard(card) }"
-        :title="card.id"
-        :label="getCardDescription(card)"
-        center
-        @click="editShortcut(card)"
-      >
-        <template #right-icon>
-          <div class="home-card-cell__actions">
-            <van-button v-if="isCustomCard(card)" size="small" plain type="danger" aria-label="删除快捷方式" @click.stop="removeShortcut(card)">删除</van-button>
-            <van-switch v-model="card.enabled" @click.stop @change="saveCardSettings" />
-          </div>
-        </template>
-      </van-cell>
-      <van-cell title="添加快捷方式" is-link @click="openAddShortcut" />
-    </van-cell-group> -->
-
-    <AddShortcut
-      v-model:show="showShortcutPopup"
-      :card="editingShortcut"
-      @saved="onShortcutSaved"
-    />
-
-    <!-- <van-cell-group inset title="编辑器主题">
-      <van-field class="editor-theme-field" label="背景颜色">
-        <template #input>
-          <van-radio-group v-model="editorDarkBackground" class="editor-theme-options" @change="setEditorDarkBackground">
-            <van-radio name="#282c34">深蓝</van-radio>
-            <van-radio name="#141414">深灰</van-radio>
-            <van-radio name="#000000">纯黑</van-radio>
-          </van-radio-group>
-        </template>
-      </van-field>
-    </van-cell-group> -->
 
     <van-cell-group inset title="Gist 相关设置" id="Gistsetting">
       <van-field
@@ -214,12 +138,6 @@
           <van-switch v-model="autoGist" @change="setGistauto" />
         </template>
       </van-cell>
-
-      <van-cell class="van-cell-sw" center title="深色模式背景" inset>
-        <template #right-icon>
-          <van-switch v-model="autoISBGC" @change="setBGC" />
-        </template>
-      </van-cell>
     </van-cell-group>
 
     <van-cell-group inset title="编辑器设置">
@@ -293,6 +211,95 @@
       </van-cell>
     </van-cell-group>
 
+    <van-cell-group inset title="默认启动页设置">
+      <van-field
+        v-model="fieldValue"
+        is-link
+        readonly
+        label="首页"
+        placeholder="选择启动页"
+        @click="showPicker = true"
+      />
+      <van-popup v-model:show="showPicker" round position="bottom">
+        <van-picker
+          :columns="columns"
+          @cancel="showPicker = false"
+          @confirm="onConfirm"
+        />
+      </van-popup>
+      <!-- </van-cell-group>
+    <van-cell-group inset title="界面设置"> -->
+      <van-cell
+        class="van-cell-sw"
+        center
+        title="隐藏页面返回按钮"
+        label="关闭后，带返回功能的页面左下角不显示返回按钮"
+      >
+        <template #right-icon>
+          <van-switch v-model="hideBackButton" @change="setHideBackButton" />
+        </template>
+      </van-cell>
+    </van-cell-group>
+    <van-cell-group inset title="搜索引擎快捷切换">
+      <van-cell
+        title="选择搜索框下方显示的引擎"
+        label="可在首页搜索框下方点击切换，也可以拖动排序"
+      />
+      <van-cell v-for="item in searchEngines" :key="item" :title="item" center>
+        <template #right-icon>
+          <van-switch
+            :model-value="searchTabs.includes(item)"
+            @update:model-value="(enabled) => toggleSearchEngine(item, enabled)"
+          />
+        </template>
+      </van-cell>
+      <van-cell class="van-cell-sw" center title="深色模式背景" inset>
+        <template #right-icon>
+          <van-switch v-model="autoISBGC" @change="setBGC" />
+        </template>
+      </van-cell>
+    </van-cell-group>
+
+    <!-- <van-cell-group inset title="主页卡片">
+      <van-cell title="整理主页卡片" label="关闭后将不会显示在主页" />
+      <van-cell
+        v-for="card in homeCards"
+        :key="card.id"
+        class="home-card-cell"
+        :class="{ 'home-card-cell--editable': isCustomCard(card) }"
+        :title="card.id"
+        :label="getCardDescription(card)"
+        center
+        @click="editShortcut(card)"
+      >
+        <template #right-icon>
+          <div class="home-card-cell__actions">
+            <van-button v-if="isCustomCard(card)" size="small" plain type="danger" aria-label="删除快捷方式" @click.stop="removeShortcut(card)">删除</van-button>
+            <van-switch v-model="card.enabled" @click.stop @change="saveCardSettings" />
+          </div>
+        </template>
+      </van-cell>
+      <van-cell title="添加快捷方式" is-link @click="openAddShortcut" />
+    </van-cell-group> -->
+
+    <AddShortcut
+      v-model:show="showShortcutPopup"
+      :card="editingShortcut"
+      @saved="onShortcutSaved"
+    />
+
+    <!-- <van-cell-group inset title="编辑器主题">
+      <van-field class="editor-theme-field" label="背景颜色">
+        <template #input>
+          <van-radio-group v-model="editorDarkBackground" class="editor-theme-options" @change="setEditorDarkBackground">
+            <van-radio name="#282c34">深蓝</van-radio>
+            <van-radio name="#141414">深灰</van-radio>
+            <van-radio name="#000000">纯黑</van-radio>
+          </van-radio-group>
+        </template>
+      </van-field>
+    </van-cell-group> -->
+
     <!-- <van-cell-group inset title="Swipe">
       <van-swipe-cell>
         <template #left>
@@ -350,6 +357,7 @@ import {
   getCmSettings,
   setCmSetting,
 } from "@/EditCode/editorSettings.js";
+const version = import.meta.env.PACKAGE_VERSION;
 
 const useGStore = useGistStore();
 const codeHubSyncUrl = ref(localStorage.getItem(CODEHUB_SYNC_URL_KEY) || "");

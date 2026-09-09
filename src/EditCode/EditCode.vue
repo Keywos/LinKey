@@ -45,6 +45,9 @@
                 更多
               </button>
               <div v-if="moreMenuOpen" class="saves-more-menu">
+                 <button class="saves-menu-item" @click="push_setting">
+                  设置
+                </button>
                 <button class="saves-menu-item" @click="openSearchFromMenu">
                   搜索
                 </button>
@@ -1249,12 +1252,12 @@
         <template v-if="syncModalState.phase === 'checking'">
           <button class="sync-btn cancel" @click="closeSyncModal">取消</button>
           <button class="sync-btn confirm disabled" disabled>
-            <span class="sync-spinner white"></span> 正在比对差异…
+            <span class="sync-spinner white"></span> 差异比对…
           </button>
         </template>
         <template v-else-if="syncModalState.phase === 'empty'">
           <button class="sync-btn cancel" @click="closeSyncModal">关闭</button>
-          <button class="sync-btn confirm" @click="openSyncModal()">
+          <button class="sync-btn confirm" @click="openSyncModal(undefined, true)">
             重新检查
           </button>
         </template>
@@ -1707,7 +1710,7 @@ const syncModalState = ref({
   visible: false,
   tab: "upload", // 'upload' | 'download'
   phase: "confirm", // 'checking' | 'confirm' | 'empty' | 'syncing' | 'done'
-  title: "CodeHub CF 云同步",
+  title: "Cloudflare 云同步",
   diff: null,
   uploadItems: [],
   downloadItems: [],
@@ -1719,39 +1722,72 @@ const syncBoxRef = ref(null);
 const syncBoxHeight = ref(null);
 let syncBoxHeightTimer = null;
 
-const animateSyncBoxHeight = async () => {
-  await nextTick();
+const animateSyncBoxHeight = (mutationFn) => {
   const element = syncBoxRef.value;
-  if (!element) return;
+  if (!element) {
+    if (mutationFn) mutationFn();
+    return;
+  }
 
-  const currentHeight = element.getBoundingClientRect().height;
-  const styles = getComputedStyle(element);
-  const verticalPadding =
-    parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
-  const currentContentHeight = Math.max(currentHeight - verticalPadding, 0);
-  const targetHeight = element.scrollHeight - verticalPadding;
+  // 1. 记录切换前的真实高度
+  const startHeight = element.getBoundingClientRect().height;
 
-  syncBoxHeight.value = currentContentHeight;
-  requestAnimationFrame(() => {
-    syncBoxHeight.value = Math.max(targetHeight, 0);
+  // 2. 执行数据更新（如切换 tab / 状态）
+  if (mutationFn) {
+    mutationFn();
+  }
+
+  // 3. 在 DOM 更新完成后测量新的高度并执行平滑过渡
+  nextTick(() => {
+    if (!syncBoxRef.value) return;
+    const el = syncBoxRef.value;
+
+    // 临时锁定为起始高度（若此前有内联高度，先确保平稳）
+    el.style.height = `${startHeight}px`;
+    syncBoxHeight.value = startHeight;
+    void el.offsetHeight; // 强制重排
+
+    // 测量目标高度：清除固定高度测量 scrollHeight/offsetHeight
+    el.style.height = "auto";
+    const targetHeight = el.getBoundingClientRect().height;
+
+    if (Math.abs(startHeight - targetHeight) < 1) {
+      el.style.height = "";
+      syncBoxHeight.value = null;
+      return;
+    }
+
+    // 重置回起始高度以准备 CSS 过渡
+    el.style.height = `${startHeight}px`;
+    syncBoxHeight.value = startHeight;
+    void el.offsetHeight;
+
+    // 下一帧激活动画至 targetHeight
+    requestAnimationFrame(() => {
+      syncBoxHeight.value = targetHeight;
+      el.style.height = `${targetHeight}px`;
+    });
+
+    // 监听 transitionend 事件，动画自然结束时平稳清除内联高度
+    clearTimeout(syncBoxHeightTimer);
+    const onTransitionEnd = (e) => {
+      if (e.target !== el || e.propertyName !== "height") return;
+      el.removeEventListener("transitionend", onTransitionEnd);
+      clearTimeout(syncBoxHeightTimer);
+      // 动画到达 targetHeight 后，保持当前高度不变，平稳移除非必需内联
+      syncBoxHeight.value = null;
+      el.style.height = "";
+    };
+    el.addEventListener("transitionend", onTransitionEnd, { once: true });
+
+    // 超时兜底（防止极端情况下未触发 transitionend）
+    syncBoxHeightTimer = setTimeout(() => {
+      el.removeEventListener("transitionend", onTransitionEnd);
+      syncBoxHeight.value = null;
+      el.style.height = "";
+    }, 450);
   });
-
-  clearTimeout(syncBoxHeightTimer);
-  syncBoxHeightTimer = setTimeout(() => {
-    syncBoxHeight.value = null;
-  }, 300);
 };
-
-watch(
-  () => [
-    syncModalState.value.visible,
-    syncModalState.value.phase,
-    syncModalState.value.tab,
-    syncModalState.value.activeItems.length,
-  ],
-  animateSyncBoxHeight,
-  { flush: "post" },
-);
 
 const closeSyncModal = () => {
   if (syncModalState.value.phase === "syncing") return;
@@ -1760,9 +1796,11 @@ const closeSyncModal = () => {
 
 // 切换弹窗内的标签页（上传 / 下载）
 const switchSyncTab = (tab) => {
-  if (syncModalState.value.phase === "syncing") return;
-  syncModalState.value.tab = tab;
-  updateSyncModalActiveItems();
+  if (syncModalState.value.phase === "syncing" || syncModalState.value.tab === tab) return;
+  animateSyncBoxHeight(() => {
+    syncModalState.value.tab = tab;
+    updateSyncModalActiveItems();
+  });
 };
 
 const updateSyncModalActiveItems = () => {
@@ -1777,7 +1815,7 @@ const updateSyncModalActiveItems = () => {
 };
 
 // 打开统一云同步弹窗（优先比对差异并展示）
-const openSyncModal = async (defaultTab) => {
+const openSyncModal = async (defaultTab, forceFresh = false) => {
   const { url, token } = getCodeHubSyncConfig();
   if (!url || !token) {
     showToast({
@@ -1802,24 +1840,38 @@ const openSyncModal = async (defaultTab) => {
     }
   }
 
-  syncModalState.value = {
-    visible: true,
-    tab: initialTab,
-    phase: "checking",
-    title: "CodeHub CF 云同步",
-    diff: null,
-    uploadItems: [],
-    downloadItems: [],
-    activeItems: [],
-    summary: "",
-    error: null,
-  };
+  // 若弹窗已经在显示中（如上传/下载完成后自动重新检查），包裹在高度动画中平滑过渡到 checking
+  if (syncModalState.value.visible) {
+    animateSyncBoxHeight(() => {
+      syncModalState.value.tab = initialTab;
+      syncModalState.value.phase = "checking";
+      syncModalState.value.diff = null;
+      syncModalState.value.uploadItems = [];
+      syncModalState.value.downloadItems = [];
+      syncModalState.value.activeItems = [];
+      syncModalState.value.summary = "";
+      syncModalState.value.error = null;
+    });
+  } else {
+    syncModalState.value = {
+      visible: true,
+      tab: initialTab,
+      phase: "checking",
+      title: "Cloudflare 云同步",
+      diff: null,
+      uploadItems: [],
+      downloadItems: [],
+      activeItems: [],
+      summary: "",
+      error: null,
+    };
+  }
 
   syncingCodeHub.value = true;
   try {
     // 添加超时保护，防止 checkCodeHubSyncDiff 内部 fetch 无限挂起
     const diff = await Promise.race([
-      checkCodeHubSyncDiff(),
+      checkCodeHubSyncDiff({ forceFresh }),
       new Promise((_, reject) =>
         setTimeout(
           () =>
@@ -1932,16 +1984,18 @@ const openSyncModal = async (defaultTab) => {
     syncModalState.value.downloadItems = formattedDownloadItems;
 
     // 未明确指定标签时，以本次检查结果为准：下载优先，只有上传时切到上传
-    if (!defaultTab) {
-      syncModalState.value.tab =
-        formattedDownloadItems.length > 0
-          ? "download"
-          : formattedUploadItems.length > 0
-            ? "upload"
-            : syncModalState.value.tab;
-    }
+    const nextTab = !defaultTab
+      ? formattedDownloadItems.length > 0
+        ? "download"
+        : formattedUploadItems.length > 0
+          ? "upload"
+          : syncModalState.value.tab
+      : defaultTab;
 
-    updateSyncModalActiveItems();
+    animateSyncBoxHeight(() => {
+      syncModalState.value.tab = nextTab;
+      updateSyncModalActiveItems();
+    });
   } catch (error) {
     if (syncModalState.value.visible) {
       syncModalState.value.phase = "done";
@@ -2549,6 +2603,10 @@ const removePromptTag = (tag) => {
 const push_home = () => {
   router.push("/");
 };
+const push_setting = () => {
+  router.push("/setting");
+};
+ 
 
 async function pasteToPromptInput() {
   try {
@@ -6886,10 +6944,13 @@ onBeforeUnmount(() => {
 .modal-box.sync-box {
   width: min(92vw, 480px);
   max-height: 85vh;
+  min-height: 33vh;
   display: flex;
   flex-direction: column;
   padding: 18px 20px;
-  transition: height 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: height 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .sync-header {
@@ -6993,11 +7054,12 @@ onBeforeUnmount(() => {
 }
 
 .sync-body {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin: 0 -4px 0 2px;
-  min-height: 0;
+  min-height: 190px;
   flex: 1 1 auto;
 }
 
@@ -7005,6 +7067,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
   opacity: 0.75;
   line-height: 1.5;
+  animation: syncContentFade 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .sync-tip-success {
@@ -7019,6 +7082,7 @@ onBeforeUnmount(() => {
   max-height: 48vh;
   overflow-y: auto;
   padding-right: 4px;
+  animation: syncContentFade 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .sync-item-row {
@@ -7233,13 +7297,26 @@ onBeforeUnmount(() => {
 
 .sync-loading-box,
 .sync-empty-box {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 42px 16px;
+  padding: 32px 16px;
   gap: 12px;
   opacity: 0.85;
+  animation: syncContentFade 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes syncContentFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .sync-spinner.large {

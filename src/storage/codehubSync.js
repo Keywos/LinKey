@@ -287,49 +287,98 @@ export const getLocalIndex = async () => {
   };
 };
 
-// 获取并解密云端索引（仅解析加密密文，空云端返回默认空结构，异常抛出详细原因）
-export const fetchAndDecryptRemoteIndex = async (secretKey) => {
-  try {
-    const res = await apiFetch("/index");
-    const data = await res.json();
-    const rawIndex = data?.index;
+// 云端索引短时内存缓存（TTL: 15秒）与并发合并
+let _cachedRemoteIndex = null;
+let _cachedRemoteIndexTime = 0;
+let _pendingRemoteIndexPromise = null;
+const REMOTE_INDEX_CACHE_TTL = 15000;
 
-    // 云端尚未上传过任何索引（初始空桶状态），视为合法空数据
-    if (!rawIndex || (typeof rawIndex === "string" && !rawIndex.trim())) {
-      return {
-        version: 2,
-        updatedAt: 0,
-        keys: {},
-        items: [],
-        tombstones: {},
-      };
-    }
-
-    if (typeof rawIndex === "object") {
-      // 兼容彻底删除旧版本写入的 { index: "密文" } 包装格式。
-      if (typeof rawIndex.index === "string" && rawIndex.index.trim()) {
-        const decrypted = await decryptContent(rawIndex.index, secretKey);
-        return JSON.parse(decrypted);
-      }
-      return rawIndex;
-    }
-
-    if (typeof rawIndex !== "string") {
-      throw new Error("云端索引格式异常：非预期的密文字符串");
-    }
-
-    const decrypted = await decryptContent(rawIndex, secretKey);
-    return JSON.parse(decrypted);
-  } catch (err) {
-    console.error("获取或解密云端索引失败:", err);
-    throw err;
+export const setCachedRemoteIndex = (index) => {
+  if (index && typeof index === "object") {
+    _cachedRemoteIndex = JSON.parse(JSON.stringify(index));
+    _cachedRemoteIndexTime = Date.now();
   }
+};
+
+export const invalidateRemoteIndexCache = () => {
+  _cachedRemoteIndex = null;
+  _cachedRemoteIndexTime = 0;
+  _pendingRemoteIndexPromise = null;
+};
+
+// 获取并解密云端索引（仅解析加密密文，空云端返回默认空结构，异常抛出详细原因）
+export const fetchAndDecryptRemoteIndex = async (secretKey, options = {}) => {
+  const forceFresh = options === true || options?.forceFresh === true;
+  const now = Date.now();
+
+  // 1. 命中短时内存缓存，直接复用，避免在弹窗打开/确认/上传各步骤中重复发 GET /index
+  if (!forceFresh && _cachedRemoteIndex && now - _cachedRemoteIndexTime < REMOTE_INDEX_CACHE_TTL) {
+    return _cachedRemoteIndex;
+  }
+
+  // 2. 避免并发多次拉取
+  if (!forceFresh && _pendingRemoteIndexPromise) {
+    return _pendingRemoteIndexPromise;
+  }
+
+  const task = (async () => {
+    try {
+      const res = await apiFetch("/index");
+      const data = await res.json();
+      const rawIndex = data?.index;
+
+      // 云端尚未上传过任何索引（初始空桶状态），视为合法空数据
+      if (!rawIndex || (typeof rawIndex === "string" && !rawIndex.trim())) {
+        const emptyIndex = {
+          version: 2,
+          updatedAt: 0,
+          keys: {},
+          items: [],
+          tombstones: {},
+        };
+        _cachedRemoteIndex = emptyIndex;
+        _cachedRemoteIndexTime = Date.now();
+        return emptyIndex;
+      }
+
+      let parsed = null;
+      if (typeof rawIndex === "object") {
+        // 兼容彻底删除旧版本写入的 { index: "密文" } 包装格式。
+        if (typeof rawIndex.index === "string" && rawIndex.index.trim()) {
+          const decrypted = await decryptContent(rawIndex.index, secretKey);
+          parsed = JSON.parse(decrypted);
+        } else {
+          parsed = rawIndex;
+        }
+      } else if (typeof rawIndex === "string") {
+        const decrypted = await decryptContent(rawIndex, secretKey);
+        parsed = JSON.parse(decrypted);
+      } else {
+        throw new Error("云端索引格式异常：非预期的密文字符串");
+      }
+
+      _cachedRemoteIndex = parsed;
+      _cachedRemoteIndexTime = Date.now();
+      return parsed;
+    } catch (err) {
+      console.error("获取或解密云端索引失败:", err);
+      throw err;
+    } finally {
+      _pendingRemoteIndexPromise = null;
+    }
+  })();
+
+  if (!forceFresh) {
+    _pendingRemoteIndexPromise = task;
+  }
+  return task;
 };
 
 // 上传：检查时间戳，只有本地比云端更新或云端缺失的文件才上传
 export const uploadCodeHubSnapshot = async (options = {}) => {
   const onProgress = typeof options === "function" ? options : options?.onProgress;
   const { secretKey } = getCodeHubSyncConfig();
+  const uploadStartTime = Date.now();
   const remoteIndex = await fetchAndDecryptRemoteIndex(secretKey);
   const localEntries = await codehubStorage.getAllEntries();
   const localIndex = parseSavesIndex(await codehubStorage.getItem(SAVES_INDEX_KEY));
@@ -483,15 +532,20 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
     [...uploadedLogicalIds].filter((id) => !failedLogicalIds.has(id)),
   );
 
-  // 在生成并上传最新云端索引前，重新拉取一次云端最新索引，防止上传文件耗时期间其他设备写入了新墓碑或文件导致被覆盖
+  // 在生成并上传最新云端索引前：
+  // 仅当上传条目较多（> 20 项）或上传耗时较长（> 15 秒）时，才重新向云端发请求校验；
+  // 对于日常少量文件同步（通常耗时仅数百毫秒），直接复用已持有的 remoteIndex，避免冗余网络往返
   let latestRemoteIndex = remoteIndex;
-  try {
-    const refreshedRemote = await fetchAndDecryptRemoteIndex(secretKey);
-    if (refreshedRemote) {
-      latestRemoteIndex = refreshedRemote;
+  const uploadDuration = Date.now() - uploadStartTime;
+  if (entriesToUpload.length > 20 || uploadDuration > 15000) {
+    try {
+      const refreshedRemote = await fetchAndDecryptRemoteIndex(secretKey, { forceFresh: true });
+      if (refreshedRemote) {
+        latestRemoteIndex = refreshedRemote;
+      }
+    } catch (refreshErr) {
+      console.warn("上传完成时拉取最新云端索引失败，将使用初始索引合并:", refreshErr);
     }
-  } catch (refreshErr) {
-    console.warn("上传完成时拉取最新云端索引失败，将使用初始索引合并:", refreshErr);
   }
   const latestRemoteIndexData = parseSavesIndex(latestRemoteIndex);
   const latestRemoteKeys = new Set(
@@ -608,6 +662,10 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
     headers: { "Content-Type": "text/plain; charset=utf-8" },
     body: await encryptContent(indexJsonStr, secretKey),
   });
+
+  // ★ 写入云端成功后，立即将本地刚生成的最新 newIndex 注入内存缓存，
+  // 使得随后的 openSyncModal() 或 checkCodeHubSyncDiff() 无需再向云端发 GET /index 重复拉取刚上传的数据
+  setCachedRemoteIndex(newIndex);
 
   // 上传云端成功后，同步将合并后的墓碑和最新的 items 回写到本地 IndexedDB，
   // 避免本地索引与云端索引存在细微差异导致反复触发“有内容需上传”的假报警
@@ -777,10 +835,35 @@ export const restoreCodeHubSnapshot = async (options = {}) => {
     updatedAt: Date.now(),
   });
 
+  // 下载完成后，将已知的最新 remoteIndex 保持在缓存中
+  setCachedRemoteIndex(remoteIndex);
+
   return {
     downloaded: new Set(entriesToDownload.map(getLogicalFileId)).size,
     total: new Set(remoteEntries.map(getLogicalFileId)).size,
   };
+};
+
+/**
+ * 格式化时间差为可读文本（秒 / 分钟 / 小时 / 天）
+ * @param {number} diffMs 时间差（毫秒）
+ * @returns {string} 如 "12秒"、"5分钟"、"2小时"、"3天"
+ */
+export const formatTimeDiff = (diffMs) => {
+  const totalSeconds = Math.max(1, Math.round(Math.abs(diffMs) / 1000));
+  if (totalSeconds < 60) {
+    return `${totalSeconds}秒`;
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  if (minutes < 60) {
+    return `${minutes}分钟`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}小时`;
+  }
+  const days = Math.floor(hours / 24);
+  return `${days}天`;
 };
 
 /**
@@ -796,13 +879,12 @@ export const restoreCodeHubSnapshot = async (options = {}) => {
  *   localFiles: Array
  * }
  */
-export const checkCodeHubSyncDiff = async () => {
+export const checkCodeHubSyncDiff = async (options = {}) => {
   const { url, token, secretKey } = getCodeHubSyncConfig();
   if (!url || !token) return null;
 
-  const [localIndex, remoteIndex, localKeysArr] = await Promise.all([
-    getLocalIndex(),
-    fetchAndDecryptRemoteIndex(secretKey),
+  const [remoteIndex, localKeysArr] = await Promise.all([
+    fetchAndDecryptRemoteIndex(secretKey, options),
     codehubStorage.getAllKeys(),
   ]);
 
@@ -838,10 +920,10 @@ export const checkCodeHubSyncDiff = async () => {
         id: item.id,
         name: item.name || "未命名文件",
         reason: !r
-          ? "云端缺失"
+          ? "未上传云端"
           : isNameChanged
             ? "本地重命名"
-            : `本地更新 (相差 ${Math.round((lTime - rTime) / 1000)}秒)`,
+            : `本地更新 (相差 ${formatTimeDiff(lTime - rTime)})`,
         localUpdatedAt: lTime,
         localTimeStr: lTime ? new Date(lTime).toLocaleString() : "无",
         remoteUpdatedAt: rTime,
@@ -868,7 +950,7 @@ export const checkCodeHubSyncDiff = async () => {
           ? "本地缺失"
           : isNameChanged
             ? "云端重命名"
-            : `云端更新 (相差 ${Math.round((rTime - lTime) / 1000)}秒)`,
+            : `云端更新 (相差 ${formatTimeDiff(rTime - lTime)})`,
         remoteUpdatedAt: rTime,
         remoteTimeStr: rTime ? new Date(rTime).toLocaleString() : "无",
         localUpdatedAt: lTime,
@@ -1108,6 +1190,7 @@ export const apiDeleteFileFromCloud = async (id, options = {}) => {
           headers: { "Content-Type": "text/plain; charset=utf-8" },
           body: encryptedIndex,
         });
+        invalidateRemoteIndexCache();
       }
     }
     onProgress?.({ step: "done", message: "云端已彻底删除完毕" });
@@ -1204,6 +1287,7 @@ export const apiDeleteMultipleFilesFromCloud = async (ids = [], options = {}) =>
           headers: { "Content-Type": "text/plain; charset=utf-8" },
           body: encryptedIndex,
         });
+        invalidateRemoteIndexCache();
       }
     }
     onProgress?.({ step: "done", message: "云端批量删除完成" });
