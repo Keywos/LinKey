@@ -630,30 +630,7 @@
             </Transition>
           </template>
           <div class="saves-footers">
-            <!-- <button
-              class="saves-sync-btn saves-trash-btn"
-              @click.stop="openTrashModal"
-              title="管理被墓碑标记的已删除文件（保留60天内可恢复）"
-            >
-              回收站{{ trashList.length ? ` (${trashList.length})` : "" }}
-            </button>
-            <button class="saves-sync-btn" @click.stop="push_home">
-              返回首页
-            </button>
-            <button
-              class="saves-sync-btn"
-              :disabled="backupInProgress"
-              @click.stop="backupDatabase"
-            >
-              {{ backupInProgress ? "备份中…" : "备份" }}
-            </button>
-            <button
-              class="saves-sync-btn"
-              :disabled="restoreInProgress"
-              @click.stop="triggerBackupRestore"
-            >
-              {{ restoreInProgress ? "恢复中…" : "恢复备份" }}
-            </button> -->
+           
           </div>
         </div>
       </div>
@@ -1083,12 +1060,19 @@
           <span class="sync-title">{{ syncModalState.title }}</span>
           <span
             v-if="
+              syncModalState.tab !== 'history' &&
               syncModalState.phase !== 'checking' &&
               syncModalState.phase !== 'empty'
             "
             class="sync-count-tag"
           >
             {{ syncModalState.activeItems.length }} 项
+          </span>
+          <span
+            v-else-if="syncModalState.tab === 'history'"
+            class="sync-count-tag"
+          >
+            {{ autoSyncLogs.length }} 条
           </span>
         </div>
         <button
@@ -1101,7 +1085,7 @@
         </button>
       </div>
 
-      <!-- 上传 / 下载 Tab 切换导航 -->
+      <!-- 上传 / 下载 / 自动同步历史 Tab 切换导航 -->
       <div class="sync-tab-nav">
         <button
           class="sync-tab-btn"
@@ -1109,7 +1093,7 @@
           :disabled="syncModalState.phase === 'syncing'"
           @click="switchSyncTab('upload')"
         >
-          <span>上传到云端</span>
+          <span>上传</span>
           <span
             v-if="syncModalState.uploadItems.length > 0"
             class="sync-tab-badge"
@@ -1123,7 +1107,7 @@
           :disabled="syncModalState.phase === 'syncing'"
           @click="switchSyncTab('download')"
         >
-          <span>从云端下载</span>
+          <span>下载</span>
           <span
             v-if="syncModalState.downloadItems.length > 0"
             class="sync-tab-badge"
@@ -1131,12 +1115,88 @@
             {{ syncModalState.downloadItems.length }}
           </span>
         </button>
+        <button
+          class="sync-tab-btn"
+          :class="{ active: syncModalState.tab === 'history' }"
+          :disabled="syncModalState.phase === 'syncing'"
+          @click="switchSyncTab('history')"
+        >
+          <span>自动</span>
+          <span
+            v-if="autoSyncLogs.length > 0"
+            class="sync-tab-badge1"
+          >
+            {{ autoSyncLogs.length }}
+          </span>
+        </button>
       </div>
 
       <div class="sync-body">
+        <!-- 自动同步历史视图 -->
+        <template v-if="syncModalState.tab === 'history'">
+          <div v-if="autoSyncLogs.length === 0" class="sync-empty-box">
+            <div class="sync-empty-icon">📝</div>
+            <div class="sync-empty-text">暂无自动同步历史日志，需在设置里打开，最多保留60条</div>
+          </div>
+          <template v-else>
+            <div class="sync-tip">
+              <span>自动同步历史记录（最多保存 60 条，保存在本地）</span>
+            </div>
+            <div class="sync-item-list">
+              <div
+                v-for="log in autoSyncLogs"
+                :key="log.id"
+                class="sync-item-row"
+                :class="log.type === 'error' ? 'status-error' : 'status-success'"
+              >
+                <div class="sync-item-info">
+                  <div class="sync-item-top">
+                    <span class="sync-item-name" :title="log.name || log.summary">
+                      {{ log.name || log.summary }}
+                    </span>
+                    <span
+                      class="sync-item-type-badge"
+                      :class="log.actionType === '下载' ? '下载' : log.actionType === '上传' ? '新增' : log.type === 'error' ? 'error' : '列表'"
+                    >
+                      {{ log.actionType || (log.type === "success" ? "同步" : "失败") }}
+                    </span>
+                  </div>
+                  <div class="sync-item-reason" :title="log.details || log.summary">
+                    {{ log.details || log.summary }}
+                  </div>
+                </div>
+                <div class="sync-item-status">
+                  <span
+                    v-if="log.type === 'success'"
+                    class="status-badge success status-badge-time"
+                  >
+                    <span class="time-line-2">{{ formatLogDateParts(log.time).date }}</span>
+                    <span class="time-line-2">{{ formatLogDateParts(log.time).time }}</span>
+                  </span>
+                  <span
+                    v-else-if="log.type === 'error'"
+                    class="status-badge error status-badge-time"
+                    :title="log.details"
+                  >
+                    <span class="time-line-2">{{ formatLogDateParts(log.time).date }}</span>
+                    <span class="time-line-2">{{ formatLogDateParts(log.time).time }}</span>
+                  </span>
+                  <span
+                    v-else
+                    class="status-badge pending status-badge-time"
+                  >
+                    <span class="time-line-2">{{ formatLogDateParts(log.time).date }}</span>
+                    <span class="time-line-2">{{ formatLogDateParts(log.time).time }}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+
         <!-- 检查中骨架/懒加载 -->
         <div
-          v-if="syncModalState.phase === 'checking'"
+          v-else-if="syncModalState.phase === 'checking'"
           class="sync-loading-box"
         >
           <span class="sync-spinner large"></span>
@@ -1252,7 +1312,17 @@
       </div>
 
       <div class="sync-footer">
-        <template v-if="syncModalState.phase === 'checking'">
+        <template v-if="syncModalState.tab === 'history'">
+           <button class="sync-btn cancel" @click="closeSyncModal">关闭</button><button
+            class="sync-btn cancel confirm"
+            :disabled="autoSyncLogs.length === 0"
+            @click="handleClearAutoSyncLogs"
+          >
+            清空日志
+          </button>
+         
+        </template>
+        <template v-else-if="syncModalState.phase === 'checking'">
           <button class="sync-btn cancel" @click="closeSyncModal">取消</button>
           <button class="sync-btn confirm disabled" disabled>
             <span class="sync-spinner white"></span> 差异比对…
@@ -1355,6 +1425,11 @@ import {
   apiDeleteMultipleFilesFromCloud,
   fetchCloudTrashInfo,
   isCodeHubSyncAutoCheckEnabled,
+  isCodeHubAutoSyncEnabled,
+  getCodeHubAutoSyncInterval,
+  getCodeHubAutoSyncLogs,
+  addCodeHubAutoSyncLog,
+  clearCodeHubAutoSyncLogs,
 } from "@/storage/codehubSync.js";
 
 import JSZip from "jszip";
@@ -1372,8 +1447,142 @@ const cmStore = useCmStore();
 const syncingCodeHub = ref(false);
 const syncDiffInfo = ref(null); // 云端与本地差异信息
 
+// 自动云同步逻辑（后台静默同步并通知）
+const runAutoCloudSync = async () => {
+  if (
+    !isCodeHubAutoSyncEnabled() ||
+    syncingCodeHub.value ||
+    syncModalState.value.visible
+  ) {
+    return;
+  }
+  const { url, token } = getCodeHubSyncConfig();
+  if (!url || !token) return;
+
+  syncingCodeHub.value = true;
+  try {
+    // 1. 差异比对
+    const diff = await checkCodeHubSyncDiff();
+    if (!diff || !diff.hasChanges) {
+      syncDiffInfo.value = null;
+      return;
+    }
+    syncDiffInfo.value = diff;
+
+    // 2. 判断冲突：若同时有需要下载和上传的非同名项/同名项
+    // 优先处理需要下载的更新，或者同时处理
+    let downloadedCount = 0;
+    let uploadedCount = 0;
+    const summaryParts = [];
+    const changedFiles = [];
+
+    // 如果有需要从云端下载的文件
+    if (diff.downloadItems && diff.downloadItems.length > 0) {
+      clearTimeout(autosaveTimer);
+      isDirty = false;
+      const downloadNames = diff.downloadItems
+        .map((it) => it.name || it.id)
+        .filter(Boolean);
+      changedFiles.push(...downloadNames);
+
+      const res = await restoreCodeHubSnapshot();
+      downloadedCount = res.downloaded || 0;
+      if (downloadedCount > 0) {
+        summaryParts.push(`已下载 ${downloadedCount} 个文件`);
+      }
+      if (currentItemId.value) {
+        await reloadCurrentItemFromStorage();
+      }
+    }
+
+    // 处理云端已彻底删除需本地清理的项
+    if (
+      diff.trashPendingLocalCleanupItems &&
+      diff.trashPendingLocalCleanupItems.length > 0
+    ) {
+      for (const item of diff.trashPendingLocalCleanupItems) {
+        await permanentlyDeleteCodeHubTombstone(item.id);
+      }
+      summaryParts.push(
+        `已清理本地废弃文件 ${diff.trashPendingLocalCleanupItems.length} 项`,
+      );
+    }
+
+    // 重新比对本地待上传项（防止覆盖刚下载的文件）
+    const postDownloadDiff = await checkCodeHubSyncDiff();
+    if (
+      postDownloadDiff &&
+      (postDownloadDiff.localNewCount > 0 ||
+        postDownloadDiff.trashPendingUploadItems?.length > 0 ||
+        postDownloadDiff.gistListUploadNeeded ||
+        postDownloadDiff.tombstoneChanged)
+    ) {
+      const uploadNames = (postDownloadDiff.uploadItems || [])
+        .map((it) => it.name || it.id)
+        .filter(Boolean);
+      changedFiles.push(...uploadNames);
+
+      const uploadRes = await uploadCodeHubSnapshot();
+      uploadedCount = uploadRes.uploaded || 0;
+      if (uploadedCount > 0) {
+        summaryParts.push(`已上传 ${uploadedCount} 个文件`);
+      }
+      if (uploadRes.deleted > 0) {
+        summaryParts.push(`已清理云端文件 ${uploadRes.deleted} 个`);
+      }
+      if (summaryParts.length === 0 && uploadRes.indexChanged) {
+        summaryParts.push("已同步索引记录");
+      }
+    }
+
+    await loadSaves();
+    syncDiffInfo.value = null;
+
+    if (summaryParts.length > 0) {
+      const summaryText = summaryParts.join("，");
+      const uniqueNames = [...new Set(changedFiles)];
+      const fileSummary =
+        uniqueNames.length > 0
+          ? uniqueNames.slice(0, 3).join(", ") +
+            (uniqueNames.length > 3 ? ` 等 ${uniqueNames.length} 个文件` : "")
+          : "";
+      const primaryName = uniqueNames[0] || summaryParts[0] || "云端自动同步";
+      const detailsText = fileSummary || summaryText;
+
+      addCodeHubAutoSyncLog({
+        type: "success",
+        name: primaryName,
+        actionType: downloadedCount > 0 && uploadedCount > 0 ? "双向同步" : downloadedCount > 0 ? "下载" : "上传",
+        summary: summaryText,
+        details: detailsText,
+        files: uniqueNames,
+      });
+      showToast({
+        message: `自动云同步完成：${summaryText}`,
+        duration: 3500,
+      });
+    }
+  } catch (err) {
+    console.debug("自动云同步失败:", err);
+    addCodeHubAutoSyncLog({
+      type: "error",
+      name: "自动云同步",
+      actionType: "失败",
+      summary: "自动云同步执行失败",
+      details: err?.message || String(err),
+      files: [],
+    });
+  } finally {
+    syncingCodeHub.value = false;
+  }
+};
+
 const checkRemoteSync = async (silent = false) => {
   try {
+    if (isCodeHubAutoSyncEnabled()) {
+      await runAutoCloudSync();
+      return;
+    }
     const diff = await checkCodeHubSyncDiff();
     if (diff && diff.hasChanges) {
       syncDiffInfo.value = diff;
@@ -1443,12 +1652,32 @@ const checkRemoteSync = async (silent = false) => {
   }
 };
 
+let autoSyncTimer = null;
+
+const startAutoSyncTimer = () => {
+  stopAutoSyncTimer();
+  if (!isCodeHubAutoSyncEnabled()) return;
+  const intervalSeconds = getCodeHubAutoSyncInterval();
+  const intervalMs = Math.max(10, Math.min(3600, intervalSeconds)) * 1000;
+  autoSyncTimer = setInterval(() => {
+    if (document.visibilityState === "visible") {
+      runAutoCloudSync();
+    }
+  }, intervalMs);
+};
+
+const stopAutoSyncTimer = () => {
+  if (autoSyncTimer) {
+    clearInterval(autoSyncTimer);
+    autoSyncTimer = null;
+  }
+};
+
 // ============================================
 // 回收站（已删除文件管理 / 60天墓碑机制）
 // ============================================
 const trashModalVisible = ref(false);
 const trashList = ref([]);
-const isRestoringTrash = ref(false);
 
 // 回收站当前正在执行的操作状态
 const trashAction = ref({
@@ -1498,6 +1727,16 @@ const formatTrashDate = (timestamp) => {
   const d = new Date(timestamp);
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+const formatLogDateParts = (timestamp) => {
+  if (!timestamp) return { date: "-", time: "" };
+  const d = new Date(timestamp);
+  const pad = (n) => String(n).padStart(2, "0");
+  return {
+    date: `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
 };
 
 const handleRestoreTrashItem = async (item) => {
@@ -1711,10 +1950,24 @@ const handleClearAllTrash = async () => {
   }
 };
 
+// 自动同步历史日志
+const autoSyncLogs = ref([]);
+const loadAutoSyncLogs = () => {
+  autoSyncLogs.value = getCodeHubAutoSyncLogs();
+};
+
+const handleClearAutoSyncLogs = async () => {
+  const confirmed = await askConfirm("确定要清空自动同步历史日志吗？");
+  if (!confirmed) return;
+  clearCodeHubAutoSyncLogs();
+  loadAutoSyncLogs();
+  showToast("已清空自动同步历史日志");
+};
+
 // 同步确认与进度弹窗状态
 const syncModalState = ref({
   visible: false,
-  tab: "upload", // 'upload' | 'download'
+  tab: "upload", // 'upload' | 'download' | 'history'
   phase: "confirm", // 'checking' | 'confirm' | 'empty' | 'syncing' | 'done'
   title: "Cloudflare 云同步",
   diff: null,
@@ -1807,6 +2060,9 @@ const switchSyncTab = (tab) => {
     syncModalState.value.tab === tab
   )
     return;
+  if (tab === "history") {
+    loadAutoSyncLogs();
+  }
   animateSyncBoxHeight(() => {
     syncModalState.value.tab = tab;
     updateSyncModalActiveItems();
@@ -1814,6 +2070,10 @@ const switchSyncTab = (tab) => {
 };
 
 const updateSyncModalActiveItems = () => {
+  if (syncModalState.value.tab === "history") {
+    syncModalState.value.activeItems = [];
+    return;
+  }
   const isUpload = syncModalState.value.tab === "upload";
   const items = isUpload
     ? syncModalState.value.uploadItems
@@ -1826,6 +2086,11 @@ const updateSyncModalActiveItems = () => {
 
 // 打开统一云同步弹窗（优先比对差异并展示）
 const openSyncModal = async (defaultTab, forceFresh = false) => {
+  if (syncingCodeHub.value && !syncModalState.value.visible) {
+    showToast("正在自动同步中，请稍候…");
+    return;
+  }
+  loadAutoSyncLogs();
   const { url, token } = getCodeHubSyncConfig();
   if (!url || !token) {
     showToast({
@@ -1835,16 +2100,28 @@ const openSyncModal = async (defaultTab, forceFresh = false) => {
     return;
   }
 
-  // 计算默认优先展示的标签页：优先展示有待处理项的一侧
+  // 记录弹窗打开前的状态：仅在首次打开时自动切换 Tab，重新检查（弹窗已打开）时保持当前 Tab
+  const wasVisible = syncModalState.value.visible;
+
+  // 计算默认优先展示的标签页：优先展示有待处理项的一侧；若无变动但有自动同步历史则优先展示“自动”Tab
   let initialTab = defaultTab;
 
-  if (!initialTab) {
+  if (!initialTab && wasVisible) {
+    // 重新检查：保持当前 Tab，不自动切换
+    initialTab = syncModalState.value.tab;
+  } else if (!initialTab) {
     if (syncDiffInfo.value) {
       if (syncDiffInfo.value.remoteNewCount > 0) {
         initialTab = "download";
+      } else if (syncDiffInfo.value.localNewCount > 0) {
+        initialTab = "upload";
+      } else if (autoSyncLogs.value.length > 0) {
+        initialTab = "history";
       } else {
         initialTab = "upload";
       }
+    } else if (autoSyncLogs.value.length > 0) {
+      initialTab = "history";
     } else {
       initialTab = "upload";
     }
@@ -1993,13 +2270,18 @@ const openSyncModal = async (defaultTab, forceFresh = false) => {
     syncModalState.value.uploadItems = formattedUploadItems;
     syncModalState.value.downloadItems = formattedDownloadItems;
 
-    // 未明确指定标签时，以本次检查结果为准：下载优先，只有上传时切到上传
+    // 未明确指定标签时：下载优先，其次上传；若均无变动且自动历史有记录时，自动跳转到“自动”Tab
+    // 弹窗已打开（重新检查）时保持当前 Tab 不变，仅首次打开时自动选择
     const nextTab = !defaultTab
-      ? formattedDownloadItems.length > 0
-        ? "download"
-        : formattedUploadItems.length > 0
-          ? "upload"
-          : syncModalState.value.tab
+      ? wasVisible
+        ? syncModalState.value.tab
+        : formattedDownloadItems.length > 0
+          ? "download"
+          : formattedUploadItems.length > 0
+            ? "upload"
+            : autoSyncLogs.value.length > 0
+              ? "history"
+              : syncModalState.value.tab
       : defaultTab;
 
     animateSyncBoxHeight(() => {
@@ -2016,10 +2298,6 @@ const openSyncModal = async (defaultTab, forceFresh = false) => {
   }
 };
 
-// 兼容旧调用的入口函数
-// const syncCodeHub = async (action = "upload") => {
-//   openSyncModal(action === "restore" ? "download" : action);
-// };
 
 const executeSyncModal = async () => {
   if (syncModalState.value.phase !== "confirm") return;
@@ -2919,6 +3197,9 @@ watch(moreMenuOpen, (isOpen) => {
 
 const toggleToolbar = () => {
   moreMenuOpen.value = !moreMenuOpen.value;
+  if (moreMenuOpen.value) {
+    loadTrashList();
+  }
 };
 
 const runMoreAction = async (action) => {
@@ -3854,6 +4135,7 @@ const deleteSingleItem = async (item) => {
   }
   savedItems.value = savedItems.value.filter((i) => i.id !== item.id);
   await persistIndex();
+  await loadTrashList();
 
   if (currentItemId.value === item.id) {
     await setCurrentItem(null, "");
@@ -3892,6 +4174,7 @@ const deleteSelected = async () => {
   );
   checkedIds.value.clear();
   await persistIndex();
+  await loadTrashList();
 
   if (currentItemWasDeleted) {
     await setCurrentItem(null, "");
@@ -4376,6 +4659,12 @@ const flushCurrentSave = async () => {
 const handleVisibilityChange = () => {
   if (document.visibilityState === "hidden") {
     flushCurrentSave();
+    stopAutoSyncTimer();
+  } else if (document.visibilityState === "visible") {
+    startAutoSyncTimer();
+    if (isCodeHubAutoSyncEnabled()) {
+      runAutoCloudSync();
+    }
   }
 };
 const handleBeforeUnload = () => {
@@ -5050,6 +5339,9 @@ onMounted(async () => {
   if (isCodeHubSyncAutoCheckEnabled()) {
     checkRemoteSync();
   }
+
+  // ★ 启动当前页定时自动云同步
+  startAutoSyncTimer();
 });
 
 // ★ 面板打开/关闭时，打开后自动滚动到当前项
@@ -5336,6 +5628,7 @@ watchEffect(() => {
 });
 
 onBeforeUnmount(() => {
+  stopAutoSyncTimer();
   document.removeEventListener("pointerdown", onMoreMenuClickOutside);
   document.removeEventListener("keydown", onMoreMenuKeydown);
   cleanupDragListeners();
@@ -5499,19 +5792,13 @@ onBeforeUnmount(() => {
   gap: 7px;
   border: 1px solid rgba(128, 128, 128, 0.12);
   border-radius: 23px;
-  background: rgba(248, 249, 252, 0.78);
+  background: rgba(248, 249, 252, 0.139);
   box-shadow: 0 10px 24px rgba(30, 35, 55, 0.16);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
 
-@media (prefers-color-scheme: dark) {
-  .saves-more-menu {
-    background: rgba(37, 41, 56, 0.05);
-    border-color: rgba(220, 225, 240, 0.06);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
-  }
-}
+
 
 .saves-menu-item {
   min-height: 30px;
@@ -5523,7 +5810,18 @@ onBeforeUnmount(() => {
   text-align: center;
   font-size: 12px;
   cursor: pointer;
-  background: #8f98c606;
+  background: #8f98c611;
+}
+
+@media (prefers-color-scheme: dark) {
+  .saves-more-menu {
+    background: rgba(37, 41, 56, 0.05);
+    border-color: rgba(220, 225, 240, 0.06);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  }
+  .saves-menu-item {
+     background: #8f98c609;
+  }
 }
 
 .saves-menu-item:hover {
@@ -7082,11 +7380,22 @@ onBeforeUnmount(() => {
   font-size: 11px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: #ff5252;
+  background: #ff5252f4;
   color: #ffffff;
   font-weight: 600;
   line-height: 1.3;
 }
+
+.sync-tab-badge1 {
+  font-size: 11px;
+  /* padding: 1px 6px; */
+  border-radius: 999px;
+  /* background: #ff5252f4; */
+  /* color: #ffffff; */
+  font-weight: 600;
+  line-height: 1.3;
+}
+
 
 .sync-close-btn:hover {
   opacity: 1;
@@ -7251,6 +7560,26 @@ onBeforeUnmount(() => {
   background: rgba(220, 53, 69, 0.15);
   color: #dc3545;
   cursor: help;
+}
+
+.status-badge.status-badge-time {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 3px 12px;
+  line-height: 1.2;
+}
+
+.status-badge.status-badge-time .time-line-1 {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge.status-badge-time .time-line-2 {
+  font-size: 10px;
+  opacity: 0.85;
+  white-space: nowrap;
 }
 
 @keyframes pulseProgress {

@@ -10,7 +10,7 @@ import {
   markCodeHubItemsDeleted,
   TOMBSTONE_RETENTION_MS,
   getTombstoneDeletedAt,
-  getTombstoneInfo,
+  // getTombstoneInfo,
   mergeTombstones,
   areTombstonesEqual,
 } from "@/storage/codehubStorage.js";
@@ -21,6 +21,13 @@ export const CODEHUB_SYNC_TOKEN_KEY = "CodeHubSyncToken";
 export const CODEHUB_SYNC_SECRET_KEY = "CodeHubSyncKey";
 export const CODEHUB_SYNC_KEY_KEY = CODEHUB_SYNC_SECRET_KEY;
 export const CODEHUB_SYNC_AUTO_CHECK_KEY = "CodeHubSyncAutoCheck";
+export const CODEHUB_AUTO_SYNC_KEY = "CodeHubAutoSync";
+export const CODEHUB_AUTO_SYNC_INTERVAL_KEY = "CodeHubAutoSyncInterval";
+export const CODEHUB_AUTO_SYNC_LOGS_KEY = "CodeHubAutoSyncLogs";
+export const DEFAULT_AUTO_SYNC_INTERVAL_SECONDS = 300;
+export const MIN_AUTO_SYNC_INTERVAL_SECONDS = 10; // 自动同步 设置 最小时间 s
+export const MAX_AUTO_SYNC_INTERVAL_SECONDS = 3600; // 最大
+export const MAX_AUTO_SYNC_LOGS = 60;
 export const MAX_SYNC_FILE_SIZE = 50 * 1024 * 1024; // 单个文件最大 50MB
 const SHOW_SAVES_KEY = "SHOW_SAVES_KEY";
 
@@ -37,6 +44,98 @@ export const isCodeHubSyncAutoCheckEnabled = () => {
  */
 export const setCodeHubSyncAutoCheckEnabled = (enabled) => {
   localStorage.setItem(CODEHUB_SYNC_AUTO_CHECK_KEY, enabled ? "1" : "0");
+};
+
+/**
+ * 判断是否开启了“自动云同步”（默认关闭）
+ */
+export const isCodeHubAutoSyncEnabled = () => {
+  const val = localStorage.getItem(CODEHUB_AUTO_SYNC_KEY);
+  return val === "1" || val === "true";
+};
+
+/**
+ * 设置“自动云同步”状态
+ */
+export const setCodeHubAutoSyncEnabled = (enabled) => {
+  localStorage.setItem(CODEHUB_AUTO_SYNC_KEY, enabled ? "1" : "0");
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("codehub-auto-sync-change"));
+  }
+};
+
+/**
+ * 获取自动云同步时间间隔（秒，最小10，最大3600，默认300秒）
+ */
+export const getCodeHubAutoSyncInterval = () => {
+  const raw = localStorage.getItem(CODEHUB_AUTO_SYNC_INTERVAL_KEY);
+  const val = parseInt(raw, 10);
+  if (isNaN(val)) return DEFAULT_AUTO_SYNC_INTERVAL_SECONDS;
+  return Math.min(MAX_AUTO_SYNC_INTERVAL_SECONDS, Math.max(MIN_AUTO_SYNC_INTERVAL_SECONDS, val));
+};
+
+/**
+ * 设置自动云同步时间间隔（秒，最小10，最大3600）
+ */
+export const setCodeHubAutoSyncInterval = (seconds) => {
+  let val = parseInt(seconds, 10);
+  if (isNaN(val) || val < MIN_AUTO_SYNC_INTERVAL_SECONDS) val = MIN_AUTO_SYNC_INTERVAL_SECONDS;
+  else if (val > MAX_AUTO_SYNC_INTERVAL_SECONDS) val = MAX_AUTO_SYNC_INTERVAL_SECONDS;
+  localStorage.setItem(CODEHUB_AUTO_SYNC_INTERVAL_KEY, String(val));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("codehub-auto-sync-change"));
+  }
+  return val;
+};
+
+/**
+ * 获取自动同步历史日志（最多60条）
+ */
+export const getCodeHubAutoSyncLogs = () => {
+  try {
+    const raw = localStorage.getItem(CODEHUB_AUTO_SYNC_LOGS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * 添加一条自动同步日志到本地（最多保留60条）
+ * @param {Object} logEntry
+ * @param {string} logEntry.type 'success' | 'info' | 'warn' | 'error'
+ * @param {string} logEntry.summary 简要描述
+ * @param {string} [logEntry.details] 详细内容
+ * @param {number} [logEntry.time] 时间戳
+ */
+export const addCodeHubAutoSyncLog = (logEntry) => {
+  try {
+    const logs = getCodeHubAutoSyncLogs();
+    const entry = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      time: logEntry.time || Date.now(),
+      type: logEntry.type || "info",
+      summary: logEntry.summary || "",
+      details: logEntry.details || "",
+    };
+    logs.unshift(entry);
+    if (logs.length > MAX_AUTO_SYNC_LOGS) {
+      logs.length = MAX_AUTO_SYNC_LOGS;
+    }
+    localStorage.setItem(CODEHUB_AUTO_SYNC_LOGS_KEY, JSON.stringify(logs));
+    return entry;
+  } catch (e) {
+    console.warn("保存自动同步日志失败:", e);
+  }
+};
+
+/**
+ * 清空自动同步日志
+ */
+export const clearCodeHubAutoSyncLogs = () => {
+  localStorage.removeItem(CODEHUB_AUTO_SYNC_LOGS_KEY);
 };
 
 const isSyncableStoreKey = (key) =>
@@ -291,7 +390,7 @@ export const getLocalIndex = async () => {
 let _cachedRemoteIndex = null;
 let _cachedRemoteIndexTime = 0;
 let _pendingRemoteIndexPromise = null;
-const REMOTE_INDEX_CACHE_TTL = 15000;
+const REMOTE_INDEX_CACHE_TTL = 6000;
 
 export const setCachedRemoteIndex = (index) => {
   if (index && typeof index === "object") {

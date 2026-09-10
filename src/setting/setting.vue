@@ -46,6 +46,27 @@
         </template>
       </van-cell>
 
+      <van-cell class="van-cell-sw" center title="自动云同步" label="检测到本地或云端有更新时自动同步并通知" inset>
+        <template #right-icon>
+          <van-switch
+            v-model="codeHubAutoSync"
+            @change="onCodeHubAutoSyncChange"
+          />
+        </template>
+      </van-cell>
+
+      <van-field
+        v-if="codeHubAutoSync"
+        v-model="codeHubAutoSyncInterval"
+        type="digit"
+        label="同步间隔"
+        placeholder="10 - 3600"
+        @blur="onCodeHubAutoSyncIntervalChange"
+        @change="onCodeHubAutoSyncIntervalChange"
+      >
+        <template #extra>10-3600 秒</template>
+      </van-field>
+
     </van-cell-group>
     
     <div style="padding: 0 22px; opacity: 0.6; font-size: 12px">
@@ -347,6 +368,10 @@ import {
   CODEHUB_SYNC_URL_KEY,
   isCodeHubSyncAutoCheckEnabled,
   setCodeHubSyncAutoCheckEnabled,
+  isCodeHubAutoSyncEnabled,
+  setCodeHubAutoSyncEnabled,
+  getCodeHubAutoSyncInterval,
+  setCodeHubAutoSyncInterval,
   testCodeHubSyncConfig,
 } from "@/storage/codehubSync.js";
 // import { defaultHomeCards, getHomeCards, saveHomeCards } from "@/homeCards.js";
@@ -366,10 +391,22 @@ const codeHubSyncToken = ref(
 );
 const codeHubSyncKey = ref(localStorage.getItem(CODEHUB_SYNC_KEY_KEY) || "");
 const codeHubSyncAutoCheck = ref(isCodeHubSyncAutoCheckEnabled());
+const codeHubAutoSync = ref(isCodeHubAutoSyncEnabled());
+const codeHubAutoSyncInterval = ref(getCodeHubAutoSyncInterval());
 
 const onCodeHubSyncAutoCheckChange = (val) => {
   setCodeHubSyncAutoCheckEnabled(val);
   showToast(val ? "已开启自动检查云端更新" : "已关闭自动检查云端更新");
+};
+
+const onCodeHubAutoSyncChange = (val) => {
+  setCodeHubAutoSyncEnabled(val);
+  showToast(val ? "已开启自动云同步" : "已关闭自动云同步");
+};
+
+const onCodeHubAutoSyncIntervalChange = () => {
+  const finalVal = setCodeHubAutoSyncInterval(codeHubAutoSyncInterval.value);
+  codeHubAutoSyncInterval.value = finalVal;
 };
 
 const savingSync = ref(false);
