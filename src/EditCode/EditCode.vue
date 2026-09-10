@@ -1060,7 +1060,7 @@
           <span class="sync-title">{{ syncModalState.title }}</span>
           <span
             v-if="
-              syncModalState.tab !== 'history' &&
+              !isHistoryTab &&
               syncModalState.phase !== 'checking' &&
               syncModalState.phase !== 'empty'
             "
@@ -1069,7 +1069,7 @@
             {{ syncModalState.activeItems.length }} 项
           </span>
           <span
-            v-else-if="syncModalState.tab === 'history'"
+            v-else-if="isHistoryTab"
             class="sync-count-tag"
           >
             {{ autoSyncLogs.length }} 条
@@ -1116,6 +1116,7 @@
           </span>
         </button>
         <button
+          v-if="autoSyncEnabled"
           class="sync-tab-btn"
           :class="{ active: syncModalState.tab === 'history' }"
           :disabled="syncModalState.phase === 'syncing'"
@@ -1133,7 +1134,7 @@
 
       <div class="sync-body">
         <!-- 自动同步历史视图 -->
-        <template v-if="syncModalState.tab === 'history'">
+        <template v-if="isHistoryTab">
           <div v-if="autoSyncLogs.length === 0" class="sync-empty-box">
             <div class="sync-empty-icon">📝</div>
             <div class="sync-empty-text">暂无自动同步历史日志，需在设置里打开，最多保留60条</div>
@@ -1312,7 +1313,7 @@
       </div>
 
       <div class="sync-footer">
-        <template v-if="syncModalState.tab === 'history'">
+        <template v-if="isHistoryTab">
            <button class="sync-btn cancel" @click="closeSyncModal">关闭</button><button
             class="sync-btn cancel confirm"
             :disabled="autoSyncLogs.length === 0"
@@ -1956,6 +1957,14 @@ const loadAutoSyncLogs = () => {
   autoSyncLogs.value = getCodeHubAutoSyncLogs();
 };
 
+// 自动云同步开关状态:设置里关闭时不展示弹窗内的“自动”Tab
+const autoSyncEnabled = ref(isCodeHubAutoSyncEnabled());
+
+const handleAutoSyncEnabledChange = () => {
+  // 仅同步最新开关状态,弹窗 Tab 的纠正由 watch 统一处理
+  autoSyncEnabled.value = isCodeHubAutoSyncEnabled();
+};
+
 const handleClearAutoSyncLogs = async () => {
   const confirmed = await askConfirm("确定要清空自动同步历史日志吗？");
   if (!confirmed) return;
@@ -2060,6 +2069,8 @@ const switchSyncTab = (tab) => {
     syncModalState.value.tab === tab
   )
     return;
+  // 设置里关闭自动同步时,禁止切到“自动”Tab
+  if (tab === "history" && !autoSyncEnabled.value) return;
   if (tab === "history") {
     loadAutoSyncLogs();
   }
@@ -2084,6 +2095,23 @@ const updateSyncModalActiveItems = () => {
   }
 };
 
+// “自动”历史视图是否可见:设置里关闭自动同步时一律不展示
+const isHistoryTab = computed(
+  () => autoSyncEnabled.value && syncModalState.value.tab === "history",
+);
+
+// 关闭自动同步(或外部改了开关)时,把停留在“自动”Tab 的弹窗纠正回“上传”Tab
+watch(autoSyncEnabled, (enabled) => {
+  if (
+    !enabled &&
+    syncModalState.value.tab === "history" &&
+    syncModalState.value.phase !== "syncing"
+  ) {
+    syncModalState.value.tab = "upload";
+    updateSyncModalActiveItems();
+  }
+});
+
 // 打开统一云同步弹窗（优先比对差异并展示）
 const openSyncModal = async (defaultTab, forceFresh = false) => {
   if (syncingCodeHub.value && !syncModalState.value.visible) {
@@ -2091,6 +2119,7 @@ const openSyncModal = async (defaultTab, forceFresh = false) => {
     return;
   }
   loadAutoSyncLogs();
+  autoSyncEnabled.value = isCodeHubAutoSyncEnabled();
   const { url, token } = getCodeHubSyncConfig();
   if (!url || !token) {
     showToast({
@@ -2115,16 +2144,21 @@ const openSyncModal = async (defaultTab, forceFresh = false) => {
         initialTab = "download";
       } else if (syncDiffInfo.value.localNewCount > 0) {
         initialTab = "upload";
-      } else if (autoSyncLogs.value.length > 0) {
+      } else if (autoSyncEnabled.value && autoSyncLogs.value.length > 0) {
         initialTab = "history";
       } else {
         initialTab = "upload";
       }
-    } else if (autoSyncLogs.value.length > 0) {
+    } else if (autoSyncEnabled.value && autoSyncLogs.value.length > 0) {
       initialTab = "history";
     } else {
       initialTab = "upload";
     }
+  }
+
+  // 设置里关闭了自动同步时,强制回退到“上传”Tab(不展示“自动”Tab)
+  if (!autoSyncEnabled.value && initialTab === "history") {
+    initialTab = "upload";
   }
 
   // 若弹窗已经在显示中（如上传/下载完成后自动重新检查），包裹在高度动画中平滑过渡到 checking
@@ -2279,13 +2313,17 @@ const openSyncModal = async (defaultTab, forceFresh = false) => {
           ? "download"
           : formattedUploadItems.length > 0
             ? "upload"
-            : autoSyncLogs.value.length > 0
+            : autoSyncEnabled.value && autoSyncLogs.value.length > 0
               ? "history"
               : syncModalState.value.tab
       : defaultTab;
 
+    // 设置里关闭了自动同步时,禁止跳转到“自动”Tab
+    const safeNextTab =
+      !autoSyncEnabled.value && nextTab === "history" ? "upload" : nextTab;
+
     animateSyncBoxHeight(() => {
-      syncModalState.value.tab = nextTab;
+      syncModalState.value.tab = safeNextTab;
       updateSyncModalActiveItems();
     });
   } catch (error) {
@@ -5321,6 +5359,8 @@ onMounted(async () => {
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("beforeunload", handleBeforeUnload);
   window.addEventListener("pointerdown", recordClickPosition, true);
+  window.addEventListener("codehub-auto-sync-change", handleAutoSyncEnabledChange);
+  window.addEventListener("storage", handleAutoSyncEnabledChange);
 
   // 监听 saves-list 宽度变化，动态计算 URL 截断长度
   savesListObserver = new ResizeObserver((entries) => {
@@ -5640,6 +5680,8 @@ onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   window.removeEventListener("beforeunload", handleBeforeUnload);
   window.removeEventListener("pointerdown", recordClickPosition, true);
+  window.removeEventListener("codehub-auto-sync-change", handleAutoSyncEnabledChange);
+  window.removeEventListener("storage", handleAutoSyncEnabledChange);
   window.removeEventListener("editor-theme-change", updateEditorPageBackground);
   window.removeEventListener("resize", updateNavHeight);
   document.body.style.backgroundColor = "";
