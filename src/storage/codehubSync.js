@@ -1,7 +1,6 @@
 import {
   codehubStorage,
   contentKey,
-  getIdsFromSavesIndex,
   getLogicalFileId,
   metaKey,
   parseSavesIndex,
@@ -10,7 +9,6 @@ import {
   markCodeHubItemsDeleted,
   TOMBSTONE_RETENTION_MS,
   getTombstoneDeletedAt,
-  // getTombstoneInfo,
   mergeTombstones,
   areTombstonesEqual,
 } from "@/storage/codehubStorage.js";
@@ -355,28 +353,6 @@ const runWithConcurrency = async (items, limit, fn) => {
 };
 
 
-// 获取本地仅包含元数据的轻量索引，普通文件和 Gist 文件都参与同步
-export const getLocalIndex = async () => {
-  const rawIndex = await codehubStorage.getItem(SAVES_INDEX_KEY);
-  const idList = getIdsFromSavesIndex(rawIndex);
-  const files = {};
-  const syncableIds = [];
-  for (const id of idList) {
-    const meta = await codehubStorage.getItem(metaKey(id));
-    if (meta) {
-      files[id] = meta;
-      syncableIds.push(id);
-    }
-  }
-  const gistList = await codehubStorage.getItem(GIST_LIST_KEY);
-  return {
-    version: 2,
-    updatedAt: Date.now(),
-    ids: syncableIds,
-    files,
-    gistList: Array.isArray(gistList) ? gistList : [],
-  };
-};
 
 // 云端索引短时内存缓存
 let _cachedRemoteIndex = null;
@@ -675,7 +651,7 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
     items: updatedItems,
     tombstones: finalAllTombstones,
   };
-  await codehubStorage.setItem(SAVES_INDEX_KEY, syncedIndex);
+  // await codehubStorage.setItem(SAVES_INDEX_KEY, syncedIndex);
 
   // 云端索引三方合并：保留远端其他设备新增的有效项，同时加入/更新本地上传的项
   const cloudMergedItemsMap = new Map();
@@ -699,12 +675,9 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
   }
   const cloudMergedItems = Array.from(cloudMergedItemsMap.values());
 
-  const latestEntries = await codehubStorage.getAllEntries();
-
   // 云端 entries 也是三方合并：保留远端原有未被删除的 key，加上本次新成功上传的 key
-  const successfullyDeletedKeySet = successfullyDeletedIds;
   const survivingRemoteKeys = [...new Set([...remoteKeys, ...latestRemoteKeys])].filter(
-    (k) => !successfullyDeletedKeySet.has(k)
+    (k) => !successfullyDeletedIds.has(k)
   );
   const indexEntries = [
     ...new Set([
@@ -722,7 +695,7 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
       delete cloudFiles[id];
     }
   }
-  for (const { key, value } of latestEntries) {
+  for (const { key, value } of localEntries) {
     if (key.startsWith("codehub_save_meta:") && successfulKeys.has(key)) {
       cloudFiles[key.slice("codehub_save_meta:".length)] = value;
     }
@@ -741,7 +714,7 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
     ids: cloudMergedItems.map((item) => item.id),
     files: cloudFiles,
     gistList: successfulKeys.has(GIST_LIST_KEY)
-      ? (latestEntries.find(({ key }) => key === GIST_LIST_KEY)?.value || [])
+      ? (localValues.get(GIST_LIST_KEY) || [])
       : (latestRemoteIndex.gistList || remoteIndex.gistList || []),
   };
   const indexJsonStr = JSON.stringify(newIndex);
@@ -758,12 +731,11 @@ export const uploadCodeHubSnapshot = async (options = {}) => {
   // 使得随后的 openSyncModal() 或 checkCodeHubSyncDiff() 无需再向云端发 GET /index 重复拉取刚上传的数据
   setCachedRemoteIndex(newIndex);
 
-  // 上传云端成功后，同步将合并后的墓碑和最新的 items 回写到本地 IndexedDB，
+  // 上传云端成功后，一次性将合并后的墓碑和最新的 items 回写到本地 IndexedDB，
   // 避免本地索引与云端索引存在细微差异导致反复触发“有内容需上传”的假报警
   try {
-    const localCurrentIndex = parseSavesIndex(await codehubStorage.getItem(SAVES_INDEX_KEY));
     await codehubStorage.setItem(SAVES_INDEX_KEY, {
-      ...localCurrentIndex,
+      ...syncedIndex,
       updatedAt: newIndex.updatedAt,
       tombstones: finalAllTombstones,
     });
@@ -1215,87 +1187,6 @@ export const fetchCloudTrashInfo = async () => {
   }
 };
 
-// 彻底从云端删除指定文件及其元数据与根索引记录
-export const apiDeleteFileFromCloud = async (id, options = {}) => {
-  if (!id) return false;
-  const onProgress = typeof options === "function" ? options : options?.onProgress;
-  const { secretKey } = getCodeHubSyncConfig();
-
-  try {
-    onProgress?.({ step: "deleting_files", message: "正在从云端存储删除文件与元数据..." });
-    // 1. 删除 Worker R2 里的实际加密文件
-    await Promise.allSettled([
-      apiFetch(`/files/${encodeURIComponent(metaKey(id))}`, { method: "DELETE" }),
-      apiFetch(`/files/${encodeURIComponent(contentKey(id))}`, { method: "DELETE" }),
-    ]);
-
-    // 2. 更新云端根索引，彻底移除该 id 的 tombstones、keys 和 items
-    onProgress?.({ step: "updating_index", message: "正在更新云端根索引并清除标记..." });
-    const remoteIndex = await fetchAndDecryptRemoteIndex(secretKey);
-    if (remoteIndex && typeof remoteIndex === "object") {
-      let indexChanged = false;
-      if (remoteIndex.tombstones && remoteIndex.tombstones[id]) {
-        delete remoteIndex.tombstones[id];
-        indexChanged = true;
-      }
-      if (remoteIndex.keys) {
-        if (remoteIndex.keys[metaKey(id)]) {
-          delete remoteIndex.keys[metaKey(id)];
-          indexChanged = true;
-        }
-        if (remoteIndex.keys[contentKey(id)]) {
-          delete remoteIndex.keys[contentKey(id)];
-          indexChanged = true;
-        }
-      }
-      if (Array.isArray(remoteIndex.items)) {
-        const prevLen = remoteIndex.items.length;
-        remoteIndex.items = remoteIndex.items.filter((it) => it.id !== id);
-        if (remoteIndex.items.length !== prevLen) {
-          indexChanged = true;
-        }
-      }
-      if (Array.isArray(remoteIndex.entries)) {
-        const prevLen = remoteIndex.entries.length;
-        remoteIndex.entries = remoteIndex.entries.filter(
-          (key) => getLogicalFileId(key) !== id,
-        );
-        if (remoteIndex.entries.length !== prevLen) {
-          indexChanged = true;
-        }
-      }
-      if (Array.isArray(remoteIndex.ids)) {
-        const prevLen = remoteIndex.ids.length;
-        remoteIndex.ids = remoteIndex.ids.filter((itemId) => itemId !== id);
-        if (remoteIndex.ids.length !== prevLen) {
-          indexChanged = true;
-        }
-      }
-      if (remoteIndex.files && typeof remoteIndex.files === "object") {
-        if (Object.prototype.hasOwnProperty.call(remoteIndex.files, id)) {
-          delete remoteIndex.files[id];
-          indexChanged = true;
-        }
-      }
-      if (indexChanged) {
-        remoteIndex.updatedAt = Date.now();
-        const encryptedIndex = await encryptContent(JSON.stringify(remoteIndex), secretKey);
-        await apiFetch("/index", {
-          method: "PUT",
-          headers: { "Content-Type": "text/plain; charset=utf-8" },
-          body: encryptedIndex,
-        });
-        invalidateRemoteIndexCache();
-      }
-    }
-    onProgress?.({ step: "done", message: "云端已彻底删除完毕" });
-    return true;
-  } catch (err) {
-    console.warn("从云端彻底删除文件失败:", err);
-    throw err;
-  }
-};
-
 // 批量从云端彻底删除多个文件及其根索引
 export const apiDeleteMultipleFilesFromCloud = async (ids = [], options = {}) => {
   if (!ids || ids.length === 0) return true;
@@ -1391,6 +1282,12 @@ export const apiDeleteMultipleFilesFromCloud = async (ids = [], options = {}) =>
     console.warn("从云端批量彻底删除文件失败:", err);
     throw err;
   }
+};
+
+// 彻底从云端删除单个文件（直接复用批量删除，避免冗余代码）
+export const apiDeleteFileFromCloud = async (id, options = {}) => {
+  if (!id) return false;
+  return apiDeleteMultipleFilesFromCloud([id], options);
 };
 
 /**
