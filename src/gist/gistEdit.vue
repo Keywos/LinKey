@@ -101,7 +101,7 @@ import {
   computeGistHash,
   contentKey,
   getGistItemId,
-  getIdsFromSavesIndex,
+  // getIdsFromSavesIndex,
   metaKey,
   parseSavesIndex,
   prependGistFileToCache,

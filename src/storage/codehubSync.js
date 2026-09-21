@@ -354,14 +354,6 @@ const runWithConcurrency = async (items, limit, fn) => {
   return Promise.all(results);
 };
 
-// 统一且安全地解析元数据中的修改时间戳
-const getMetaTimestamp = (meta) => {
-  if (!meta) return 0;
-  const val = meta.updatedAt ?? meta.createAt ?? meta.createdAt;
-  if (!val) return 0;
-  const num = typeof val === "string" ? (Date.parse(val) || Number(val)) : Number(val);
-  return Number.isFinite(num) ? num : 0;
-};
 
 // 获取本地仅包含元数据的轻量索引，普通文件和 Gist 文件都参与同步
 export const getLocalIndex = async () => {
@@ -386,11 +378,11 @@ export const getLocalIndex = async () => {
   };
 };
 
-// 云端索引短时内存缓存（TTL: 15秒）与并发合并
+// 云端索引短时内存缓存
 let _cachedRemoteIndex = null;
 let _cachedRemoteIndexTime = 0;
 let _pendingRemoteIndexPromise = null;
-const REMOTE_INDEX_CACHE_TTL = 6000;
+const REMOTE_INDEX_CACHE_TTL = 4000;
 
 export const setCachedRemoteIndex = (index) => {
   if (index && typeof index === "object") {
@@ -970,12 +962,18 @@ export const formatTimeDiff = (diffMs) => {
  * 返回值:
  * {
  *   hasChanges: boolean,
- *   toDownload: number,     // 云端有新增或较新的文件数
- *   toUpload: number,       // 本地有新增或较新的文件数
- *   remoteDeleted: number,  // 云端已删除的文件数（本地还存在）
- *   localDeleted: number,   // 本地已删除的文件数（云端还存在）
- *   remoteFiles: Array,
- *   localFiles: Array
+ *   remoteNewCount: number, // 云端有新增或较新的文件数
+ *   localNewCount: number,  // 本地有新增或较新的文件数
+ *   remoteCount: number,    // 云端有效文件总数
+ *   localCount: number,     // 本地有效文件总数
+ *   uploadItems: Array,
+ *   downloadItems: Array,
+ *   trashPendingUploadItems: Array,
+ *   trashPendingLocalCleanupItems: Array,
+ *   gistListChanged: boolean,
+ *   gistListUploadNeeded: boolean,
+ *   gistListDownloadNeeded: boolean,
+ *   tombstoneChanged: boolean
  * }
  */
 export const checkCodeHubSyncDiff = async (options = {}) => {
@@ -1162,8 +1160,6 @@ export const checkCodeHubSyncDiff = async (options = {}) => {
 
   return {
     hasChanges,
-    toDownload: downloadItems.length,
-    toUpload: effectiveUploadCount,
     remoteNewCount: downloadItems.length,
     localNewCount: effectiveUploadCount,
     remoteCount: activeRemoteItems.length,

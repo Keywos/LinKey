@@ -1398,7 +1398,7 @@ import {
   computeGistHash,
   contentKey,
   getGistItemId,
-  getIdsFromSavesIndex,
+  // getIdsFromSavesIndex,
   getLogicalFileId,
   markCodeHubItemsDeleted,
   metaKey,
@@ -1621,7 +1621,7 @@ const checkRemoteSync = async (silent = false) => {
               .slice(0, 3)
               .join(", ");
             showToast({
-              message: `本地有 ${diff.localNewCount} 个待同步更新（${names}${diff.uploadItems.length > 3 ? " 等" : ""}），点击“同步”可上传`,
+              message: `本地有 ${diff.uploadItems.length} 个待同步更新（${names}${diff.uploadItems.length > 3 ? " 等" : ""}），点击“同步”可上传`,
               duration: 3500,
             });
           } else if (
